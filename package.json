@@ -1,0 +1,36 @@
+{
+    "name": "entity-walker",
+    "version": "0.1.0",
+    "description": "A type-safe, in-memory entity graph resolver for normalized data structures in TypeScript.",
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "files": [
+        "dist"
+    ],
+    "scripts": {
+        "build": "tsc",
+        "test": "vitest",
+        "test:watch": "vitest --watch",
+        "lint": "eslint . --ext .ts,.tsx"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/rolandcsosz/entity-walker.git"
+    },
+    "keywords": [
+        "entity",
+        "graph",
+        "typescript",
+        "relations",
+        "foreign-key",
+        "normalized-data"
+    ],
+    "author": "Roland Csősz",
+    "license": "MIT",
+    "devDependencies": {
+        "@types/node": "^20.5.0",
+        "eslint": "^8.50.0",
+        "typescript": "^5.3.0",
+        "vitest": "^4.0.18"
+    }
+}
