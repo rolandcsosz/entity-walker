@@ -4,7 +4,7 @@ import { createEntityGraph, EntityGraph, ForeignKeyResolver, GraphDef, Relations
 
 
 type Transaction = { id: string; subcategoryId: string };
-type Subcategory = { id: string; mainCategoryId: string };
+type Subcategory = { id: string; name: string, mainCategoryId: string };
 type MainCategory = { id: string; name: string };
 
 type Schema = {
@@ -13,16 +13,16 @@ type Schema = {
     mainCategory: MainCategory;
 };
 
-const byId = {
-    transaction: {
-        tx1: { id: "tx1", subcategoryId: "sub1" },
-    },
-    subcategory: {
-        sub1: { id: "sub1", mainCategoryId: "cat1" },
-    },
-    mainCategory: {
-        cat1: { id: "cat1", name: "Food" },
-    },
+const entities = {
+    transaction: [
+        { id: "tx1", subcategoryId: "sub1" }, { id: "tx2", subcategoryId: "sub2" },
+    ],
+    subcategory: [
+        { id: "sub1", name: "sub1", mainCategoryId: "cat1" }, { id: "sub2", name: "sub2", mainCategoryId: "cat1" },
+    ],
+    mainCategory: [
+        { id: "cat1", name: "Food" },
+    ],
 };
 
 const relations = {
@@ -46,12 +46,21 @@ const foreignKeys: ForeignKeyResolver<Schema> = {
 type CustomGraph = GraphDef<Schema, typeof relations>;
 
 const graph = createEntityGraph<Schema>().create({
-    byId,
+    entities,
     relations,
     foreignKeys,
 }) as EntityGraph<CustomGraph>;
 
 describe("entity graph", () => {
+
+    it("access first node object", () => {
+        const subcategoryId = graph
+            .transaction("tx1").get()
+            .subcategoryId;
+
+        expect(subcategoryId).toBe("sub1");
+    });
+
     it("walks relations via named functions", () => {
         const name = graph
             .transaction("tx1")
@@ -60,6 +69,19 @@ describe("entity graph", () => {
             .get().name;
 
         expect(name).toBe("Food");
+    });
+
+    it("handles multiple entities correctly", () => {
+        const name1 = graph
+            .transaction("tx1")
+            .subcategory()
+            .get().name;
+        const name2 = graph
+            .transaction("tx2")
+            .subcategory()
+            .get().name;
+        expect(name1).toBe("sub1");
+        expect(name2).toBe("sub2");
     });
 
     it("throws on invalid relation", () => {
