@@ -154,6 +154,33 @@ describe("entity graph", () => {
         ).toThrow();
     });
 
+    it("checks existence of valid optinonal relation", () => {
+        expect(
+            graph
+                .mainCategory("cat1")
+                .expenseType()
+                .exists()
+        ).toBe(true);
+    });
+
+    it("checks existence of faulty optional relation", () => {
+        expect(
+            graph
+                .mainCategory("cat2")
+                .expenseType()
+                .exists()
+        ).toBe(false);
+    });
+
+    it("checks existence of not existing optional relation", () => {
+        expect(
+            graph
+                .mainCategory("cat3")
+                .expenseType()
+                .exists()
+        ).toBe(false);
+    });
+
     it("throws on invalid relation", () => {
         expect(() =>
             // @ts-expect-error

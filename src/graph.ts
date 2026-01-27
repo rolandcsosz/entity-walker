@@ -61,6 +61,14 @@ export function createEntityGraph<EM extends EntityMap>() {
                     {},
                     {
                         get(_, prop: string) {
+
+                            if (prop === "exists") {
+                                return () => {
+                                    if (id === null) return false;
+                                    return !!byId[key as string]?.[id];
+                                };
+                            }
+
                             if (prop === "get") {
                                 return () => {
                                     if (id === null) return undefined;

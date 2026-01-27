@@ -1,4 +1,3 @@
-
 export type EntityBase = { id: string };
 export type EntityMap = Record<string, EntityBase>;
 
@@ -46,15 +45,19 @@ export type EntityNode<
     get(): Nullable extends true
         ? D["entityModel"][K] | undefined
         : D["entityModel"][K];
-} & {
+} & (Nullable extends true
+    ? {
+        exists(): boolean;
+    }
+    : {})
+    & {
         [Rel in keyof D["edges"][K]]: () => EntityNode<
             D,
             D["edges"][K][Rel]["to"] & keyof D["entityModel"],
             Or<Nullable, D["edges"][K][Rel]["optional"]>
         >;
     } & {
-        [SourceEntity in ReverseKeys<D, K> as `${string & SourceEntity
-        }References`]: () => EntityNode<D, SourceEntity, false>[];
+        [SourceEntity in ReverseKeys<D, K> as `${string & SourceEntity}References`]: () => EntityNode<D, SourceEntity, false>[];
     };
 
 export type EntityGraph<D extends GraphDef<any, any>> = {
