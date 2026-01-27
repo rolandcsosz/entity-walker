@@ -9,10 +9,44 @@ export function createEntityGraph<EM extends EntityMap>() {
             const { entities, edges } = config;
 
             const byId: Record<string, Record<string, any>> = {};
+
+            const reverseIndex: Record<
+                string,
+                Record<string, Record<string, string[]>>
+            > = {};
+
             for (const key in entities) {
                 byId[key] = {};
+                if (!reverseIndex[key]) reverseIndex[key] = {};
+
                 for (const item of entities[key]!) {
                     byId[key][item.id] = item;
+                }
+            }
+
+            for (const sourceKey in edges) {
+                const entityEdges = (edges as any)[sourceKey];
+                if (!entityEdges) continue;
+
+                for (const relName in entityEdges) {
+                    const edge = entityEdges[relName];
+                    if (!edge.bidirectional) continue;
+
+                    const targetType = edge.to as string;
+                    if (!reverseIndex[targetType]) reverseIndex[targetType] = {};
+                    if (!reverseIndex[targetType][sourceKey]) {
+                        reverseIndex[targetType][sourceKey] = {};
+                    }
+
+                    for (const sourceItem of entities[sourceKey]!) {
+                        const targetId = edge.resolve(sourceItem);
+                        if (targetId) {
+                            if (!reverseIndex[targetType][sourceKey][targetId]) {
+                                reverseIndex[targetType][sourceKey][targetId] = [];
+                            }
+                            reverseIndex[targetType][sourceKey][targetId].push(sourceItem.id);
+                        }
+                    }
                 }
             }
 
@@ -37,30 +71,39 @@ export function createEntityGraph<EM extends EntityMap>() {
                             return () => {
                                 if (id === null) {
                                     const edge = (edges as any)[key]?.[prop];
-                                    if (!edge) throw new Error(`No relation '${prop}'`);
-                                    return createNode(edge.to, null);
+                                    if (edge) return createNode(edge.to, null);
+                                    if (prop.endsWith("References")) return [];
+                                    throw new Error(`No relation '${prop}'`);
                                 }
 
-                                const entity = getEntity(key, id);
                                 const edge = (edges as any)[key]?.[prop];
-                                if (!edge) throw new Error(`No relation '${prop}'`);
+                                if (edge) {
+                                    const entity = getEntity(key, id);
+                                    const nextId = edge.resolve(entity);
 
-                                const nextId = edge.resolve(entity);
+                                    if (!nextId) {
+                                        if (edge.optional) return createNode(edge.to, null);
+                                        throw new Error(`FK resolution failed for '${prop}'`);
+                                    }
 
-                                if (!nextId) {
-                                    if (edge.optional) return createNode(edge.to, null);
-                                    throw new Error(`FK resolution failed for '${prop}'`);
+                                    const targetExists = !!byId[edge.to as string]?.[nextId];
+                                    if (!targetExists) {
+                                        if (edge.optional) return createNode(edge.to, null);
+                                    }
+
+                                    return createNode(edge.to, nextId);
                                 }
 
-                                const targetExists = !!byId[edge.to as string]?.[nextId];
+                                if (prop.endsWith("References")) {
+                                    const sourceKey = prop.slice(0, -"References".length);
 
-                                if (!targetExists) {
-                                    if (edge.optional) {
-                                        return createNode(edge.to, null);
+                                    if (sourceKey) {
+                                        const pointingIds = reverseIndex[key as string]?.[sourceKey]?.[id] || [];
+                                        return pointingIds.map(pid => createNode(sourceKey as keyof EM, pid));
                                     }
                                 }
 
-                                return createNode(edge.to, nextId);
+                                throw new Error(`No relation '${prop}'`);
                             };
                         },
                     }

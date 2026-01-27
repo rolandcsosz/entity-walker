@@ -38,12 +38,14 @@ const edges = {
     transaction: {
         subcategory: {
             to: "subcategory",
+            bidirectional: true,
             resolve: (t) => t.subcategoryId,
         },
     },
     subcategory: {
         mainCategory: {
             to: "mainCategory",
+            bidirectional: true,
             optional: true,
             resolve: (s) => s.mainCategoryId,
         },
@@ -163,5 +165,18 @@ describe("entity graph", () => {
         expect(() =>
             graph.transaction("invalid").get()
         ).toThrow();
+    });
+
+    it("traverses reverse", () => {
+        const catNode = graph.mainCategory("cat1");
+        const subNodes = catNode.subcategoryReferences();
+
+        expect(subNodes).toHaveLength(2);
+        expect(subNodes[0].get().id).toBe("sub1");
+        expect(subNodes[1].get().id).toBe("sub2");
+
+        const sub1Transactions = subNodes[0].transactionReferences();
+        expect(sub1Transactions).toHaveLength(1);
+        expect(sub1Transactions[0].get().id).toBe("tx1");
     });
 });

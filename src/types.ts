@@ -5,6 +5,7 @@ export type EntityMap = Record<string, EntityBase>;
 export type EdgeDef<EM extends EntityMap, Source> = {
     to: keyof EM;
     optional?: boolean;
+    bidirectional?: boolean;
     resolve: (entity: Source) => string | undefined | null;
 };
 
@@ -23,6 +24,20 @@ type Or<A extends boolean, B extends boolean> = A extends true
     ? true
     : false;
 
+type ReverseKeys<
+    D extends GraphDef<any, any>,
+    TargetKey extends keyof D["entityModel"]
+> = {
+    [SourceKey in keyof D["edges"]]: {
+        [RelName in keyof D["edges"][SourceKey]]: D["edges"][SourceKey][RelName] extends {
+            to: TargetKey;
+            bidirectional: true;
+        }
+        ? SourceKey
+        : never;
+    }[keyof D["edges"][SourceKey]];
+}[keyof D["edges"]];
+
 export type EntityNode<
     D extends GraphDef<any, any>,
     K extends keyof D["entityModel"],
@@ -37,6 +52,9 @@ export type EntityNode<
             D["edges"][K][Rel]["to"] & keyof D["entityModel"],
             Or<Nullable, D["edges"][K][Rel]["optional"]>
         >;
+    } & {
+        [SourceEntity in ReverseKeys<D, K> as `${string & SourceEntity
+        }References`]: () => EntityNode<D, SourceEntity, false>[];
     };
 
 export type EntityGraph<D extends GraphDef<any, any>> = {
