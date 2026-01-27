@@ -20,10 +20,13 @@ type Schema = {
 
 const entities = {
     transaction: [
-        { id: "tx1", subcategoryId: "sub1" }, { id: "tx2", subcategoryId: "sub2" },
+        { id: "tx1", subcategoryId: "sub1" },
+        { id: "tx2", subcategoryId: "sub2" },
+        { id: "tx3", subcategoryId: "sub1" },
     ],
     subcategory: [
-        { id: "sub1", name: "sub1", mainCategoryId: "cat1" }, { id: "sub2", name: "sub2", mainCategoryId: "cat1" },
+        { id: "sub1", name: "sub1", mainCategoryId: "cat1" },
+        { id: "sub2", name: "sub2", mainCategoryId: "cat1" },
     ],
     mainCategory: [
         { id: "cat1", name: "Food", expenseTypeId: "et1", incomeTypeId: "it1" },
@@ -54,6 +57,7 @@ const edges = {
         expenseType: {
             to: "expenseType",
             optional: true,
+            bidirectional: true,
             resolve: (m) => m.expenseTypeId,
         },
         incomeType: {
@@ -145,7 +149,7 @@ describe("entity graph", () => {
         ).toThrow();
     });
 
-    it("handles optional relations with missing property", () => {
+    it("handles relations with missing property", () => {
         expect(() =>
             graph
                 .mainCategory("cat3")
@@ -203,7 +207,103 @@ describe("entity graph", () => {
         expect(subNodes[1].get().id).toBe("sub2");
 
         const sub1Transactions = subNodes[0].transactionReferences();
-        expect(sub1Transactions).toHaveLength(1);
+        expect(sub1Transactions).toHaveLength(2);
         expect(sub1Transactions[0].get().id).toBe("tx1");
     });
+
+    it("supports .map() on references to extract data", () => {
+        const subNode = graph.subcategory("sub1");
+
+        const titles = subNode.transactionReferences().filter(tn => {
+            const mainCat = tn
+                .subcategory()
+                .mainCategory()
+                .get();
+            return mainCat?.name === "Food";
+        }).map(tn => tn.get().id);
+
+        expect(titles).toEqual(["tx1", "tx3"]);
+    });
+
+    it("supports .filter() on references to select specific nodes", () => {
+        const subNode = graph.subcategory("sub1");
+
+        const transactions = subNode.transactionReferences().filter(
+            (tn) => {
+                const mainCat = tn
+                    .subcategory()
+                    .mainCategory()
+                    .get();
+                return mainCat?.expenseTypeId === "et1";
+            }
+        );
+
+        expect(transactions).toHaveLength(2);
+        expect(transactions[0].get().id).toBe("tx1");
+    });
+
+    it("supports .flatMap() to traverse deeper relationships", () => {
+        const exNode = graph.expenseType("et1");
+
+        const allTransactionIds = exNode
+            .mainCategoryReferences()
+            .flatMap(mc => mc.subcategoryReferences())
+            .flatMap(sc => sc.transactionReferences())
+            .map(tn => tn.get().id);
+
+        expect(allTransactionIds).toHaveLength(3);
+        expect(allTransactionIds).toEqual(["tx1", "tx3", "tx2"]);
+    });
+
+    it("chains filter and map correctly", () => {
+        const exNode = graph.expenseType("et1");
+
+        const filteredTransactionIds = exNode
+            .mainCategoryReferences()
+            .flatMap(mc => mc.subcategoryReferences())
+            .filter(sc => {
+                const mainCat = sc
+                    .mainCategory()
+                    .get();
+                return mainCat?.expenseTypeId === "et1";
+            })
+            .flatMap(sc => sc.transactionReferences())
+            .map(tn => tn.get().id);
+
+        expect(filteredTransactionIds).toHaveLength(3);
+        expect(filteredTransactionIds).toEqual(["tx1", "tx3", "tx2"]);
+    });
+
+    it("returns an empty array for references with no matches", () => {
+        const emptyGraph = createEntityGraph<Schema>().create({
+            entities: {
+                transaction: [],
+                subcategory: [],
+                mainCategory: [],
+                expenseType: [],
+                incomeType: [],
+            },
+            edges: edges,
+        });
+
+        const results = emptyGraph
+            .expenseType("nonexistent")
+            .mainCategoryReferences();
+
+        expect(results).toEqual([]);
+    });
+
+    it("returns an empty array (safe fallback) when the parent node does not exist", () => {
+        const missingMainCategory = graph.mainCategory("nonexistent");
+        const result = missingMainCategory.subcategoryReferences();
+
+        expect(Array.isArray(result)).toBe(true);
+        expect(result).toHaveLength(0);
+    });
+
+    it("returns frozen entities from get()", () => {
+        const tx = graph.transaction("tx1").get();
+        expect(Object.isFrozen(tx)).toBe(true);
+    });
+
 });

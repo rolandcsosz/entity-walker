@@ -53,7 +53,7 @@ export function createEntityGraph<EM extends EntityMap>() {
             function getEntity(key: keyof EM, id: string) {
                 const entity = byId[key as string]?.[id];
                 if (!entity) throw new Error(`Entity ${String(key)}(${id}) not found`);
-                return entity;
+                return Object.freeze(entity) as Readonly<EM[typeof key]>;
             }
 
             function createNode(key: keyof EM, id: string | null): any {
