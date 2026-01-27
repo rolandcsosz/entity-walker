@@ -1,3 +1,2 @@
-export type { EntityMap, Relations } from "./types";
-export type { Chain } from "./graph";
+export type { EntityGraph, EntityMap, GraphDef, GraphEdges } from "./types";
 export { createEntityGraph } from "./graph";

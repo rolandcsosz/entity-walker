@@ -1,46 +1,12 @@
-export type EntityBase = { id: string };
-export type EntityMap = Record<string, EntityBase>;
-
-export type Relations<EM extends EntityMap> = {
-    [K in keyof EM]?: { [relationName: string]: keyof EM };
-};
-
-export type ForeignKeyResolver<EM extends EntityMap> = {
-    [K in keyof EM]: (
-        entity: EM[K],
-        relation: string
-    ) => { key: keyof EM; id: string } | null;
-};
-
-export interface GraphDef<EM extends EntityMap, R extends Relations<EM>> {
-    entityModel: EM;
-    relationships: R;
-}
-
-export type EntityNode<
-    D extends GraphDef<any, any>,
-    K extends keyof D["entityModel"]
-> = {
-    get(): D["entityModel"][K];
-} & {
-        [Rel in keyof D["relationships"][K]]: () => EntityNode<
-            D,
-            D["relationships"][K][Rel] & keyof D["entityModel"]
-        >;
-    };
-
-export type EntityGraph<D extends GraphDef<any, any>> = {
-    [K in keyof D["entityModel"]]: (id: string) => EntityNode<D, K>;
-};
+import { EntityGraph, EntityMap, GraphDef, GraphEdges } from "./types";
 
 export function createEntityGraph<EM extends EntityMap>() {
     return {
-        create: <R extends Relations<EM>>(config: {
+        create: <E extends GraphEdges<EM>>(config: {
             entities: { [K in keyof EM]: EM[K][] };
-            relations: R;
-            foreignKeys: ForeignKeyResolver<EM>;
-        }): EntityGraph<GraphDef<EM, R>> => {
-            const { entities, relations, foreignKeys } = config;
+            edges: E;
+        }): EntityGraph<GraphDef<EM, E>> => {
+            const { entities, edges } = config;
 
             const byId: Record<string, Record<string, any>> = {};
             for (const key in entities) {
@@ -62,15 +28,14 @@ export function createEntityGraph<EM extends EntityMap>() {
                     {
                         get(_, prop: string) {
                             if (prop === "get") return () => getEntity(key, id);
-
-                            const entity = getEntity(key, id);
-                            const nextKey = relations[key]?.[prop];
-                            if (!nextKey) throw new Error(`No relation '${prop}'`);
-
-                            const fk = foreignKeys[key](entity, prop);
-                            if (!fk) throw new Error(`FK resolution failed`);
-
-                            return () => createNode(fk.key, fk.id);
+                            return () => {
+                                const entity = getEntity(key, id);
+                                const edge = (edges as any)[key]?.[prop];
+                                if (!edge) throw new Error(`No relation '${prop}'`);
+                                const nextId = edge.resolve(entity);
+                                if (!nextId) throw new Error(`FK resolution failed`);
+                                return createNode(edge.to, nextId);
+                            };
                         },
                     }
                 );
