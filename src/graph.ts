@@ -22,18 +22,44 @@ export function createEntityGraph<EM extends EntityMap>() {
                 return entity;
             }
 
-            function createNode(key: keyof EM, id: string): any {
+            function createNode(key: keyof EM, id: string | null): any {
                 return new Proxy(
                     {},
                     {
                         get(_, prop: string) {
-                            if (prop === "get") return () => getEntity(key, id);
+                            if (prop === "get") {
+                                return () => {
+                                    if (id === null) return undefined;
+                                    return getEntity(key, id);
+                                };
+                            }
+
                             return () => {
+                                if (id === null) {
+                                    const edge = (edges as any)[key]?.[prop];
+                                    if (!edge) throw new Error(`No relation '${prop}'`);
+                                    return createNode(edge.to, null);
+                                }
+
                                 const entity = getEntity(key, id);
                                 const edge = (edges as any)[key]?.[prop];
                                 if (!edge) throw new Error(`No relation '${prop}'`);
+
                                 const nextId = edge.resolve(entity);
-                                if (!nextId) throw new Error(`FK resolution failed`);
+
+                                if (!nextId) {
+                                    if (edge.optional) return createNode(edge.to, null);
+                                    throw new Error(`FK resolution failed for '${prop}'`);
+                                }
+
+                                const targetExists = !!byId[edge.to as string]?.[nextId];
+
+                                if (!targetExists) {
+                                    if (edge.optional) {
+                                        return createNode(edge.to, null);
+                                    }
+                                }
+
                                 return createNode(edge.to, nextId);
                             };
                         },

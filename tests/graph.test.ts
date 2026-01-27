@@ -6,7 +6,7 @@ import { EntityGraph, GraphDef, GraphEdges } from "../src/types";
 
 type Transaction = { id: string; subcategoryId: string };
 type Subcategory = { id: string; name: string, mainCategoryId: string };
-type MainCategory = { id: string; name: string; expenseTypeId: string; incomeTypeId: string };
+type MainCategory = { id: string; name: string; expenseTypeId?: string; incomeTypeId?: string };
 type ExpenseType = { id: string; description: string };
 type IncomeType = { id: string; description: string };
 
@@ -27,6 +27,8 @@ const entities = {
     ],
     mainCategory: [
         { id: "cat1", name: "Food", expenseTypeId: "et1", incomeTypeId: "it1" },
+        { id: "cat2", name: "Food", expenseTypeId: "error", incomeTypeId: "error" },
+        { id: "cat3", name: "Food" },
     ],
     expenseType: [{ id: "et1", description: "Groceries" }],
     incomeType: [{ id: "it1", description: "Salary" }],
@@ -42,12 +44,14 @@ const edges = {
     subcategory: {
         mainCategory: {
             to: "mainCategory",
+            optional: true,
             resolve: (s) => s.mainCategoryId,
         },
     },
     mainCategory: {
         expenseType: {
             to: "expenseType",
+            optional: true,
             resolve: (m) => m.expenseTypeId,
         },
         incomeType: {
@@ -79,10 +83,9 @@ describe("entity graph", () => {
         const name = graph
             .transaction("tx1")
             .subcategory()
-            .mainCategory()
             .get().name;
 
-        expect(name).toBe("Food");
+        expect(name).toBe("sub1");
     });
 
     it("handles multiple entities correctly", () => {
@@ -104,15 +107,49 @@ describe("entity graph", () => {
             .subcategory()
             .mainCategory()
             .expenseType()
-            .get().description;
+            .get()?.description || "N/A";
         const incomeDesc = graph
             .transaction("tx1")
             .subcategory()
             .mainCategory()
             .incomeType()
-            .get().description;
+            .get()?.description || "N/A";
         expect(expenseDesc).toBe("Groceries");
         expect(incomeDesc).toBe("Salary");
+    });
+
+    it("handles optional relations with invalid FK", () => {
+        const expenseType = graph
+            .mainCategory("cat2")
+            .expenseType()
+            .get();
+        expect(expenseType).toBeUndefined();
+    });
+
+    it("handles optional relations with missing property", () => {
+        const incomeType = graph
+            .mainCategory("cat3")
+            .expenseType()
+            .get();
+        expect(incomeType).toBeUndefined();
+    });
+
+    it("handles relations with invalid FK", () => {
+        expect(() =>
+            graph
+                .mainCategory("cat2")
+                .incomeType()
+                .get()
+        ).toThrow();
+    });
+
+    it("handles optional relations with missing property", () => {
+        expect(() =>
+            graph
+                .mainCategory("cat3")
+                .incomeType()
+                .get()
+        ).toThrow();
     });
 
     it("throws on invalid relation", () => {
