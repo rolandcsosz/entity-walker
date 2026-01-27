@@ -85,6 +85,29 @@ describe("entity graph", () => {
         expect(subcategoryId).toBe("sub1");
     });
 
+    it("access invalid first node object with get()", () => {
+        expect(() => {
+            graph.transaction("error").get();
+        }).toThrow();
+    });
+
+    it("access invalid first node object with tryGet()", () => {
+        const transaction = graph.transaction("error").tryGet();
+        expect(transaction).toBeUndefined();
+    });
+
+    it("access invalid related node object with get()", () => {
+        expect(() =>
+            graph.transaction("error").subcategory().get()
+        ).toThrow();
+    });
+
+    it("access invalid related node object with tryGet()", () => {
+        const subcategory = graph.transaction("error").subcategory().tryGet();
+        expect(subcategory).toBeUndefined();
+    });
+
+
     it("walks relations via named functions", () => {
         const name = graph
             .transaction("tx1")
@@ -113,13 +136,13 @@ describe("entity graph", () => {
             .subcategory()
             .mainCategory()
             .expenseType()
-            .get()?.description || "N/A";
+            .tryGet()?.description || "N/A";
         const incomeDesc = graph
             .transaction("tx1")
             .subcategory()
             .mainCategory()
             .incomeType()
-            .get()?.description || "N/A";
+            .tryGet()?.description || "N/A";
         expect(expenseDesc).toBe("Groceries");
         expect(incomeDesc).toBe("Salary");
     });
@@ -128,7 +151,7 @@ describe("entity graph", () => {
         const expenseType = graph
             .mainCategory("cat2")
             .expenseType()
-            .get();
+            .tryGet();
         expect(expenseType).toBeUndefined();
     });
 
@@ -136,7 +159,7 @@ describe("entity graph", () => {
         const incomeType = graph
             .mainCategory("cat3")
             .expenseType()
-            .get();
+            .tryGet();
         expect(incomeType).toBeUndefined();
     });
 
@@ -218,7 +241,7 @@ describe("entity graph", () => {
             const mainCat = tn
                 .subcategory()
                 .mainCategory()
-                .get();
+                .tryGet();
             return mainCat?.name === "Food";
         }).map(tn => tn.get().id);
 
@@ -233,7 +256,7 @@ describe("entity graph", () => {
                 const mainCat = tn
                     .subcategory()
                     .mainCategory()
-                    .get();
+                    .tryGet();
                 return mainCat?.expenseTypeId === "et1";
             }
         );
@@ -264,7 +287,7 @@ describe("entity graph", () => {
             .filter(sc => {
                 const mainCat = sc
                     .mainCategory()
-                    .get();
+                    .tryGet();
                 return mainCat?.expenseTypeId === "et1";
             })
             .flatMap(sc => sc.transactionReferences())

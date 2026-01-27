@@ -24,8 +24,8 @@ export function createEntityGraph<EM extends EntityMap>() {
                 }
             }
 
-            for (const sourceKey in edges) {
-                const entityEdges = (edges as any)[sourceKey];
+            for (const sourceType in edges) {
+                const entityEdges = (edges as any)[sourceType];
                 if (!entityEdges) continue;
 
                 for (const relName in entityEdges) {
@@ -34,18 +34,16 @@ export function createEntityGraph<EM extends EntityMap>() {
 
                     const targetType = edge.to as string;
                     if (!reverseIndex[targetType]) reverseIndex[targetType] = {};
-                    if (!reverseIndex[targetType][sourceKey]) {
-                        reverseIndex[targetType][sourceKey] = {};
-                    }
+                    if (!reverseIndex[targetType][sourceType]) reverseIndex[targetType][sourceType] = {};
 
-                    for (const sourceItem of entities[sourceKey]!) {
-                        const targetId = edge.resolve(sourceItem);
-                        if (targetId) {
-                            if (!reverseIndex[targetType][sourceKey][targetId]) {
-                                reverseIndex[targetType][sourceKey][targetId] = [];
-                            }
-                            reverseIndex[targetType][sourceKey][targetId].push(sourceItem.id);
+                    for (const sourceEntity of entities[sourceType]!) {
+                        const targetId = edge.resolve(sourceEntity);
+                        if (!targetId) continue;
+
+                        if (!reverseIndex[targetType][sourceType][targetId]) {
+                            reverseIndex[targetType][sourceType][targetId] = [];
                         }
+                        reverseIndex[targetType][sourceType][targetId].push(sourceEntity.id);
                     }
                 }
             }
@@ -56,11 +54,27 @@ export function createEntityGraph<EM extends EntityMap>() {
                 return Object.freeze(entity) as Readonly<EM[typeof key]>;
             }
 
-            function createNode(key: keyof EM, id: string | null): any {
+            function createNode(key: keyof EM, id: string | null, isOptional: boolean = false): any {
                 return new Proxy(
                     {},
                     {
                         get(_, prop: string) {
+                            if (prop === "get") {
+                                return () => {
+                                    if (id === null) {
+                                        if (isOptional) return undefined;
+                                        throw new Error(`Entity ${String(key)} not found`);
+                                    }
+                                    return getEntity(key, id);
+                                };
+                            }
+
+                            if (prop === "tryGet") {
+                                return () => {
+                                    if (id === null) return undefined;
+                                    return byId[key as string]?.[id];
+                                };
+                            }
 
                             if (prop === "exists") {
                                 return () => {
@@ -69,45 +83,44 @@ export function createEntityGraph<EM extends EntityMap>() {
                                 };
                             }
 
-                            if (prop === "get") {
-                                return () => {
-                                    if (id === null) return undefined;
-                                    return getEntity(key, id);
-                                };
-                            }
-
                             return () => {
                                 if (id === null) {
                                     const edge = (edges as any)[key]?.[prop];
-                                    if (edge) return createNode(edge.to, null);
+                                    if (edge) return createNode(edge.to, null, false);
                                     if (prop.endsWith("References")) return [];
                                     throw new Error(`No relation '${prop}'`);
                                 }
 
                                 const edge = (edges as any)[key]?.[prop];
                                 if (edge) {
-                                    const entity = getEntity(key, id);
+                                    const entity = byId[key as string]?.[id];
+
+                                    if (!entity) {
+                                        return createNode(edge.to, null, false);
+                                    }
+
                                     const nextId = edge.resolve(entity);
 
                                     if (!nextId) {
-                                        if (edge.optional) return createNode(edge.to, null);
+                                        if (edge.optional) return createNode(edge.to, null, true);
                                         throw new Error(`FK resolution failed for '${prop}'`);
                                     }
 
                                     const targetExists = !!byId[edge.to as string]?.[nextId];
                                     if (!targetExists) {
-                                        if (edge.optional) return createNode(edge.to, null);
+                                        if (edge.optional) return createNode(edge.to, null, true);
+                                        return createNode(edge.to, nextId, false);
                                     }
 
-                                    return createNode(edge.to, nextId);
+                                    return createNode(edge.to, nextId, false);
                                 }
 
                                 if (prop.endsWith("References")) {
                                     const sourceKey = prop.slice(0, -"References".length);
-
                                     if (sourceKey) {
+                                        if (!byId[key as string]?.[id]) return [];
                                         const pointingIds = reverseIndex[key as string]?.[sourceKey]?.[id] || [];
-                                        return pointingIds.map(pid => createNode(sourceKey as keyof EM, pid));
+                                        return pointingIds.map(pid => createNode(sourceKey as keyof EM, pid, false));
                                     }
                                 }
 
