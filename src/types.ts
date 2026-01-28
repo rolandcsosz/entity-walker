@@ -1,6 +1,10 @@
 export type EntityBase = { id: string };
 export type EntityMap = Record<string, EntityBase>;
 
+export type Entities<T> = {
+    [K in keyof T]: T[K][];
+};
+
 export type EdgeDef<EM extends EntityMap, Source> = {
     to: keyof EM;
     optional?: boolean;

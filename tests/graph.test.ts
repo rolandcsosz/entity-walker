@@ -1,11 +1,11 @@
 
 import { describe, it, expect } from "vitest";
 import { createEntityGraph } from "../src/graph";
-import { EntityGraph } from "../src/types";
-import { CustomGraph, edges, Entities, Schema } from "./types";
+import { Entities, EntityGraph } from "../src/types";
+import { CustomGraph, edges, Schema } from "./types";
 
 
-const entities: Entities = {
+const entities: Entities<Schema> = {
     transaction: [
         { id: "tx1", subcategoryId: "sub1" },
         { id: "tx2", subcategoryId: "sub2" },

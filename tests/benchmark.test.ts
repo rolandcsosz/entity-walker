@@ -1,8 +1,8 @@
 import fs from "fs";
 import { performance } from "perf_hooks";
 import { createEntityGraph } from "../src/graph";
-import { EntityGraph } from "../src/types";
-import { CustomGraph, edges, Entities, ExpenseType, IncomeType, MainCategory, Schema, Subcategory, Transaction } from "./types";
+import { Entities, EntityGraph } from "../src/types";
+import { CustomGraph, edges, ExpenseType, IncomeType, MainCategory, Schema, Subcategory, Transaction } from "./types";
 
 
 function generateLargeDataset({
@@ -15,7 +15,7 @@ function generateLargeDataset({
     mainCategoriesPerExpense: number;
     subcategoriesPerMain: number;
     transactionsPerSub: number;
-}): Entities {
+}): Entities<Schema> {
     const expenseType: ExpenseType[] = [];
     const mainCategory: MainCategory[] = [];
     const subcategory: Subcategory[] = [];
@@ -47,7 +47,7 @@ function createRandomIndex(maxLimit: number) {
     return Math.floor(Math.random() * maxLimit);
 }
 
-function nestedLoop(entities: Entities, expenseTypeId: string) {
+function nestedLoop(entities: Entities<Schema>, expenseTypeId: string) {
     const result: string[] = [];
 
     for (let i = 0; i < entities.mainCategory.length; i++) {
@@ -83,7 +83,7 @@ function graphTraversal(graph: EntityGraph<CustomGraph>, expenseTypeId: string) 
         .map((tx) => tx.get().id);
 }
 
-function graphTraversalWithBuild(entities: Entities, expenseTypeId: string) {
+function graphTraversalWithBuild(entities: Entities<Schema>, expenseTypeId: string) {
     const graph = createGraph(entities);
     return graph
         .expenseType(expenseTypeId)
