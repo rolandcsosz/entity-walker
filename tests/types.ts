@@ -1,0 +1,55 @@
+import { GraphDef, GraphEdges } from "../src/types";
+
+export type Schema = {
+    transaction: Transaction;
+    subcategory: Subcategory;
+    mainCategory: MainCategory;
+    expenseType: ExpenseType;
+    incomeType: IncomeType;
+}
+
+export type Entities = {
+    transaction: Transaction[];
+    subcategory: Subcategory[];
+    mainCategory: MainCategory[];
+    expenseType: ExpenseType[];
+    incomeType: IncomeType[];
+}
+
+export type Transaction = { id: string; subcategoryId: string };
+export type Subcategory = { id: string; name: string, mainCategoryId: string };
+export type MainCategory = { id: string; name: string; expenseTypeId?: string; incomeTypeId?: string };
+export type ExpenseType = { id: string; description: string };
+export type IncomeType = { id: string; description: string };
+
+export const edges = {
+    transaction: {
+        subcategory: {
+            to: "subcategory",
+            bidirectional: true,
+            resolve: (t) => t.subcategoryId,
+        },
+    },
+    subcategory: {
+        mainCategory: {
+            to: "mainCategory",
+            bidirectional: true,
+            optional: true,
+            resolve: (s) => s.mainCategoryId,
+        },
+    },
+    mainCategory: {
+        expenseType: {
+            to: "expenseType",
+            optional: true,
+            bidirectional: true,
+            resolve: (m) => m.expenseTypeId,
+        },
+        incomeType: {
+            to: "incomeType",
+            resolve: (m) => m.incomeTypeId,
+        }
+    },
+} as const satisfies GraphEdges<Schema>;
+
+export type CustomGraph = GraphDef<Schema, typeof edges>;

@@ -1,24 +1,11 @@
 
 import { describe, it, expect } from "vitest";
 import { createEntityGraph } from "../src/graph";
-import { EntityGraph, GraphDef, GraphEdges } from "../src/types";
+import { EntityGraph } from "../src/types";
+import { CustomGraph, edges, Entities, Schema } from "./types";
 
 
-type Transaction = { id: string; subcategoryId: string };
-type Subcategory = { id: string; name: string, mainCategoryId: string };
-type MainCategory = { id: string; name: string; expenseTypeId?: string; incomeTypeId?: string };
-type ExpenseType = { id: string; description: string };
-type IncomeType = { id: string; description: string };
-
-type Schema = {
-    transaction: Transaction;
-    subcategory: Subcategory;
-    mainCategory: MainCategory;
-    expenseType: ExpenseType;
-    incomeType: IncomeType;
-}
-
-const entities = {
+const entities: Entities = {
     transaction: [
         { id: "tx1", subcategoryId: "sub1" },
         { id: "tx2", subcategoryId: "sub2" },
@@ -36,39 +23,6 @@ const entities = {
     expenseType: [{ id: "et1", description: "Groceries" }],
     incomeType: [{ id: "it1", description: "Salary" }],
 };
-
-const edges = {
-    transaction: {
-        subcategory: {
-            to: "subcategory",
-            bidirectional: true,
-            resolve: (t) => t.subcategoryId,
-        },
-    },
-    subcategory: {
-        mainCategory: {
-            to: "mainCategory",
-            bidirectional: true,
-            optional: true,
-            resolve: (s) => s.mainCategoryId,
-        },
-    },
-    mainCategory: {
-        expenseType: {
-            to: "expenseType",
-            optional: true,
-            bidirectional: true,
-            resolve: (m) => m.expenseTypeId,
-        },
-        incomeType: {
-            to: "incomeType",
-            resolve: (m) => m.incomeTypeId,
-        }
-    },
-} as const satisfies GraphEdges<Schema>;
-
-
-type CustomGraph = GraphDef<Schema, typeof edges>;
 
 const graph: EntityGraph<CustomGraph> = createEntityGraph<Schema>().create({
     entities,
