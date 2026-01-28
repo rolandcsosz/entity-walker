@@ -6,8 +6,8 @@
   <body>
     <div id="plot" style="width:100%;height:600px;"></div>
     <script>
-      const data = [{"x":[400,40000,250000,1000000],"y":[0.24233000000006086,22.212120000000006,445.28511,6801.006210000001],"type":"scatter","mode":"lines+markers","name":"Nested Loops"},{"x":[400,40000,250000,1000000],"y":[0.05399000000004435,2.0952600000000303,12.05053999999991,85.00434999999997],"type":"scatter","mode":"lines+markers","name":"Entity Graph"},{"x":[400,40000,250000,1000000],"y":[0.276509999999962,7.311019999999962,63.490369999999714,430.99120999999866],"type":"scatter","mode":"lines+markers","name":"Entity Graph with Build"}];
-      const layout = {"title":"Benchmark: Nested Loops vs Entity Graph","xaxis":{"title":"Number of Transactions"},"yaxis":{"title":"Average runtime (ms)"}};
+      const data = [{"x":[400,40000,250000,1000000],"y":[0.2703299999999899,25.04236000000001,405.47854000000007,4758.7124300000005],"type":"scatter","mode":"lines+markers","name":"Nested Loops","line":{"color":"#f1634c","width":4},"marker":{"color":"#f1634c","size":8,"symbol":"circle"}},{"x":[400,40000,250000,1000000],"y":[0.06624000000003889,1.879970000000003,12.759810000000106,48.04993999999933],"type":"scatter","mode":"lines+markers","name":"Entity Graph","line":{"color":"#37b98b","width":4},"marker":{"color":"#37b98b","size":8,"symbol":"circle"}},{"x":[400,40000,250000,1000000],"y":[0.39666999999999464,6.449209999999994,61.48010999999997,294.4639200000012],"type":"scatter","mode":"lines+markers","name":"Entity Graph with Build","line":{"color":"#faa318","width":4},"marker":{"color":"#faa318","size":8,"symbol":"circle"}}];
+      const layout = {"xaxis":{"title":"Number of Transactions"},"yaxis":{"title":"Average runtime (ms)","tickformat":".0s"},"font":{"size":18},"legend":{"orientation":"h","x":0.5,"xanchor":"center","y":1.1},"margin":{"l":80,"r":40,"t":70,"b":80}};
       Plotly.newPlot('plot', data, layout);
     </script>
   </body>

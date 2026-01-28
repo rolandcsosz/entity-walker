@@ -172,6 +172,8 @@ function generatePlot(results: BenchmarkResult[]) {
         type: "scatter",
         mode: "lines+markers",
         name: "Nested Loops",
+        line: { color: "#f1634c", width: 4 },
+        marker: { color: "#f1634c", size: 8, symbol: "circle" }
     };
 
     const traceGraph = {
@@ -180,6 +182,8 @@ function generatePlot(results: BenchmarkResult[]) {
         type: "scatter",
         mode: "lines+markers",
         name: "Entity Graph",
+        line: { color: "#37b98b", width: 4 },
+        marker: { color: "#37b98b", size: 8, symbol: "circle" }
     };
 
     const traceGraphWithBuild = {
@@ -188,12 +192,20 @@ function generatePlot(results: BenchmarkResult[]) {
         type: "scatter",
         mode: "lines+markers",
         name: "Entity Graph with Build",
+        line: { color: "#faa318", width: 4 },
+        marker: { color: "#faa318", size: 8, symbol: "circle" }
     };
 
     const layout = {
-        title: "Benchmark: Nested Loops vs Entity Graph",
-        xaxis: { title: "Number of Transactions" },
-        yaxis: { title: "Average runtime (ms)" },
+        xaxis: { title: "Number of Transactions", },
+        yaxis: { title: "Average runtime (ms)", tickformat: ".0s" },
+        font: { size: 18 },
+        legend: {
+            orientation: "h",
+            x: 0.5,
+            xanchor: "center",
+            y: 1.1,
+        }, margin: { l: 80, r: 40, t: 70, b: 80 }
     };
 
     const html = `
