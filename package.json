@@ -1,6 +1,6 @@
 {
     "name": "entity-walker",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "description": "A type-safe, in-memory entity graph resolver for normalized data structures in TypeScript.",
     "main": "dist/index.js",
     "types": "dist/index.d.ts",
