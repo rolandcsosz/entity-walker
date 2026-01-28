@@ -1,5 +1,7 @@
 # Entity Walker
 
+![CI](https://github.com/rolandcsosz/entity-walker/actions/workflows/ci.yml/badge.svg)
+
 Entity Walker is a small, zero-dependency TypeScript library for working with normalised relational data as an immutable, type-safe graph.
 
 It lets you define entities and their relationships via foreign keys, then traverse the graph with fully typed, autocompleted accessors. Every entity and relation is typed, so your IDE will guide you with autocomplete and prevent mistakes. It makes
