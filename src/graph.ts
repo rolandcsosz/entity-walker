@@ -7,7 +7,6 @@ export function createEntityGraph<EM extends EntityMap>() {
             edges: E;
         }): EntityGraph<GraphDef<EM, E>> => {
             const { entities, edges } = config;
-
             const byId: Record<string, Record<string, any>> = {};
 
             const reverseIndex: Record<
@@ -28,11 +27,10 @@ export function createEntityGraph<EM extends EntityMap>() {
                 const entityEdges = (edges as any)[sourceType];
                 if (!entityEdges) continue;
 
-                for (const relName in entityEdges) {
-                    const edge = entityEdges[relName];
+                for (const targetType in entityEdges) {
+                    const edge = entityEdges[targetType];
                     if (!edge.bidirectional) continue;
 
-                    const targetType = edge.to as string;
                     if (!reverseIndex[targetType]) reverseIndex[targetType] = {};
                     if (!reverseIndex[targetType][sourceType]) reverseIndex[targetType][sourceType] = {};
 
@@ -55,90 +53,71 @@ export function createEntityGraph<EM extends EntityMap>() {
             }
 
             function createNode(key: keyof EM, id: string | null, isOptional: boolean = false): any {
-                return new Proxy(
-                    {},
-                    {
-                        get(_, prop: string) {
-                            if (prop === "get") {
-                                return () => {
-                                    if (id === null) {
-                                        if (isOptional) return undefined;
-                                        throw new Error(`Entity ${String(key)} not found`);
-                                    }
-                                    return getEntity(key, id);
-                                };
-                            }
-
-                            if (prop === "tryGet") {
-                                return () => {
-                                    if (id === null) return undefined;
-                                    return byId[key as string]?.[id];
-                                };
-                            }
-
-                            if (prop === "exists") {
-                                return () => {
-                                    if (id === null) return false;
-                                    return !!byId[key as string]?.[id];
-                                };
-                            }
-
+                return new Proxy({}, {
+                    get(_, prop: string) {
+                        if (prop === "get") {
                             return () => {
                                 if (id === null) {
-                                    const edge = (edges as any)[key]?.[prop];
-                                    if (edge) return createNode(edge.to, null, false);
-                                    if (prop.endsWith("References")) return [];
-                                    throw new Error(`No relation '${prop}'`);
+                                    if (isOptional) return undefined;
+                                    throw new Error(`Entity ${String(key)} not found`);
                                 }
-
-                                const edge = (edges as any)[key]?.[prop];
-                                if (edge) {
-                                    const entity = byId[key as string]?.[id];
-
-                                    if (!entity) {
-                                        return createNode(edge.to, null, false);
-                                    }
-
-                                    const nextId = edge.resolve(entity);
-
-                                    if (!nextId) {
-                                        if (edge.optional) return createNode(edge.to, null, true);
-                                        throw new Error(`FK resolution failed for '${prop}'`);
-                                    }
-
-                                    const targetExists = !!byId[edge.to as string]?.[nextId];
-                                    if (!targetExists) {
-                                        if (edge.optional) return createNode(edge.to, null, true);
-                                        return createNode(edge.to, nextId, false);
-                                    }
-
-                                    return createNode(edge.to, nextId, false);
-                                }
-
-                                if (prop.endsWith("References")) {
-                                    const sourceKey = prop.slice(0, -"References".length);
-                                    if (sourceKey) {
-                                        if (!byId[key as string]?.[id]) return [];
-                                        const pointingIds = reverseIndex[key as string]?.[sourceKey]?.[id] || [];
-                                        return pointingIds.map(pid => createNode(sourceKey as keyof EM, pid, false));
-                                    }
-                                }
-
-                                throw new Error(`No relation '${prop}'`);
+                                return getEntity(key, id);
                             };
-                        },
-                    }
-                );
+                        }
+                        if (prop === "tryGet") return () => (id === null ? undefined : byId[key as string]?.[id]);
+                        if (prop === "exists") return () => (id === null ? false : !!byId[key as string]?.[id]);
+
+                        return () => {
+                            const edge = (edges as any)[key]?.[prop];
+
+                            if (id === null) {
+                                if (edge) return createNode(prop as keyof EM, null, false);
+                                if (prop.endsWith("References")) return [];
+                                throw new Error(`No relation '${prop}'`);
+                            }
+
+                            if (edge) {
+                                const entity = byId[key as string]?.[id];
+                                const targetType = prop as keyof EM;
+
+                                if (!entity) return createNode(targetType, null, false);
+
+                                const nextId = edge.resolve(entity);
+
+                                if (!nextId) {
+                                    if (edge.optional) return createNode(targetType, null, true);
+                                    throw new Error(`FK resolution failed for '${prop}'`);
+                                }
+
+                                const targetExists = !!byId[targetType as string]?.[nextId];
+                                if (!targetExists) {
+                                    if (edge.optional) return createNode(targetType, null, true);
+                                    return createNode(targetType, nextId, false);
+                                }
+
+                                return createNode(targetType, nextId, false);
+                            }
+
+                            if (prop.endsWith("References")) {
+                                const sourceKey = prop.slice(0, -"References".length);
+                                if (sourceKey) {
+                                    if (!byId[key as string]?.[id]) return [];
+                                    const pointingIds = reverseIndex[key as string]?.[sourceKey]?.[id] || [];
+                                    return pointingIds.map(pid => createNode(sourceKey as keyof EM, pid, false));
+                                }
+                            }
+
+                            throw new Error(`No relation '${prop}'`);
+                        };
+                    },
+                });
             }
 
-            return new Proxy(
-                {},
-                {
-                    get(_, prop: string) {
-                        return (id: string) => createNode(prop as keyof EM, id);
-                    },
-                }
-            ) as any;
+            return new Proxy({}, {
+                get(_, prop: string) {
+                    return (id: string) => createNode(prop as keyof EM, id);
+                },
+            }) as any;
         },
     };
 }

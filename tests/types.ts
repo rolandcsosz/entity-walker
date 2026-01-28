@@ -17,14 +17,12 @@ export type Schema = {
 export const edges = {
     transaction: {
         subcategory: {
-            to: "subcategory",
             bidirectional: true,
             resolve: (t) => t.subcategoryId,
         },
     },
     subcategory: {
         mainCategory: {
-            to: "mainCategory",
             bidirectional: true,
             optional: true,
             resolve: (s) => s.mainCategoryId,
@@ -32,15 +30,13 @@ export const edges = {
     },
     mainCategory: {
         expenseType: {
-            to: "expenseType",
             optional: true,
             bidirectional: true,
             resolve: (m) => m.expenseTypeId,
         },
         incomeType: {
-            to: "incomeType",
             resolve: (m) => m.incomeTypeId,
-        }
+        },
     },
 } as const satisfies GraphEdges<Schema>;
 

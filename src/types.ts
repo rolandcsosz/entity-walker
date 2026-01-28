@@ -1,3 +1,5 @@
+
+
 export type EntityBase = { id: string };
 export type EntityMap = Record<string, EntityBase>;
 
@@ -5,34 +7,39 @@ export type Entities<T> = {
     [K in keyof T]: T[K][];
 };
 
-export type EdgeDef<EM extends EntityMap, Source> = {
-    to: keyof EM;
+export type EdgeDef<Source> = {
     optional?: boolean;
     bidirectional?: boolean;
     resolve: (entity: Source) => string | undefined | null;
 };
 
 export type GraphEdges<EM extends EntityMap> = {
-    [K in keyof EM]?: Record<string, EdgeDef<EM, EM[K]>>;
+    [K in keyof EM]?: {
+        [Rel in Exclude<keyof EM, K>]?: EdgeDef<EM[K]>;
+    };
 };
+
 
 export interface GraphDef<EM extends EntityMap, E extends GraphEdges<EM>> {
     entityModel: EM;
     edges: E;
 }
 
-type Or<A extends boolean, B extends boolean> = A extends true ? true : B extends true ? true : false;
+type Or<A extends boolean, B extends boolean> = A extends true
+    ? true
+    : B extends true
+    ? true
+    : false;
 
 type ReverseKeys<
     D extends GraphDef<any, any>,
     TargetKey extends keyof D["entityModel"]
 > = {
     [SourceKey in keyof D["edges"]]: {
-        [RelName in keyof D["edges"][SourceKey]]: D["edges"][SourceKey][RelName] extends {
-            to: TargetKey;
-            bidirectional: true;
-        }
+        [RelName in keyof D["edges"][SourceKey]]: RelName extends TargetKey
+        ? D["edges"][SourceKey][RelName] extends { bidirectional: true }
         ? SourceKey
+        : never
         : never;
     }[keyof D["edges"][SourceKey]];
 }[keyof D["edges"]];
@@ -43,17 +50,16 @@ export type EntityNode<
     Nullable extends boolean = false
 > = {
     tryGet(): D["entityModel"][K] | undefined;
-} & (Nullable extends false ? { get(): D["entityModel"][K] } : {})
-    & (Nullable extends true ? { exists(): boolean } : {})
-    & {
+} & (Nullable extends false ? { get(): D["entityModel"][K] } : {}) &
+    (Nullable extends true ? { exists(): boolean } : {}) & {
         [Rel in keyof D["edges"][K]]: () => EntityNode<
             D,
-            D["edges"][K][Rel]["to"] & keyof D["entityModel"],
+            Rel & keyof D["entityModel"],
             Or<Nullable, D["edges"][K][Rel]["optional"]>
         >;
-    }
-    & {
-        [SourceEntity in ReverseKeys<D, K> as `${string & SourceEntity}References`]: () => EntityNode<D, SourceEntity, false>[];
+    } & {
+        [SourceEntity in ReverseKeys<D, K> as `${string &
+        SourceEntity}References`]: () => EntityNode<D, SourceEntity, false>[];
     };
 
 export type EntityGraph<D extends GraphDef<any, any>> = {
