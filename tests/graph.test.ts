@@ -24,7 +24,7 @@ const entities: Entities<Schema> = {
     incomeType: [{ id: "it1", description: "Salary" }],
 };
 
-const graph: EntityGraph<CustomGraph> = createEntityGraph<Schema>().create({
+const graph: EntityGraph<CustomGraph> = createEntityGraph({
     entities,
     edges,
 });
@@ -251,14 +251,14 @@ describe("entity graph", () => {
     });
 
     it("returns an empty array for references with no matches", () => {
-        const emptyGraph = createEntityGraph<Schema>().create({
+        const emptyGraph = createEntityGraph({
             entities: {
                 transaction: [],
                 subcategory: [],
                 mainCategory: [],
                 expenseType: [],
                 incomeType: [],
-            },
+            } as Entities<Schema>,
             edges: edges,
         });
 

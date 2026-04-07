@@ -71,7 +71,7 @@ function nestedLoop(entities: Entities<Schema>, expenseTypeId: string) {
 
 
 function createGraph(entities: any): EntityGraph<CustomGraph> {
-    return createEntityGraph<Schema>().create({ entities, edges }) as EntityGraph<CustomGraph>;
+    return createEntityGraph({ entities, edges }) as EntityGraph<CustomGraph>;
 }
 
 function graphTraversal(graph: EntityGraph<CustomGraph>, expenseTypeId: string) {
@@ -80,7 +80,7 @@ function graphTraversal(graph: EntityGraph<CustomGraph>, expenseTypeId: string) 
         .mainCategoryReferences()
         .flatMap((mc) => mc.subcategoryReferences())
         .flatMap((sc) => sc.transactionReferences())
-        .map((tx) => tx.get().id);
+        .map((tx) => tx.get()?.id);
 }
 
 function graphTraversalWithBuild(entities: Entities<Schema>, expenseTypeId: string) {
@@ -90,7 +90,7 @@ function graphTraversalWithBuild(entities: Entities<Schema>, expenseTypeId: stri
         .mainCategoryReferences()
         .flatMap((mc) => mc.subcategoryReferences())
         .flatMap((sc) => sc.transactionReferences())
-        .map((tx) => tx.get().id);
+        .map((tx) => tx.get()?.id);
 }
 
 type BenchmarkResult = {
