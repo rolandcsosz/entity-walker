@@ -202,19 +202,9 @@ describe("entity graph", () => {
     });
 
     it("supports .filter() on references to select specific nodes", () => {
-        const subNode = graph.subcategory("sub1");
-
-        const transactions = subNode.transactionReferences().filter(
-            (tn) => {
-                const mainCat = tn
-                    .subcategory()
-                    .mainCategory()
-                    .get();
-                return mainCat?.expenseTypeId === "et1";
-            }
-        );
-
-        expect(transactions).toHaveLength(2);
+        const transactions = graph.mainCategoryReferences((mc) => mc?.expenseTypeId === "et1").subcategoryReferences().transactionReferences();
+        console.log(transactions.map(t => t.get()?.id));
+        expect(transactions).toHaveLength(3);
         expect(transactions[0].get()?.id).toBe("tx1");
     });
 
@@ -223,8 +213,8 @@ describe("entity graph", () => {
 
         const allTransactionIds = exNode
             .mainCategoryReferences()
-            .flatMap(mc => mc.subcategoryReferences())
-            .flatMap(sc => sc.transactionReferences())
+            .subcategoryReferences()
+            .transactionReferences()
             .map(tn => tn.get()?.id);
 
         expect(allTransactionIds).toHaveLength(3);
@@ -236,7 +226,7 @@ describe("entity graph", () => {
 
         const filteredTransactionIds = exNode
             .mainCategoryReferences()
-            .flatMap(mc => mc.subcategoryReferences())
+            .subcategoryReferences()
             .filter(sc => {
                 const mainCat = sc
                     .mainCategory()
@@ -333,6 +323,157 @@ describe("entity graph", () => {
     it("getAll() filters out undefined entries", () => {
         const results = graph.mainCategory("nonexistent").subcategoryReferences().getAll();
         expect(results).toEqual([]);
+    });
+
+    it("multi-level chained references with filter on intermediate list", () => {
+        const ids = graph
+            .expenseType("et1")
+            .mainCategoryReferences()
+            .subcategoryReferences()
+            .filter(sc => sc.get()?.name === "sub1")
+            .flatMap(sc => sc.transactionReferences())
+            .map(tn => tn.get()?.id);
+
+        expect(ids).toEqual(["tx1", "tx3"]);
+    });
+
+    it("multi-level chained references with filter and getAll()", () => {
+        const subs = graph
+            .expenseType("et1")
+            .mainCategoryReferences()
+            .subcategoryReferences()
+            .filter(sc => sc.get()?.name === "sub2");
+
+        expect(subs).toHaveLength(1);
+        expect(subs[0].get()?.id).toBe("sub2");
+
+        const transactions = subs.flatMap(sc => sc.transactionReferences());
+        expect(transactions.map(t => t.get()?.id)).toEqual(["tx2"]);
+    });
+
+    it("base references with where into chained traversal", () => {
+        const ids = graph
+            .mainCategoryReferences(c => c.expenseTypeId === "et1")
+            .subcategoryReferences()
+            .transactionReferences()
+            .getAll()
+            .map(t => t.id);
+
+        expect(ids).toEqual(["tx1", "tx3", "tx2"]);
+    });
+
+    it("base references with where that narrows results through chain", () => {
+        const ids = graph
+            .subcategoryReferences(s => s.name === "sub1")
+            .transactionReferences()
+            .getAll()
+            .map(t => t.id);
+
+        expect(ids).toEqual(["tx1", "tx3"]);
+    });
+
+    it("chained references with multiple filters at different levels", () => {
+        const descriptions = graph
+            .transactionReferences(t => t.subcategoryId === "sub1")
+            .subcategory()
+            .mainCategory()
+            .expenseType()
+            .getAll()
+            .map(e => e.description);
+
+        expect(descriptions).toEqual(["Groceries", "Groceries"]);
+    });
+
+    it("chained where on reverse references at multiple levels", () => {
+        const ids = graph
+            .expenseType("et1")
+            .mainCategoryReferences(c => c.name === "Food")
+            .subcategoryReferences(s => s.name === "sub1")
+            .transactionReferences()
+            .getAll()
+            .map(t => t.id);
+
+        expect(ids).toEqual(["tx1", "tx3"]);
+    });
+
+    it("chained where on forward edges at multiple levels", () => {
+        const results = graph
+            .transactionReferences(t => t.subcategoryId === "sub1")
+            .subcategory(s => s.mainCategoryId === "cat1")
+            .mainCategory(c => c.expenseTypeId === "et1")
+            .getAll();
+
+        expect(results).toHaveLength(2);
+        expect(results[0].name).toBe("Food");
+    });
+
+    it("chained where filters out non-matching at each level", () => {
+        const ids = graph
+            .mainCategoryReferences(c => c.expenseTypeId === "et1")
+            .subcategoryReferences(s => s.name === "sub2")
+            .transactionReferences(t => t.subcategoryId === "sub2")
+            .getAll()
+            .map(t => t.id);
+
+        expect(ids).toEqual(["tx2"]);
+    });
+
+    it("chained where that filters everything out", () => {
+        const ids = graph
+            .expenseType("et1")
+            .mainCategoryReferences(c => c.name === "NonExistent")
+            .subcategoryReferences()
+            .getAll();
+
+        expect(ids).toHaveLength(0);
+    });
+
+    it("getAllWitoutDuplicates() removes duplicate entities from chained traversal", () => {
+        const categories = graph
+            .mainCategory("cat1")
+            .subcategoryReferences()
+            .mainCategory()
+            .getAll();
+
+        expect(categories).toHaveLength(2);
+        expect(categories[0].id).toBe("cat1");
+        expect(categories[1].id).toBe("cat1");
+
+        const unique = graph
+            .mainCategory("cat1")
+            .subcategoryReferences()
+            .mainCategory()
+            .getAllWitoutDuplicates();
+
+        expect(unique).toHaveLength(1);
+        expect(unique[0].id).toBe("cat1");
+    });
+
+    it("getAllWitoutDuplicates() on base references with no duplicates", () => {
+        const subs = graph.subcategoryReferences().getAllWitoutDuplicates();
+        expect(subs).toHaveLength(2);
+        expect(subs.map(s => s.id)).toEqual(["sub1", "sub2"]);
+    });
+
+    it("getAllWitoutDuplicates() returns empty for missing entities", () => {
+        const result = graph
+            .mainCategory("nonexistent")
+            .subcategoryReferences()
+            .getAllWitoutDuplicates();
+
+        expect(result).toHaveLength(0);
+    });
+
+    it("getAllWitoutDuplicates() on deep chain with duplicates", () => {
+        const transactions = graph
+            .expenseType("et1")
+            .mainCategoryReferences()
+            .subcategoryReferences()
+            .mainCategory()
+            .getAllWitoutDuplicates()
+
+        expect(transactions).toHaveLength(1);
+        expect(transactions[0].id).toBe("cat1");
     });
 
 });

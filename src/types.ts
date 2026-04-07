@@ -42,6 +42,19 @@ export type EntityNodeList<
     K extends keyof D["entityModel"]
 > = EntityNode<D, K>[] & {
     getAll(): D["entityModel"][K][];
+    getAllWitoutDuplicates(): D["entityModel"][K][];
+} & {
+    [Rel in keyof D["edges"][K]]: (
+        where?: (entity: D["entityModel"][Rel & keyof D["entityModel"]]) => boolean
+    ) => EntityNodeList<
+        D,
+        Rel & keyof D["entityModel"]
+    >;
+} & {
+    [SourceEntity in ReverseKeys<D, K> as `${string &
+    SourceEntity}References`]: (
+        where?: (entity: D["entityModel"][SourceEntity]) => boolean
+    ) => EntityNodeList<D, SourceEntity>;
 };
 
 export type EntityNode<
@@ -57,7 +70,9 @@ export type EntityNode<
     >;
 } & {
     [SourceEntity in ReverseKeys<D, K> as `${string &
-    SourceEntity}References`]: () => EntityNodeList<D, SourceEntity>;
+    SourceEntity}References`]: (
+        where?: (entity: D["entityModel"][SourceEntity]) => boolean
+    ) => EntityNodeList<D, SourceEntity>;
 };
 
 export type EntityGraph<D extends GraphDef<any, any>> = {

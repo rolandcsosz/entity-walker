@@ -1,14 +1,5 @@
 import { EntityGraph, EntityMap, GraphDef, GraphEdges } from "./types";
 
-function toNodeList(nodes: any[]): any {
-    const list = [...nodes] as any;
-    Object.defineProperty(list, 'getAll', {
-        value: () => nodes.map(n => n.get()).filter((v: any) => v !== undefined),
-        enumerable: false,
-    });
-    return list;
-}
-
 export function createEntityGraph<EM extends EntityMap, E extends GraphEdges<EM>>(config: {
     entities: { [K in keyof EM]: EM[K][] };
     edges: E;
@@ -53,6 +44,60 @@ export function createEntityGraph<EM extends EntityMap, E extends GraphEdges<EM>
         }
     }
 
+    function toNodeList(nodes: any[], nodeKey: string): any {
+        const list = [...nodes] as any;
+        Object.defineProperty(list, 'getAll', {
+            value: () => toNodeList(nodes.map((n: any) => n.get()).filter((v: any) => v !== undefined), nodeKey),
+            enumerable: false,
+        });
+
+        Object.defineProperty(list, 'getAllWitoutDuplicates', {
+            value: () => {
+                const entites = nodes.map(n => n.get()).filter(e => e !== undefined);
+                return toNodeList(Array.from(new Set(entites)), nodeKey);
+            },
+            enumerable: false,
+        });
+
+        const entityEdges = (edges as any)[nodeKey] || {};
+        for (const rel in entityEdges) {
+            Object.defineProperty(list, rel, {
+                value: (where?: (entity: any) => boolean) => {
+                    const result: any[] = [];
+                    for (const node of nodes) {
+                        result.push(node[rel]());
+                    }
+                    const filtered = where
+                        ? result.filter(n => { const e = n.get(); return e !== undefined && where(e); })
+                        : result;
+                    return toNodeList(filtered, rel);
+                },
+                enumerable: false,
+            });
+        }
+
+        const reverseEntries = reverseIndex[nodeKey] || {};
+        for (const sourceKey in reverseEntries) {
+            const refName = `${sourceKey}References`;
+            Object.defineProperty(list, refName, {
+                value: (where?: (entity: any) => boolean) => {
+                    const result: any[] = [];
+                    for (const node of nodes) {
+                        const refs = node[refName]();
+                        for (const r of refs) result.push(r);
+                    }
+                    const filtered = where
+                        ? result.filter(n => { const e = n.get(); return e !== undefined && where(e); })
+                        : result;
+                    return toNodeList(filtered, sourceKey);
+                },
+                enumerable: false,
+            });
+        }
+
+        return list;
+    }
+
     function createNode(key: keyof EM, id: string | null): any {
         return new Proxy({}, {
             get(_, prop: string) {
@@ -73,12 +118,12 @@ export function createEntityGraph<EM extends EntityMap, E extends GraphEdges<EM>
                     };
                 }
 
-                return () => {
+                return (...args: any[]) => {
                     const edge = (edges as any)[key]?.[prop];
 
                     if (id === null) {
                         if (edge) return createNode(prop as keyof EM, null);
-                        if (prop.endsWith("References")) return toNodeList([]);
+                        if (prop.endsWith("References")) return toNodeList([], prop.slice(0, -"References".length));
                         throw new Error(`No relation '${prop}'`);
                     }
 
@@ -100,9 +145,16 @@ export function createEntityGraph<EM extends EntityMap, E extends GraphEdges<EM>
                     if (prop.endsWith("References")) {
                         const sourceKey = prop.slice(0, -"References".length);
                         if (sourceKey) {
-                            if (!byId[key as string]?.[id]) return toNodeList([]);
-                            const pointingIds = reverseIndex[key as string]?.[sourceKey]?.[id] || [];
-                            return toNodeList(pointingIds.map(pid => createNode(sourceKey as keyof EM, pid)));
+                            if (!byId[key as string]?.[id]) return toNodeList([], sourceKey);
+                            let pointingIds = reverseIndex[key as string]?.[sourceKey]?.[id] || [];
+                            const where = args[0] as ((entity: any) => boolean) | undefined;
+                            if (where) {
+                                pointingIds = pointingIds.filter(pid => {
+                                    const e = byId[sourceKey]?.[pid];
+                                    return e !== undefined && where(e);
+                                });
+                            }
+                            return toNodeList(pointingIds.map(pid => createNode(sourceKey as keyof EM, pid)), sourceKey);
                         }
                     }
 
@@ -119,7 +171,7 @@ export function createEntityGraph<EM extends EntityMap, E extends GraphEdges<EM>
                 return (where?: (entity: any) => boolean) => {
                     const all = entities[entityKey] || [];
                     const filtered = where ? all.filter(where) : all;
-                    return toNodeList(filtered.map(item => createNode(entityKey as keyof EM, item.id)));
+                    return toNodeList(filtered.map(item => createNode(entityKey as keyof EM, item.id)), entityKey);
                 };
             }
             return (id: string) => createNode(prop as keyof EM, id);
