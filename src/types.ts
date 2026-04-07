@@ -37,6 +37,13 @@ type ReverseKeys<
     }[keyof D["edges"][SourceKey]];
 }[keyof D["edges"]];
 
+export type EntityNodeList<
+    D extends GraphDef<any, any>,
+    K extends keyof D["entityModel"]
+> = EntityNode<D, K>[] & {
+    getAll(): D["entityModel"][K][];
+};
+
 export type EntityNode<
     D extends GraphDef<any, any>,
     K extends keyof D["entityModel"]
@@ -50,9 +57,13 @@ export type EntityNode<
     >;
 } & {
     [SourceEntity in ReverseKeys<D, K> as `${string &
-    SourceEntity}References`]: () => EntityNode<D, SourceEntity>[];
+    SourceEntity}References`]: () => EntityNodeList<D, SourceEntity>;
 };
 
 export type EntityGraph<D extends GraphDef<any, any>> = {
     [K in keyof D["entityModel"]]: (id: string) => EntityNode<D, K>;
+} & {
+    [K in keyof D["entityModel"] as `${string & K}References`]: (
+        where?: (entity: D["entityModel"][K]) => boolean
+    ) => EntityNodeList<D, K>;
 };

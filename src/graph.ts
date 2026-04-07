@@ -1,5 +1,14 @@
 import { EntityGraph, EntityMap, GraphDef, GraphEdges } from "./types";
 
+function toNodeList(nodes: any[]): any {
+    const list = [...nodes] as any;
+    Object.defineProperty(list, 'getAll', {
+        value: () => nodes.map(n => n.get()).filter((v: any) => v !== undefined),
+        enumerable: false,
+    });
+    return list;
+}
+
 export function createEntityGraph<EM extends EntityMap, E extends GraphEdges<EM>>(config: {
     entities: { [K in keyof EM]: EM[K][] };
     edges: E;
@@ -69,7 +78,7 @@ export function createEntityGraph<EM extends EntityMap, E extends GraphEdges<EM>
 
                     if (id === null) {
                         if (edge) return createNode(prop as keyof EM, null);
-                        if (prop.endsWith("References")) return [];
+                        if (prop.endsWith("References")) return toNodeList([]);
                         throw new Error(`No relation '${prop}'`);
                     }
 
@@ -91,9 +100,9 @@ export function createEntityGraph<EM extends EntityMap, E extends GraphEdges<EM>
                     if (prop.endsWith("References")) {
                         const sourceKey = prop.slice(0, -"References".length);
                         if (sourceKey) {
-                            if (!byId[key as string]?.[id]) return [];
+                            if (!byId[key as string]?.[id]) return toNodeList([]);
                             const pointingIds = reverseIndex[key as string]?.[sourceKey]?.[id] || [];
-                            return pointingIds.map(pid => createNode(sourceKey as keyof EM, pid));
+                            return toNodeList(pointingIds.map(pid => createNode(sourceKey as keyof EM, pid)));
                         }
                     }
 
@@ -105,6 +114,14 @@ export function createEntityGraph<EM extends EntityMap, E extends GraphEdges<EM>
 
     return new Proxy({}, {
         get(_, prop: string) {
+            if (prop.endsWith("References")) {
+                const entityKey = prop.slice(0, -"References".length);
+                return (where?: (entity: any) => boolean) => {
+                    const all = entities[entityKey] || [];
+                    const filtered = where ? all.filter(where) : all;
+                    return toNodeList(filtered.map(item => createNode(entityKey as keyof EM, item.id)));
+                };
+            }
             return (id: string) => createNode(prop as keyof EM, id);
         },
     }) as any;

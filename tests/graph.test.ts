@@ -282,4 +282,57 @@ describe("entity graph", () => {
         expect(Object.isFrozen(tx)).toBe(true);
     });
 
+    it("returns all entities via base references", () => {
+        const allTransactions = graph.transactionReferences();
+        expect(allTransactions).toHaveLength(3);
+        expect(allTransactions.map(t => t.get()?.id)).toEqual(["tx1", "tx2", "tx3"]);
+    });
+
+    it("filters entities via base references with where clause", () => {
+        const filtered = graph.transactionReferences(t => t.subcategoryId === "sub1");
+        expect(filtered).toHaveLength(2);
+        expect(filtered.map(t => t.get()?.id)).toEqual(["tx1", "tx3"]);
+    });
+
+    it("returns empty array when where clause matches nothing", () => {
+        const filtered = graph.transactionReferences(t => t.subcategoryId === "nonexistent");
+        expect(filtered).toHaveLength(0);
+    });
+
+    it("base references return walkable nodes", () => {
+        const subs = graph.subcategoryReferences();
+        const names = subs.map(s => s.mainCategory().get()?.name);
+        expect(names).toEqual(["Food", "Food"]);
+    });
+
+    it("base references with where and chaining", () => {
+        const categories = graph.mainCategoryReferences(c => c.name === "Food");
+        const expenseDescs = categories.map(c => c.expenseType().get()?.description);
+        expect(expenseDescs).toContain("Groceries");
+    });
+
+    it("getAll() on base references returns plain objects", () => {
+        const transactions = graph.transactionReferences().getAll();
+        expect(transactions).toHaveLength(3);
+        expect(transactions[0].id).toBe("tx1");
+        expect(transactions[0].subcategoryId).toBe("sub1");
+    });
+
+    it("getAll() with where clause filters and returns plain objects", () => {
+        const transactions = graph.transactionReferences(t => t.subcategoryId === "sub1").getAll();
+        expect(transactions).toHaveLength(2);
+        expect(transactions.map(t => t.id)).toEqual(["tx1", "tx3"]);
+    });
+
+    it("getAll() on node-level reverse references returns plain objects", () => {
+        const subs = graph.mainCategory("cat1").subcategoryReferences().getAll();
+        expect(subs).toHaveLength(2);
+        expect(subs[0].name).toBe("sub1");
+    });
+
+    it("getAll() filters out undefined entries", () => {
+        const results = graph.mainCategory("nonexistent").subcategoryReferences().getAll();
+        expect(results).toEqual([]);
+    });
+
 });
