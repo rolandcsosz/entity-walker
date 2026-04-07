@@ -46,32 +46,31 @@ export function createEntityGraph<EM extends EntityMap>() {
                 }
             }
 
-            function getEntity(key: keyof EM, id: string) {
-                const entity = byId[key as string]?.[id];
-                if (!entity) throw new Error(`Entity ${String(key)}(${id}) not found`);
-                return Object.freeze(entity) as Readonly<EM[typeof key]>;
-            }
-
-            function createNode(key: keyof EM, id: string | null, isOptional: boolean = false): any {
+            function createNode(key: keyof EM, id: string | null): any {
                 return new Proxy({}, {
                     get(_, prop: string) {
                         if (prop === "get") {
                             return () => {
-                                if (id === null) {
-                                    if (isOptional) return undefined;
-                                    throw new Error(`Entity ${String(key)} not found`);
-                                }
-                                return getEntity(key, id);
+                                if (id === null) return undefined;
+                                const entity = byId[key as string]?.[id];
+                                if (!entity) return undefined;
+                                return Object.freeze(entity) as Readonly<EM[typeof key]>;
                             };
                         }
-                        if (prop === "tryGet") return () => (id === null ? undefined : byId[key as string]?.[id]);
-                        if (prop === "exists") return () => (id === null ? false : !!byId[key as string]?.[id]);
+                        if (prop === "getOrThrow") {
+                            return () => {
+                                if (id === null) throw new Error(`Entity ${String(key)} not found`);
+                                const entity = byId[key as string]?.[id];
+                                if (!entity) throw new Error(`Entity ${String(key)}(${id}) not found`);
+                                return Object.freeze(entity) as Readonly<EM[typeof key]>;
+                            };
+                        }
 
                         return () => {
                             const edge = (edges as any)[key]?.[prop];
 
                             if (id === null) {
-                                if (edge) return createNode(prop as keyof EM, null, false);
+                                if (edge) return createNode(prop as keyof EM, null);
                                 if (prop.endsWith("References")) return [];
                                 throw new Error(`No relation '${prop}'`);
                             }
@@ -80,22 +79,15 @@ export function createEntityGraph<EM extends EntityMap>() {
                                 const entity = byId[key as string]?.[id];
                                 const targetType = prop as keyof EM;
 
-                                if (!entity) return createNode(targetType, null, false);
+                                if (!entity) return createNode(targetType, null);
 
                                 const nextId = edge.resolve(entity);
-
-                                if (!nextId) {
-                                    if (edge.optional) return createNode(targetType, null, true);
-                                    throw new Error(`FK resolution failed for '${prop}'`);
-                                }
+                                if (!nextId) return createNode(targetType, null);
 
                                 const targetExists = !!byId[targetType as string]?.[nextId];
-                                if (!targetExists) {
-                                    if (edge.optional) return createNode(targetType, null, true);
-                                    return createNode(targetType, nextId, false);
-                                }
+                                if (!targetExists) return createNode(targetType, null);
 
-                                return createNode(targetType, nextId, false);
+                                return createNode(targetType, nextId);
                             }
 
                             if (prop.endsWith("References")) {
@@ -103,7 +95,7 @@ export function createEntityGraph<EM extends EntityMap>() {
                                 if (sourceKey) {
                                     if (!byId[key as string]?.[id]) return [];
                                     const pointingIds = reverseIndex[key as string]?.[sourceKey]?.[id] || [];
-                                    return pointingIds.map(pid => createNode(sourceKey as keyof EM, pid, false));
+                                    return pointingIds.map(pid => createNode(sourceKey as keyof EM, pid));
                                 }
                             }
 

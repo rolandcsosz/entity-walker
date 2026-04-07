@@ -24,13 +24,11 @@ export const edges = {
     subcategory: {
         mainCategory: {
             bidirectional: true,
-            optional: true,
             resolve: (s) => s.mainCategoryId,
         },
     },
     mainCategory: {
         expenseType: {
-            optional: true,
             bidirectional: true,
             resolve: (m) => m.expenseTypeId,
         },
