@@ -59,22 +59,17 @@ export function createEntityGraph<EM extends EntityMap, E extends GraphEdges<EM>
             enumerable: false,
         });
 
-        const entityEdges = (edges as any)[nodeKey] || {};
-        for (const rel in entityEdges) {
-            Object.defineProperty(list, rel, {
-                value: (where?: (entity: any) => boolean) => {
-                    const result: any[] = [];
-                    for (const node of nodes) {
-                        result.push(node[rel]());
-                    }
-                    const filtered = where
-                        ? result.filter(n => { const e = n.get(); return e !== undefined && where(e); })
-                        : result;
-                    return toNodeList(filtered, rel);
-                },
-                enumerable: false,
-            });
-        }
+        Object.defineProperty(list, 'filterReferences', {
+            value: (where?: (entity: any) => boolean) => {
+                if (!where) return list;
+                const filtered = nodes.filter((n: any) => {
+                    const e = n.get();
+                    return e !== undefined && where(e);
+                });
+                return toNodeList(filtered, nodeKey);
+            },
+            enumerable: false,
+        });
 
         const reverseEntries = reverseIndex[nodeKey] || {};
         for (const sourceKey in reverseEntries) {
@@ -90,6 +85,25 @@ export function createEntityGraph<EM extends EntityMap, E extends GraphEdges<EM>
                         ? result.filter(n => { const e = n.get(); return e !== undefined && where(e); })
                         : result;
                     return toNodeList(filtered, sourceKey);
+                },
+                enumerable: false,
+            });
+        }
+
+        const forwardEdges = (edges as any)[nodeKey] || {};
+        for (const rel in forwardEdges) {
+            const refName = `${rel}References`;
+            if (list[refName] !== undefined) continue; // reverse already registered
+            Object.defineProperty(list, refName, {
+                value: (where?: (entity: any) => boolean) => {
+                    const result: any[] = [];
+                    for (const node of nodes) {
+                        result.push(node[rel]());
+                    }
+                    const filtered = where
+                        ? result.filter(n => { const e = n.get(); return e !== undefined && where(e); })
+                        : result;
+                    return toNodeList(filtered, rel);
                 },
                 enumerable: false,
             });

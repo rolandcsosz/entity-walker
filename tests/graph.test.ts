@@ -375,9 +375,9 @@ describe("entity graph", () => {
     it("chained references with multiple filters at different levels", () => {
         const descriptions = graph
             .transactionReferences(t => t.subcategoryId === "sub1")
-            .subcategory()
-            .mainCategory()
-            .expenseType()
+            .subcategoryReferences()
+            .mainCategoryReferences(c => c.expenseTypeId === "et1")
+            .expenseTypeReferences()
             .getAll()
             .map(e => e.description);
 
@@ -399,8 +399,8 @@ describe("entity graph", () => {
     it("chained where on forward edges at multiple levels", () => {
         const results = graph
             .transactionReferences(t => t.subcategoryId === "sub1")
-            .subcategory(s => s.mainCategoryId === "cat1")
-            .mainCategory(c => c.expenseTypeId === "et1")
+            .subcategoryReferences(s => s.mainCategoryId === "cat1")
+            .mainCategoryReferences(c => c.expenseTypeId === "et1")
             .getAll();
 
         expect(results).toHaveLength(2);
@@ -432,7 +432,7 @@ describe("entity graph", () => {
         const categories = graph
             .mainCategory("cat1")
             .subcategoryReferences()
-            .mainCategory()
+            .mainCategoryReferences()
             .getAll();
 
         expect(categories).toHaveLength(2);
@@ -442,7 +442,7 @@ describe("entity graph", () => {
         const unique = graph
             .mainCategory("cat1")
             .subcategoryReferences()
-            .mainCategory()
+            .mainCategoryReferences()
             .getAllWitoutDuplicates();
 
         expect(unique).toHaveLength(1);
@@ -469,11 +469,70 @@ describe("entity graph", () => {
             .expenseType("et1")
             .mainCategoryReferences()
             .subcategoryReferences()
-            .mainCategory()
-            .getAllWitoutDuplicates()
+            .mainCategoryReferences()
+            .getAllWitoutDuplicates();
 
         expect(transactions).toHaveLength(1);
         expect(transactions[0].id).toBe("cat1");
+    });
+
+    it("filterReferences() filters current list by predicate", () => {
+        const subs = graph
+            .mainCategoryReferences()
+            .filterReferences(s => s.name === "sub1");
+
+        expect(subs).toHaveLength(0);
+
+        const filtered = graph
+            .subcategoryReferences()
+            .filterReferences(s => s.name === "sub1");
+
+        expect(filtered).toHaveLength(1);
+        expect(filtered[0].get()?.id).toBe("sub1");
+    });
+
+    it("filterReferences() returns walkable EntityNodeList", () => {
+        const txIds = graph
+            .subcategoryReferences()
+            .filterReferences(s => s.name === "sub1")
+            .transactionReferences()
+            .getAll()
+            .map(t => t.id);
+
+        expect(txIds).toEqual(["tx1", "tx3"]);
+    });
+
+    it("filterReferences() returns empty list when nothing matches", () => {
+        const result = graph
+            .subcategoryReferences()
+            .filterReferences(s => s.name === "nonexistent");
+
+        expect(result).toHaveLength(0);
+    });
+
+    it("filterReferences() chained after reverse reference traversal", () => {
+        const cats = graph
+            .expenseType("et1")
+            .mainCategoryReferences()
+            .subcategoryReferences()
+            .filterReferences(s => s.name === "sub2")
+            .getAll();
+
+        expect(cats).toHaveLength(1);
+        expect(cats[0].id).toBe("sub2");
+    });
+
+    it("filterReferences() can chain further into forward and reverse edges", () => {
+        const txIds = graph
+            .expenseType("et1")
+            .mainCategoryReferences()
+            .subcategoryReferences()
+            .filterReferences(s => s.name === "sub2")
+            .transactionReferences()
+            .getAll()
+            .map(t => t.id);
+
+        expect(txIds).toEqual(["tx2"]);
     });
 
 });

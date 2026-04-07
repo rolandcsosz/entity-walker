@@ -43,13 +43,11 @@ export type EntityNodeList<
 > = EntityNode<D, K>[] & {
     getAll(): D["entityModel"][K][];
     getAllWitoutDuplicates(): D["entityModel"][K][];
+    filterReferences(where: (entity: D["entityModel"][K]) => boolean): EntityNodeList<D, K>;
 } & {
-    [Rel in keyof D["edges"][K]]: (
+    [Rel in keyof D["edges"][K] as `${string & Rel}References`]: (
         where?: (entity: D["entityModel"][Rel & keyof D["entityModel"]]) => boolean
-    ) => EntityNodeList<
-        D,
-        Rel & keyof D["entityModel"]
-    >;
+    ) => EntityNodeList<D, Rel & keyof D["entityModel"]>;
 } & {
     [SourceEntity in ReverseKeys<D, K> as `${string &
     SourceEntity}References`]: (
