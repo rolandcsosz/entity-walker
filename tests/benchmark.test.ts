@@ -77,20 +77,20 @@ function createGraph(entities: any): EntityGraph<CustomGraph> {
 function graphTraversal(graph: EntityGraph<CustomGraph>, expenseTypeId: string) {
     return graph
         .expenseType(expenseTypeId)
-        .mainCategoryReferences()
-        .flatMap((mc) => mc.subcategoryReferences())
-        .flatMap((sc) => sc.transactionReferences())
-        .map((tx) => tx.get()?.id);
+        .mainCategoryNodes()
+        .flatMap((mc) => mc.subcategoryNodes())
+        .flatMap((sc) => sc.transactionNodes())
+        .map((tx) => tx.value()?.id);
 }
 
 function graphTraversalWithBuild(entities: Entities<Schema>, expenseTypeId: string) {
     const graph = createGraph(entities);
     return graph
         .expenseType(expenseTypeId)
-        .mainCategoryReferences()
-        .flatMap((mc) => mc.subcategoryReferences())
-        .flatMap((sc) => sc.transactionReferences())
-        .map((tx) => tx.get()?.id);
+        .mainCategoryNodes()
+        .flatMap((mc) => mc.subcategoryNodes())
+        .flatMap((sc) => sc.transactionNodes())
+        .map((tx) => tx.value()?.id);
 }
 
 type BenchmarkResult = {

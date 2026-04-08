@@ -2,6 +2,7 @@
 
 export type EntityBase = { id: string };
 export type EntityMap = Record<string, EntityBase>;
+type Where<T> = (entity: T) => boolean;
 
 export type Entities<T> = {
     [K in keyof T]: T[K][];
@@ -9,7 +10,7 @@ export type Entities<T> = {
 
 export type EdgeDef<Source> = {
     bidirectional?: boolean;
-    resolve: (entity: Source) => string | undefined | null;
+    resolve: (entity: Source) => string | undefined;
 };
 
 export type GraphEdges<EM extends EntityMap> = {
@@ -41,17 +42,17 @@ export type EntityNodeList<
     D extends GraphDef<any, any>,
     K extends keyof D["entityModel"]
 > = EntityNode<D, K>[] & {
-    getAll(): D["entityModel"][K][];
-    getAllWitoutDuplicates(): D["entityModel"][K][];
-    filterReferences(where: (entity: D["entityModel"][K]) => boolean): EntityNodeList<D, K>;
+    all(): D["entityModel"][K][];
+    allUnique(): D["entityModel"][K][];
+    where(where: Where<D["entityModel"][K]>): EntityNodeList<D, K>;
 } & {
-    [Rel in keyof D["edges"][K] as `${string & Rel}References`]: (
-        where?: (entity: D["entityModel"][Rel & keyof D["entityModel"]]) => boolean
+    [Rel in keyof D["edges"][K] as `${string & Rel}Nodes`]: (
+        where?: Where<D["entityModel"][Rel & keyof D["entityModel"]]>
     ) => EntityNodeList<D, Rel & keyof D["entityModel"]>;
 } & {
     [SourceEntity in ReverseKeys<D, K> as `${string &
-    SourceEntity}References`]: (
-        where?: (entity: D["entityModel"][SourceEntity]) => boolean
+    SourceEntity}Nodes`]: (
+        where?: Where<D["entityModel"][SourceEntity]>
     ) => EntityNodeList<D, SourceEntity>;
 };
 
@@ -59,8 +60,8 @@ export type EntityNode<
     D extends GraphDef<any, any>,
     K extends keyof D["entityModel"]
 > = {
-    get(): D["entityModel"][K] | undefined;
-    getOrThrow(): D["entityModel"][K];
+    value(): D["entityModel"][K] | undefined;
+    valueOrThrow(): D["entityModel"][K];
 } & {
     [Rel in keyof D["edges"][K]]: () => EntityNode<
         D,
@@ -68,15 +69,15 @@ export type EntityNode<
     >;
 } & {
     [SourceEntity in ReverseKeys<D, K> as `${string &
-    SourceEntity}References`]: (
-        where?: (entity: D["entityModel"][SourceEntity]) => boolean
+    SourceEntity}Nodes`]: (
+        where?: Where<D["entityModel"][SourceEntity]>
     ) => EntityNodeList<D, SourceEntity>;
 };
 
 export type EntityGraph<D extends GraphDef<any, any>> = {
     [K in keyof D["entityModel"]]: (id: string) => EntityNode<D, K>;
 } & {
-    [K in keyof D["entityModel"] as `${string & K}References`]: (
-        where?: (entity: D["entityModel"][K]) => boolean
+    [K in keyof D["entityModel"] as `${string & K}Nodes`]: (
+        where?: Where<D["entityModel"][K]>
     ) => EntityNodeList<D, K>;
 };

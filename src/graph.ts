@@ -46,24 +46,24 @@ export function createEntityGraph<EM extends EntityMap, E extends GraphEdges<EM>
 
     function toNodeList(nodes: any[], nodeKey: string): any {
         const list = [...nodes] as any;
-        Object.defineProperty(list, 'getAll', {
-            value: () => toNodeList(nodes.map((n: any) => n.get()).filter((v: any) => v !== undefined), nodeKey),
+        Object.defineProperty(list, 'all', {
+            value: () => toNodeList(nodes.map((n: any) => n.value()).filter((v: any) => v !== undefined), nodeKey),
             enumerable: false,
         });
 
-        Object.defineProperty(list, 'getAllWitoutDuplicates', {
+        Object.defineProperty(list, 'allUnique', {
             value: () => {
-                const entites = nodes.map(n => n.get()).filter(e => e !== undefined);
+                const entites = nodes.map(n => n.value()).filter(e => e !== undefined);
                 return toNodeList(Array.from(new Set(entites)), nodeKey);
             },
             enumerable: false,
         });
 
-        Object.defineProperty(list, 'filterReferences', {
+        Object.defineProperty(list, 'where', {
             value: (where?: (entity: any) => boolean) => {
                 if (!where) return list;
                 const filtered = nodes.filter((n: any) => {
-                    const e = n.get();
+                    const e = n.value();
                     return e !== undefined && where(e);
                 });
                 return toNodeList(filtered, nodeKey);
@@ -73,7 +73,7 @@ export function createEntityGraph<EM extends EntityMap, E extends GraphEdges<EM>
 
         const reverseEntries = reverseIndex[nodeKey] || {};
         for (const sourceKey in reverseEntries) {
-            const refName = `${sourceKey}References`;
+            const refName = `${sourceKey}Nodes`;
             Object.defineProperty(list, refName, {
                 value: (where?: (entity: any) => boolean) => {
                     const result: any[] = [];
@@ -82,7 +82,7 @@ export function createEntityGraph<EM extends EntityMap, E extends GraphEdges<EM>
                         for (const r of refs) result.push(r);
                     }
                     const filtered = where
-                        ? result.filter(n => { const e = n.get(); return e !== undefined && where(e); })
+                        ? result.filter(n => { const e = n.value(); return e !== undefined && where(e); })
                         : result;
                     return toNodeList(filtered, sourceKey);
                 },
@@ -92,7 +92,7 @@ export function createEntityGraph<EM extends EntityMap, E extends GraphEdges<EM>
 
         const forwardEdges = (edges as any)[nodeKey] || {};
         for (const rel in forwardEdges) {
-            const refName = `${rel}References`;
+            const refName = `${rel}Nodes`;
             if (list[refName] !== undefined) continue; // reverse already registered
             Object.defineProperty(list, refName, {
                 value: (where?: (entity: any) => boolean) => {
@@ -101,7 +101,7 @@ export function createEntityGraph<EM extends EntityMap, E extends GraphEdges<EM>
                         result.push(node[rel]());
                     }
                     const filtered = where
-                        ? result.filter(n => { const e = n.get(); return e !== undefined && where(e); })
+                        ? result.filter(n => { const e = n.value(); return e !== undefined && where(e); })
                         : result;
                     return toNodeList(filtered, rel);
                 },
@@ -115,7 +115,7 @@ export function createEntityGraph<EM extends EntityMap, E extends GraphEdges<EM>
     function createNode(key: keyof EM, id: string | null): any {
         return new Proxy({}, {
             get(_, prop: string) {
-                if (prop === "get") {
+                if (prop === "value") {
                     return () => {
                         if (id === null) return undefined;
                         const entity = byId[key as string]?.[id];
@@ -123,7 +123,7 @@ export function createEntityGraph<EM extends EntityMap, E extends GraphEdges<EM>
                         return Object.freeze(entity) as Readonly<EM[typeof key]>;
                     };
                 }
-                if (prop === "getOrThrow") {
+                if (prop === "valueOrThrow") {
                     return () => {
                         if (id === null) throw new Error(`Entity ${String(key)} not found`);
                         const entity = byId[key as string]?.[id];
@@ -137,7 +137,7 @@ export function createEntityGraph<EM extends EntityMap, E extends GraphEdges<EM>
 
                     if (id === null) {
                         if (edge) return createNode(prop as keyof EM, null);
-                        if (prop.endsWith("References")) return toNodeList([], prop.slice(0, -"References".length));
+                        if (prop.endsWith("Nodes")) return toNodeList([], prop.slice(0, -"Nodes".length));
                         throw new Error(`No relation '${prop}'`);
                     }
 
@@ -156,8 +156,8 @@ export function createEntityGraph<EM extends EntityMap, E extends GraphEdges<EM>
                         return createNode(targetType, nextId);
                     }
 
-                    if (prop.endsWith("References")) {
-                        const sourceKey = prop.slice(0, -"References".length);
+                    if (prop.endsWith("Nodes")) {
+                        const sourceKey = prop.slice(0, -"Nodes".length);
                         if (sourceKey) {
                             if (!byId[key as string]?.[id]) return toNodeList([], sourceKey);
                             let pointingIds = reverseIndex[key as string]?.[sourceKey]?.[id] || [];
@@ -180,8 +180,8 @@ export function createEntityGraph<EM extends EntityMap, E extends GraphEdges<EM>
 
     return new Proxy({}, {
         get(_, prop: string) {
-            if (prop.endsWith("References")) {
-                const entityKey = prop.slice(0, -"References".length);
+            if (prop.endsWith("Nodes")) {
+                const entityKey = prop.slice(0, -"Nodes".length);
                 return (where?: (entity: any) => boolean) => {
                     const all = entities[entityKey] || [];
                     const filtered = where ? all.filter(where) : all;
