@@ -46,15 +46,23 @@ export function createEntityGraph<EM extends EntityMap, E extends GraphEdges<EM>
 
     function toNodeList(nodes: any[], nodeKey: string): any {
         const list = [...nodes] as any;
-        Object.defineProperty(list, 'all', {
-            value: () => toNodeList(nodes.map((n: any) => n.value()).filter((v: any) => v !== undefined), nodeKey),
+        Object.defineProperty(list, 'entities', {
+            value: () => nodes.map(n => n.value()).filter((v: any) => v !== undefined),
             enumerable: false,
         });
 
-        Object.defineProperty(list, 'allUnique', {
+        Object.defineProperty(list, 'unique', {
             value: () => {
-                const entites = nodes.map(n => n.value()).filter(e => e !== undefined);
-                return toNodeList(Array.from(new Set(entites)), nodeKey);
+                const seen = new Set<string>();
+                const uniqueNodes: any[] = [];
+                for (const n of nodes) {
+                    const e = n.value();
+                    if (e !== undefined && !seen.has(e.id)) {
+                        seen.add(e.id);
+                        uniqueNodes.push(createNode(nodeKey as keyof EM, e.id));
+                    }
+                }
+                return toNodeList(uniqueNodes, nodeKey);
             },
             enumerable: false,
         });

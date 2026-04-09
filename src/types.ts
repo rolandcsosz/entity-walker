@@ -42,8 +42,8 @@ export type EntityNodeList<
     D extends GraphDef<any, any>,
     K extends keyof D["entityModel"]
 > = EntityNode<D, K>[] & {
-    all(): D["entityModel"][K][];
-    allUnique(): D["entityModel"][K][];
+    entities(): D["entityModel"][K][];
+    unique(): EntityNodeList<D, K>;
     where(where: Where<D["entityModel"][K]>): EntityNodeList<D, K>;
 } & {
     [Rel in keyof D["edges"][K] as `${string & Rel}Nodes`]: (

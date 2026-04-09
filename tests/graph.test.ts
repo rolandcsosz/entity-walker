@@ -301,27 +301,27 @@ describe("entity graph", () => {
         expect(expenseDescs).toContain("Groceries");
     });
 
-    it("all() on base references returns plain objects", () => {
-        const transactions = graph.transactionNodes().all();
+    it("entities() on base references returns plain objects", () => {
+        const transactions = graph.transactionNodes().entities();
         expect(transactions).toHaveLength(3);
         expect(transactions[0].id).toBe("tx1");
         expect(transactions[0].subcategoryId).toBe("sub1");
     });
 
-    it("all() with where clause filters and returns plain objects", () => {
-        const transactions = graph.transactionNodes(t => t.subcategoryId === "sub1").all();
+    it("entities() with where clause filters and returns plain objects", () => {
+        const transactions = graph.transactionNodes(t => t.subcategoryId === "sub1").entities();
         expect(transactions).toHaveLength(2);
         expect(transactions.map(t => t.id)).toEqual(["tx1", "tx3"]);
     });
 
-    it("all() on node-level reverse references returns plain objects", () => {
-        const subs = graph.mainCategory("cat1").subcategoryNodes().all();
+    it("entities() on node-level reverse references returns plain objects", () => {
+        const subs = graph.mainCategory("cat1").subcategoryNodes().entities();
         expect(subs).toHaveLength(2);
         expect(subs[0].name).toBe("sub1");
     });
 
-    it("all() filters out undefined entries", () => {
-        const results = graph.mainCategory("nonexistent").subcategoryNodes().all();
+    it("entities() filters out undefined entries", () => {
+        const results = graph.mainCategory("nonexistent").subcategoryNodes().entities();
         expect(results).toEqual([]);
     });
 
@@ -337,7 +337,7 @@ describe("entity graph", () => {
         expect(ids).toEqual(["tx1", "tx3"]);
     });
 
-    it("multi-level chained references with filter and all()", () => {
+    it("multi-level chained references with filter and entities()", () => {
         const subs = graph
             .expenseType("et1")
             .mainCategoryNodes()
@@ -356,7 +356,7 @@ describe("entity graph", () => {
             .mainCategoryNodes(c => c.expenseTypeId === "et1")
             .subcategoryNodes()
             .transactionNodes()
-            .all()
+            .entities()
             .map(t => t.id);
 
         expect(ids).toEqual(["tx1", "tx3", "tx2"]);
@@ -366,7 +366,7 @@ describe("entity graph", () => {
         const ids = graph
             .subcategoryNodes(s => s.name === "sub1")
             .transactionNodes()
-            .all()
+            .entities()
             .map(t => t.id);
 
         expect(ids).toEqual(["tx1", "tx3"]);
@@ -378,7 +378,7 @@ describe("entity graph", () => {
             .subcategoryNodes()
             .mainCategoryNodes(c => c.expenseTypeId === "et1")
             .expenseTypeNodes()
-            .all()
+            .entities()
             .map(e => e.description);
 
         expect(descriptions).toEqual(["Groceries", "Groceries"]);
@@ -390,7 +390,7 @@ describe("entity graph", () => {
             .mainCategoryNodes(c => c.name === "Food")
             .subcategoryNodes(s => s.name === "sub1")
             .transactionNodes()
-            .all()
+            .entities()
             .map(t => t.id);
 
         expect(ids).toEqual(["tx1", "tx3"]);
@@ -401,7 +401,7 @@ describe("entity graph", () => {
             .transactionNodes(t => t.subcategoryId === "sub1")
             .subcategoryNodes(s => s.mainCategoryId === "cat1")
             .mainCategoryNodes(c => c.expenseTypeId === "et1")
-            .all();
+            .entities();
 
         expect(results).toHaveLength(2);
         expect(results[0].name).toBe("Food");
@@ -412,7 +412,7 @@ describe("entity graph", () => {
             .mainCategoryNodes(c => c.expenseTypeId === "et1")
             .subcategoryNodes(s => s.name === "sub2")
             .transactionNodes(t => t.subcategoryId === "sub2")
-            .all()
+            .entities()
             .map(t => t.id);
 
         expect(ids).toEqual(["tx2"]);
@@ -423,17 +423,17 @@ describe("entity graph", () => {
             .expenseType("et1")
             .mainCategoryNodes(c => c.name === "NonExistent")
             .subcategoryNodes()
-            .all();
+            .entities();
 
         expect(ids).toHaveLength(0);
     });
 
-    it("allUnique() removes duplicate entities from chained traversal", () => {
+    it("unique() removes duplicate entities from chained traversal", () => {
         const categories = graph
             .mainCategory("cat1")
             .subcategoryNodes()
             .mainCategoryNodes()
-            .all();
+            .entities();
 
         expect(categories).toHaveLength(2);
         expect(categories[0].id).toBe("cat1");
@@ -443,34 +443,36 @@ describe("entity graph", () => {
             .mainCategory("cat1")
             .subcategoryNodes()
             .mainCategoryNodes()
-            .allUnique();
+            .unique()
+            .entities();
 
         expect(unique).toHaveLength(1);
         expect(unique[0].id).toBe("cat1");
     });
 
-    it("allUnique() on base references with no duplicates", () => {
-        const subs = graph.subcategoryNodes().allUnique();
+    it("unique() on base references with no duplicates", () => {
+        const subs = graph.subcategoryNodes().unique().entities();
         expect(subs).toHaveLength(2);
         expect(subs.map(s => s.id)).toEqual(["sub1", "sub2"]);
     });
 
-    it("allUnique() returns empty for missing entities", () => {
+    it("unique() returns empty for missing entities", () => {
         const result = graph
             .mainCategory("nonexistent")
             .subcategoryNodes()
-            .allUnique();
+            .unique();
 
         expect(result).toHaveLength(0);
     });
 
-    it("allUnique() on deep chain with duplicates", () => {
+    it("unique() on deep chain with duplicates", () => {
         const transactions = graph
             .expenseType("et1")
             .mainCategoryNodes()
             .subcategoryNodes()
             .mainCategoryNodes()
-            .allUnique();
+            .unique()
+            .entities();
 
         expect(transactions).toHaveLength(1);
         expect(transactions[0].id).toBe("cat1");
@@ -496,7 +498,7 @@ describe("entity graph", () => {
             .subcategoryNodes()
             .where(s => s.name === "sub1")
             .transactionNodes()
-            .all()
+            .entities()
             .map(t => t.id);
 
         expect(txIds).toEqual(["tx1", "tx3"]);
@@ -516,7 +518,7 @@ describe("entity graph", () => {
             .mainCategoryNodes()
             .subcategoryNodes()
             .where(s => s.name === "sub2")
-            .all();
+            .entities();
 
         expect(cats).toHaveLength(1);
         expect(cats[0].id).toBe("sub2");
@@ -529,7 +531,7 @@ describe("entity graph", () => {
             .subcategoryNodes()
             .where(s => s.name === "sub2")
             .transactionNodes()
-            .all()
+            .entities()
             .map(t => t.id);
 
         expect(txIds).toEqual(["tx2"]);
