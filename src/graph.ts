@@ -51,6 +51,50 @@ export function createEntityGraph<EM extends EntityMap, E extends GraphEdges<EM>
             enumerable: false,
         });
 
+        Object.defineProperty(list, 'select', {
+            value: (fn: (entity: any) => any) =>
+                nodes.map(n => n.value()).filter((v: any) => v !== undefined).map(fn),
+            enumerable: false,
+        });
+
+        Object.defineProperty(list, 'ids', {
+            value: () =>
+                nodes.map(n => n.value()).filter((v: any) => v !== undefined).map((v: any) => v.id),
+            enumerable: false,
+        });
+
+        Object.defineProperty(list, 'first', {
+            value: () => {
+                for (const n of nodes) {
+                    const e = n.value();
+                    if (e !== undefined) return e;
+                }
+                return undefined;
+            },
+            enumerable: false,
+        });
+
+        Object.defineProperty(list, 'findEntity', {
+            value: (predicate: (entity: any) => boolean) => {
+                for (const n of nodes) {
+                    const e = n.value();
+                    if (e !== undefined && predicate(e)) return e;
+                }
+                return undefined;
+            },
+            enumerable: false,
+        });
+
+        Object.defineProperty(list, 'isEmpty', {
+            value: () => nodes.every((n: any) => n.value() === undefined),
+            enumerable: false,
+        });
+
+        Object.defineProperty(list, 'isNotEmpty', {
+            value: () => nodes.some((n: any) => n.value() !== undefined),
+            enumerable: false,
+        });
+
         Object.defineProperty(list, 'unique', {
             value: () => {
                 const seen = new Set<string>();
@@ -137,6 +181,12 @@ export function createEntityGraph<EM extends EntityMap, E extends GraphEdges<EM>
                         const entity = byId[key as string]?.[id];
                         if (!entity) throw new Error(`Entity ${String(key)}(${id}) not found`);
                         return Object.freeze(entity) as Readonly<EM[typeof key]>;
+                    };
+                }
+                if (prop === "exists") {
+                    return () => {
+                        if (id === null) return false;
+                        return !!byId[key as string]?.[id];
                     };
                 }
 

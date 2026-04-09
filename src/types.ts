@@ -43,6 +43,12 @@ export type EntityNodeList<
     K extends keyof D["entityModel"]
 > = EntityNode<D, K>[] & {
     entities(): D["entityModel"][K][];
+    select<R>(fn: (entity: D["entityModel"][K]) => R): R[];
+    ids(): string[];
+    first(): D["entityModel"][K] | undefined;
+    findEntity(predicate: (entity: D["entityModel"][K]) => boolean): D["entityModel"][K] | undefined;
+    isEmpty(): boolean;
+    isNotEmpty(): boolean;
     unique(): EntityNodeList<D, K>;
     where(where: Where<D["entityModel"][K]>): EntityNodeList<D, K>;
 } & {
@@ -62,6 +68,7 @@ export type EntityNode<
 > = {
     value(): D["entityModel"][K] | undefined;
     valueOrThrow(): D["entityModel"][K];
+    exists(): boolean;
 } & {
     [Rel in keyof D["edges"][K]]: () => EntityNode<
         D,

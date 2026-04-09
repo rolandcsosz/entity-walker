@@ -537,4 +537,157 @@ describe("entity graph", () => {
         expect(txIds).toEqual(["tx2"]);
     });
 
+    it("select() maps resolved entities", () => {
+        const names = graph.subcategoryNodes().select(s => s.name);
+        expect(names).toEqual(["sub1", "sub2"]);
+    });
+
+    it("select() skips missing entities", () => {
+        const ids = graph
+            .mainCategory("nonexistent")
+            .subcategoryNodes()
+            .select(s => s.id);
+        expect(ids).toEqual([]);
+    });
+
+    it("select() works after chained traversal", () => {
+        const ids = graph
+            .expenseType("et1")
+            .mainCategoryNodes()
+            .subcategoryNodes()
+            .select(s => s.id);
+        expect(ids).toEqual(["sub1", "sub2"]);
+    });
+
+    it("ids() returns entity ids", () => {
+        const ids = graph.subcategoryNodes().ids();
+        expect(ids).toEqual(["sub1", "sub2"]);
+    });
+
+    it("ids() returns empty array for missing entities", () => {
+        const ids = graph.mainCategory("nonexistent").subcategoryNodes().ids();
+        expect(ids).toEqual([]);
+    });
+
+    it("ids() works after chained traversal with duplicates", () => {
+        const ids = graph
+            .mainCategory("cat1")
+            .subcategoryNodes()
+            .mainCategoryNodes()
+            .ids();
+        expect(ids).toEqual(["cat1", "cat1"]);
+    });
+
+    it("first() returns first resolved entity", () => {
+        const sub = graph.subcategoryNodes().first();
+        expect(sub?.id).toBe("sub1");
+    });
+
+    it("first() returns undefined for empty list", () => {
+        const result = graph.mainCategory("nonexistent").subcategoryNodes().first();
+        expect(result).toBeUndefined();
+    });
+
+    it("first() returns first after where() filter", () => {
+        const sub = graph.subcategoryNodes().where(s => s.name === "sub2").first();
+        expect(sub?.id).toBe("sub2");
+    });
+
+    it("isEmpty() returns false when entities exist", () => {
+        expect(graph.subcategoryNodes().isEmpty()).toBe(false);
+    });
+
+    it("isEmpty() returns true for empty list", () => {
+        expect(graph.mainCategory("nonexistent").subcategoryNodes().isEmpty()).toBe(true);
+    });
+
+    it("isEmpty() returns true after where() matches nothing", () => {
+        expect(graph.subcategoryNodes().where(s => s.name === "nonexistent").isEmpty()).toBe(true);
+    });
+
+    it("isNotEmpty() returns true when entities exist", () => {
+        expect(graph.subcategoryNodes().isNotEmpty()).toBe(true);
+    });
+
+    it("isNotEmpty() returns false for empty list", () => {
+        expect(graph.mainCategory("nonexistent").subcategoryNodes().isNotEmpty()).toBe(false);
+    });
+
+    it("isNotEmpty() returns false after where() matches nothing", () => {
+        expect(graph.subcategoryNodes().where(s => s.name === "nonexistent").isNotEmpty()).toBe(false);
+    });
+
+    it("exists() returns true for a valid entity", () => {
+        expect(graph.transaction("tx1").exists()).toBe(true);
+    });
+
+    it("exists() returns false for a missing entity", () => {
+        expect(graph.transaction("nonexistent").exists()).toBe(false);
+    });
+
+    it("exists() returns false when traversal leads to null", () => {
+        expect(graph.transaction("nonexistent").subcategory().exists()).toBe(false);
+    });
+
+    it("exists() returns true for a valid chained entity", () => {
+        expect(graph.transaction("tx1").subcategory().exists()).toBe(true);
+    });
+
+    it("exists() true — value() returns the entity", () => {
+        const node = graph.transaction("tx1");
+        expect(node.exists()).toBe(true);
+        expect(node.value()?.id).toBe("tx1");
+    });
+
+    it("exists() true — valueOrThrow() does not throw", () => {
+        const node = graph.transaction("tx1");
+        expect(node.exists()).toBe(true);
+        expect(() => node.valueOrThrow()).not.toThrow();
+        expect(node.valueOrThrow().id).toBe("tx1");
+    });
+
+    it("exists() false — value() returns undefined", () => {
+        const node = graph.transaction("nonexistent");
+        expect(node.exists()).toBe(false);
+        expect(node.value()).toBeUndefined();
+    });
+
+    it("exists() false — valueOrThrow() throws", () => {
+        const node = graph.transaction("nonexistent");
+        expect(node.exists()).toBe(false);
+        expect(() => node.valueOrThrow()).toThrow();
+    });
+
+    it("exists() false on chained traversal — value() returns undefined", () => {
+        const node = graph.transaction("nonexistent").subcategory();
+        expect(node.exists()).toBe(false);
+        expect(node.value()).toBeUndefined();
+    });
+
+    it("exists() false on chained traversal — valueOrThrow() throws", () => {
+        const node = graph.transaction("nonexistent").subcategory();
+        expect(node.exists()).toBe(false);
+        expect(() => node.valueOrThrow()).toThrow();
+    });
+
+    it("findEntity() returns matching entity", () => {
+        const sub = graph.subcategoryNodes().findEntity(s => s.name === "sub2");
+        expect(sub?.id).toBe("sub2");
+    });
+
+    it("findEntity() returns undefined when nothing matches", () => {
+        const sub = graph.subcategoryNodes().findEntity(s => s.name === "nonexistent");
+        expect(sub).toBeUndefined();
+    });
+
+    it("findEntity() returns undefined for empty list", () => {
+        const sub = graph.mainCategory("nonexistent").subcategoryNodes().findEntity(() => true);
+        expect(sub).toBeUndefined();
+    });
+
+    it("findEntity() works after chained traversal", () => {
+        const tx = graph.subcategoryNodes().transactionNodes().findEntity(t => t.id === "tx2");
+        expect(tx?.id).toBe("tx2");
+    });
+
 });
