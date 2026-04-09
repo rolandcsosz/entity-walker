@@ -62,6 +62,34 @@ export type EntityNodeList<
     ) => EntityNodeList<D, SourceEntity>;
 };
 
+export type GraphEdgeSummary = {
+    from: string;
+    to: string;
+    bidirectional: boolean;
+};
+
+export type GraphSchema = {
+    entities: string[];
+    edges: GraphEdgeSummary[];
+};
+
+export type MissingEntityRef = { type: string; id: string };
+
+export type GraphDebugInfo = {
+    entityCounts: Record<string, number>;
+    cache: { nodeCount: number };
+    missingEntities: MissingEntityRef[];
+    orphanEntities: Record<string, string[]>;
+};
+
+export type NodeDebugInfo = {
+    type: string;
+    id: string | null;
+    exists: boolean;
+    path: string[];
+    value: any;
+};
+
 export type EntityNode<
     D extends GraphDef<any, any>,
     K extends keyof D["entityModel"]
@@ -69,6 +97,8 @@ export type EntityNode<
     value(): D["entityModel"][K] | undefined;
     valueOrThrow(): D["entityModel"][K];
     exists(): boolean;
+    path(): string[];
+    info(): NodeDebugInfo;
 } & {
     [Rel in keyof D["edges"][K]]: () => EntityNode<
         D,
@@ -87,4 +117,7 @@ export type EntityGraph<D extends GraphDef<any, any>> = {
     [K in keyof D["entityModel"] as `${string & K}Nodes`]: (
         where?: Where<D["entityModel"][K]>
     ) => EntityNodeList<D, K>;
+} & {
+    info(): GraphDebugInfo;
+    schema(): GraphSchema;
 };

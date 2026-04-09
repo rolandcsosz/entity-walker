@@ -203,7 +203,6 @@ describe("entity graph", () => {
 
     it("supports .filter() on references to select specific nodes", () => {
         const transactions = graph.mainCategoryNodes((mc) => mc.expenseTypeId === "et1").subcategoryNodes().transactionNodes();
-        console.log(transactions.map(t => t.value()?.id));
         expect(transactions).toHaveLength(3);
         expect(transactions[0].value()?.id).toBe("tx1");
     });
@@ -688,6 +687,166 @@ describe("entity graph", () => {
     it("findEntity() works after chained traversal", () => {
         const tx = graph.subcategoryNodes().transactionNodes().findEntity(t => t.id === "tx2");
         expect(tx?.id).toBe("tx2");
+    });
+
+});
+
+describe("info helpers", () => {
+
+    describe("graph.schema()", () => {
+        it("lists all entity types", () => {
+            const schema = graph.schema();
+            expect(schema.entities).toEqual(expect.arrayContaining([
+                "transaction", "subcategory", "mainCategory", "expenseType", "incomeType",
+            ]));
+        });
+
+        it("lists all edges with correct from/to", () => {
+            const schema = graph.schema();
+            const edgePairs = schema.edges.map(e => ({ from: e.from, to: e.to }));
+            expect(edgePairs).toEqual(expect.arrayContaining([
+                { from: "transaction", to: "subcategory" },
+                { from: "subcategory", to: "mainCategory" },
+                { from: "mainCategory", to: "expenseType" },
+                { from: "mainCategory", to: "incomeType" },
+            ]));
+        });
+
+        it("correctly marks bidirectional edges", () => {
+            const schema = graph.schema();
+            const txSub = schema.edges.find(e => e.from === "transaction" && e.to === "subcategory");
+            expect(txSub?.bidirectional).toBe(true);
+        });
+
+        it("correctly marks non-bidirectional edges", () => {
+            const schema = graph.schema();
+            const catIncome = schema.edges.find(e => e.from === "mainCategory" && e.to === "incomeType");
+            expect(catIncome?.bidirectional).toBe(false);
+        });
+    });
+
+    describe("graph.info()", () => {
+        it("returns entity counts", () => {
+            const info = graph.info();
+            expect(info.entityCounts.transaction).toBe(3);
+            expect(info.entityCounts.subcategory).toBe(2);
+            expect(info.entityCounts.mainCategory).toBe(3);
+            expect(info.entityCounts.expenseType).toBe(1);
+            expect(info.entityCounts.incomeType).toBe(1);
+        });
+
+        it("returns cache with nodeCount", () => {
+            const info = graph.info();
+            expect(typeof info.cache.nodeCount).toBe("number");
+        });
+
+        it("detects missing FK references", () => {
+            const info = graph.info();
+            const missingIds = info.missingEntities.map(m => m.id);
+            expect(missingIds).toContain("error");
+        });
+
+        it("missing entities have correct type", () => {
+            const info = graph.info();
+            const missingExpense = info.missingEntities.find(m => m.id === "error" && m.type === "expenseType");
+            expect(missingExpense).toBeDefined();
+        });
+
+        it("returns empty missingEntities when all FKs resolve", () => {
+            const clean = createEntityGraph({
+                entities: {
+                    transaction: [{ id: "t1", subcategoryId: "s1" }],
+                    subcategory: [{ id: "s1", name: "s1", mainCategoryId: "c1" }],
+                    mainCategory: [{ id: "c1", name: "C", expenseTypeId: "e1", incomeTypeId: "i1" }],
+                    expenseType: [{ id: "e1", description: "d" }],
+                    incomeType: [{ id: "i1", description: "d" }],
+                },
+                edges,
+            });
+            expect(clean.info().missingEntities).toHaveLength(0);
+        });
+
+        it("detects orphan entities not referenced by any edge", () => {
+            const info = graph.info();
+            expect(info.orphanEntities.transaction).toBeUndefined();
+            expect(info.orphanEntities.mainCategory).toEqual(["cat2", "cat3"]);
+        });
+
+        it("orphanEntities omits types that are fully referenced", () => {
+            const info = graph.info();
+            expect(info.orphanEntities.subcategory).toBeUndefined();
+        });
+
+        it("cat2 and cat3 are orphans in mainCategory (no subcategory points to them)", () => {
+            const info = graph.info();
+            expect(info.orphanEntities.mainCategory).toEqual(["cat2", "cat3"]);
+        });
+    });
+
+    describe("node.path()", () => {
+        it("returns single-step path for a root node", () => {
+            const path = graph.transaction("tx1").path();
+            expect(path).toEqual(["transaction(tx1)"]);
+        });
+
+        it("returns multi-step path after traversal", () => {
+            const path = graph.transaction("tx1").subcategory().path();
+            expect(path).toEqual(["transaction(tx1)", "subcategory(sub1)"]);
+        });
+
+        it("returns path with null marker for missing entity", () => {
+            const path = graph.transaction("nonexistent").subcategory().path();
+            expect(path).toEqual(["transaction(nonexistent)", "subcategory(null)"]);
+        });
+    });
+
+    describe("node.info()", () => {
+        it("returns correct info for an existing node", () => {
+            const info = graph.transaction("tx1").info();
+            expect(info.type).toBe("transaction");
+            expect(info.id).toBe("tx1");
+            expect(info.exists).toBe(true);
+            expect(info.value?.id).toBe("tx1");
+            expect(info.path).toEqual(["transaction(tx1)"]);
+        });
+
+        it("returns correct info for a missing node", () => {
+            const info = graph.transaction("nonexistent").info();
+            expect(info.type).toBe("transaction");
+            expect(info.id).toBe("nonexistent");
+            expect(info.exists).toBe(false);
+            expect(info.value).toBeUndefined();
+        });
+
+        it("returns correct info after chained traversal", () => {
+            const info = graph.transaction("tx1").subcategory().info();
+            expect(info.type).toBe("subcategory");
+            expect(info.id).toBe("sub1");
+            expect(info.exists).toBe(true);
+            expect(info.path).toEqual(["transaction(tx1)", "subcategory(sub1)"]);
+        });
+
+        it("returns correct info for a null node from missing traversal", () => {
+            const info = graph.transaction("nonexistent").subcategory().info();
+            expect(info.type).toBe("subcategory");
+            expect(info.id).toBeNull();
+            expect(info.exists).toBe(false);
+            expect(info.value).toBeUndefined();
+        });
+    });
+
+    describe("better error messages", () => {
+        it("valueOrThrow on missing entity mentions entity type and id", () => {
+            expect(() => graph.transaction("bad").valueOrThrow()).toThrow(/transaction.*bad/);
+        });
+
+        it("valueOrThrow on null node mentions null traversal", () => {
+            expect(() => graph.transaction("nonexistent").subcategory().valueOrThrow()).toThrow(/subcategory/);
+        });
+
+        it("accessing unknown relation mentions available relations", () => {
+            expect(() => (graph.transaction("tx1") as any).unknownRel()).toThrow(/unknownRel/);
+        });
     });
 
 });

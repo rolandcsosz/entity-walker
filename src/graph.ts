@@ -1,4 +1,4 @@
-import { EntityGraph, EntityMap, GraphDef, GraphEdges } from "./types";
+import { EntityGraph, EntityMap, GraphDef, GraphDebugInfo, GraphEdges, GraphSchema, MissingEntityRef, NodeDebugInfo } from "./types";
 
 export const createEntityGraph = <EM extends EntityMap, E extends GraphEdges<EM>>(config: {
     entities: { [K in keyof EM]: EM[K][] };
@@ -197,10 +197,80 @@ export const createEntityGraph = <EM extends EntityMap, E extends GraphEdges<EM>
 
     const nodeCache = new Map<string, any>();
 
-    function createNode(key: keyof EM, id: string | null): any {
-        const cacheKey = `${String(key)}:${id ?? '\0'}`;
-        const cached = nodeCache.get(cacheKey);
-        if (cached) return cached;
+    const buildEdgeSummary = (): GraphSchema['edges'] => {
+        const result: GraphSchema['edges'] = [];
+        for (const sourceType in edges) {
+            const entityEdges = (edges as any)[sourceType];
+            if (!entityEdges) continue;
+            for (const targetType in entityEdges) {
+                result.push({ from: sourceType, to: targetType, bidirectional: !!entityEdges[targetType].bidirectional });
+            }
+        }
+        return result;
+    };
+
+    const graphSchema = (): GraphSchema => ({
+        entities: Object.keys(byId),
+        edges: buildEdgeSummary(),
+    });
+
+    const graphInfo = (): GraphDebugInfo => {
+        const missingEntities: { type: string; id: string }[] = [];
+        for (const sourceType in edges) {
+            const entityEdges = (edges as any)[sourceType];
+            if (!entityEdges) continue;
+            for (const targetType in entityEdges) {
+                const edge = entityEdges[targetType];
+                for (const sourceEntity of entities[sourceType] ?? []) {
+                    const targetId = edge.resolve(sourceEntity);
+                    if (targetId && !byId[targetType]?.[targetId]) {
+                        missingEntities.push({ type: targetType, id: targetId });
+                    }
+                }
+            }
+        }
+
+        const referencedIds: Record<string, Set<string>> = {};
+        for (const sourceType in edges) {
+            const entityEdges = (edges as any)[sourceType];
+            if (!entityEdges) continue;
+            for (const targetType in entityEdges) {
+                const edge = entityEdges[targetType];
+                if (!referencedIds[targetType]) referencedIds[targetType] = new Set();
+                for (const sourceEntity of entities[sourceType] ?? []) {
+                    const targetId = edge.resolve(sourceEntity);
+                    if (targetId) referencedIds[targetType].add(targetId);
+                }
+            }
+        }
+        const orphanEntities: Record<string, string[]> = {};
+        for (const type in referencedIds) {
+            const refs = referencedIds[type];
+            const orphans = Object.keys(byId[type] ?? {}).filter(id => !refs.has(id));
+            if (orphans.length > 0) orphanEntities[type] = orphans;
+        }
+
+        return {
+            entityCounts: Object.fromEntries(Object.keys(byId).map(k => [k, Object.keys(byId[k]).length])),
+            cache: { nodeCount: nodeCache.size },
+            missingEntities,
+            orphanEntities,
+        };
+    };
+
+    function createNode(key: keyof EM, id: string | null, path: string[] = []): any {
+        const cacheKey = id !== null ? `${String(key)}:${id}` : null;
+        if (cacheKey) {
+            const cached = nodeCache.get(cacheKey);
+            if (cached) return cached;
+        }
+
+        const nodePath = [...path, id !== null ? `${String(key)}(${id})` : `${String(key)}(null)`];
+        const availableRelations = () => {
+            const forward = Object.keys((edges as any)[key] ?? {});
+            const reverse = Object.keys(reverseIndex[key as string] ?? {}).map(k => `${k}Nodes`);
+            return [...forward, ...reverse];
+        };
 
         let valueFetched = false;
         let cachedValue: any;
@@ -216,41 +286,57 @@ export const createEntityGraph = <EM extends EntityMap, E extends GraphEdges<EM>
         const valueOrThrowMethod = () => {
             const e = getValue();
             if (e === undefined) {
-                if (id === null) throw new Error(`Entity ${String(key)} not found`);
-                throw new Error(`Entity ${String(key)}(${id}) not found`);
+                if (id === null) throw new Error(
+                    `[entity-walker] Cannot call valueOrThrow() on '${String(key)}': traversal led to a missing entity (null id).`
+                );
+                throw new Error(
+                    `[entity-walker] Entity '${String(key)}' with id '${id}' does not exist in the graph.`
+                );
             }
             return e;
         };
         const existsMethod = () => getValue() !== undefined;
+        const pathMethod = () => nodePath;
+        const infoMethod = (): NodeDebugInfo => ({
+            type: String(key),
+            id,
+            exists: existsMethod(),
+            path: nodePath,
+            value: getValue(),
+        });
 
         const node = new Proxy({}, {
             get(_, prop: string) {
                 if (prop === "value") return getValue;
                 if (prop === "valueOrThrow") return valueOrThrowMethod;
                 if (prop === "exists") return existsMethod;
+                if (prop === "path") return pathMethod;
+                if (prop === "info") return infoMethod;
 
                 return (...args: any[]) => {
                     const edge = (edges as any)[key]?.[prop];
 
                     if (id === null) {
-                        if (edge) return createNode(prop as keyof EM, null);
+                        if (edge) return createNode(prop as keyof EM, null, nodePath);
                         if (prop.endsWith("Nodes")) return toNodeList([], prop.slice(0, -"Nodes".length));
-                        throw new Error(`No relation '${prop}'`);
+                        throw new Error(
+                            `[entity-walker] Relation '${prop}' called on a null '${String(key)}' node (traversal led to a missing entity).`
+                        );
                     }
 
                     if (edge) {
                         const entity = getValue();
                         const targetType = prop as keyof EM;
 
-                        if (!entity) return createNode(targetType, null);
+                        if (!entity) return createNode(targetType, null, nodePath);
 
                         const nextId = edge.resolve(entity);
-                        if (!nextId) return createNode(targetType, null);
+                        if (!nextId) return createNode(targetType, null, nodePath);
 
                         const targetExists = !!byId[targetType as string]?.[nextId];
-                        if (!targetExists) return createNode(targetType, null);
+                        if (!targetExists) return createNode(targetType, null, nodePath);
 
-                        return createNode(targetType, nextId);
+                        return createNode(targetType, nextId, nodePath);
                     }
 
                     if (prop.endsWith("Nodes")) {
@@ -265,21 +351,25 @@ export const createEntityGraph = <EM extends EntityMap, E extends GraphEdges<EM>
                                     return e !== undefined && where(e);
                                 });
                             }
-                            return toNodeList(pointingIds.map(pid => createNode(sourceKey as keyof EM, pid)), sourceKey);
+                            return toNodeList(pointingIds.map(pid => createNode(sourceKey as keyof EM, pid, nodePath)), sourceKey);
                         }
                     }
 
-                    throw new Error(`No relation '${prop}'`);
+                    throw new Error(
+                        `[entity-walker] No relation '${prop}' on entity type '${String(key)}'. Available: ${availableRelations().join(', ') || 'none'}`
+                    );
                 };
             },
         });
 
-        nodeCache.set(cacheKey, node);
+        if (cacheKey) nodeCache.set(cacheKey, node);
         return node;
     }
 
     return new Proxy({}, {
         get(_, prop: string) {
+            if (prop === "info") return graphInfo
+            if (prop === "schema") return graphSchema;
             if (prop.endsWith("Nodes")) {
                 const entityKey = prop.slice(0, -"Nodes".length);
                 return (where?: (entity: any) => boolean) => {
