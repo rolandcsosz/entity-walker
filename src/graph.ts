@@ -1,9 +1,9 @@
 import { EntityGraph, EntityMap, GraphDef, GraphEdges } from "./types";
 
-export function createEntityGraph<EM extends EntityMap, E extends GraphEdges<EM>>(config: {
+export const createEntityGraph = <EM extends EntityMap, E extends GraphEdges<EM>>(config: {
     entities: { [K in keyof EM]: EM[K][] };
     edges: E;
-}): EntityGraph<GraphDef<EM, E>> {
+}): EntityGraph<GraphDef<EM, E>> => {
     const { entities, edges } = config;
     const byId: Record<string, Record<string, any>> = {};
 
@@ -44,22 +44,43 @@ export function createEntityGraph<EM extends EntityMap, E extends GraphEdges<EM>
         }
     }
 
-    function toNodeList(nodes: any[], nodeKey: string): any {
+    const resolveEntities = (nodes: any[]): any[] => {
+        const result: any[] = [];
+        for (const n of nodes) {
+            const e = n.value();
+            if (e !== undefined) result.push(e);
+        }
+        return result;
+    }
+
+    const toNodeList = (nodes: any[], nodeKey: string): any => {
         const list = [...nodes] as any;
         Object.defineProperty(list, 'entities', {
-            value: () => nodes.map(n => n.value()).filter((v: any) => v !== undefined),
+            value: () => resolveEntities(nodes),
             enumerable: false,
         });
 
         Object.defineProperty(list, 'select', {
-            value: (fn: (entity: any) => any) =>
-                nodes.map(n => n.value()).filter((v: any) => v !== undefined).map(fn),
+            value: (fn: (entity: any) => any) => {
+                const result: any[] = [];
+                for (const n of nodes) {
+                    const e = n.value();
+                    if (e !== undefined) result.push(fn(e));
+                }
+                return result;
+            },
             enumerable: false,
         });
 
         Object.defineProperty(list, 'ids', {
-            value: () =>
-                nodes.map(n => n.value()).filter((v: any) => v !== undefined).map((v: any) => v.id),
+            value: () => {
+                const result: string[] = [];
+                for (const n of nodes) {
+                    const e = n.value();
+                    if (e !== undefined) result.push(e.id);
+                }
+                return result;
+            },
             enumerable: false,
         });
 
@@ -86,12 +107,22 @@ export function createEntityGraph<EM extends EntityMap, E extends GraphEdges<EM>
         });
 
         Object.defineProperty(list, 'isEmpty', {
-            value: () => nodes.every((n: any) => n.value() === undefined),
+            value: () => {
+                for (const n of nodes) {
+                    if (n.value() !== undefined) return false;
+                }
+                return true;
+            },
             enumerable: false,
         });
 
         Object.defineProperty(list, 'isNotEmpty', {
-            value: () => nodes.some((n: any) => n.value() !== undefined),
+            value: () => {
+                for (const n of nodes) {
+                    if (n.value() !== undefined) return true;
+                }
+                return false;
+            },
             enumerable: false,
         });
 
@@ -145,7 +176,7 @@ export function createEntityGraph<EM extends EntityMap, E extends GraphEdges<EM>
         const forwardEdges = (edges as any)[nodeKey] || {};
         for (const rel in forwardEdges) {
             const refName = `${rel}Nodes`;
-            if (list[refName] !== undefined) continue; // reverse already registered
+            if (list[refName] !== undefined) continue;
             Object.defineProperty(list, refName, {
                 value: (where?: (entity: any) => boolean) => {
                     const result: any[] = [];
@@ -164,31 +195,39 @@ export function createEntityGraph<EM extends EntityMap, E extends GraphEdges<EM>
         return list;
     }
 
+    const nodeCache = new Map<string, any>();
+
     function createNode(key: keyof EM, id: string | null): any {
-        return new Proxy({}, {
+        const cacheKey = `${String(key)}:${id ?? '\0'}`;
+        const cached = nodeCache.get(cacheKey);
+        if (cached) return cached;
+
+        let valueFetched = false;
+        let cachedValue: any;
+        function getValue() {
+            if (valueFetched) return cachedValue;
+            valueFetched = true;
+            if (id === null) return (cachedValue = undefined);
+            const entity = byId[key as string]?.[id];
+            cachedValue = entity ? Object.freeze(entity) as Readonly<EM[typeof key]> : undefined;
+            return cachedValue;
+        }
+
+        const valueOrThrowMethod = () => {
+            const e = getValue();
+            if (e === undefined) {
+                if (id === null) throw new Error(`Entity ${String(key)} not found`);
+                throw new Error(`Entity ${String(key)}(${id}) not found`);
+            }
+            return e;
+        };
+        const existsMethod = () => getValue() !== undefined;
+
+        const node = new Proxy({}, {
             get(_, prop: string) {
-                if (prop === "value") {
-                    return () => {
-                        if (id === null) return undefined;
-                        const entity = byId[key as string]?.[id];
-                        if (!entity) return undefined;
-                        return Object.freeze(entity) as Readonly<EM[typeof key]>;
-                    };
-                }
-                if (prop === "valueOrThrow") {
-                    return () => {
-                        if (id === null) throw new Error(`Entity ${String(key)} not found`);
-                        const entity = byId[key as string]?.[id];
-                        if (!entity) throw new Error(`Entity ${String(key)}(${id}) not found`);
-                        return Object.freeze(entity) as Readonly<EM[typeof key]>;
-                    };
-                }
-                if (prop === "exists") {
-                    return () => {
-                        if (id === null) return false;
-                        return !!byId[key as string]?.[id];
-                    };
-                }
+                if (prop === "value") return getValue;
+                if (prop === "valueOrThrow") return valueOrThrowMethod;
+                if (prop === "exists") return existsMethod;
 
                 return (...args: any[]) => {
                     const edge = (edges as any)[key]?.[prop];
@@ -200,7 +239,7 @@ export function createEntityGraph<EM extends EntityMap, E extends GraphEdges<EM>
                     }
 
                     if (edge) {
-                        const entity = byId[key as string]?.[id];
+                        const entity = getValue();
                         const targetType = prop as keyof EM;
 
                         if (!entity) return createNode(targetType, null);
@@ -217,7 +256,7 @@ export function createEntityGraph<EM extends EntityMap, E extends GraphEdges<EM>
                     if (prop.endsWith("Nodes")) {
                         const sourceKey = prop.slice(0, -"Nodes".length);
                         if (sourceKey) {
-                            if (!byId[key as string]?.[id]) return toNodeList([], sourceKey);
+                            if (getValue() === undefined) return toNodeList([], sourceKey);
                             let pointingIds = reverseIndex[key as string]?.[sourceKey]?.[id] || [];
                             const where = args[0] as ((entity: any) => boolean) | undefined;
                             if (where) {
@@ -234,6 +273,9 @@ export function createEntityGraph<EM extends EntityMap, E extends GraphEdges<EM>
                 };
             },
         });
+
+        nodeCache.set(cacheKey, node);
+        return node;
     }
 
     return new Proxy({}, {
