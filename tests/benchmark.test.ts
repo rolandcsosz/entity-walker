@@ -165,10 +165,10 @@ function generatePlot(results: BenchmarkResult[]) {
 
     const layout = {
         xaxis: { title: "Number of Transactions", },
-        yaxis: { title: "Average runtime (ms)", tickformat: "~s" },
+        yaxis: { title: "Average runtime (ms)", tickformat: ".0s" },
         font: { size: 18 },
-        legend: { orientation: "h", x: 0.5, xanchor: "center", y: 1.1 },
-        margin: { l: 100, r: 40, t: 50, b: 80 },
+        legend: { orientation: "h", x: 0.5, xanchor: "center", y: 1.2 },
+        margin: { l: 100, r: 40, t: 70, b: 80 },
     };
 
     const html = `<!DOCTYPE html>

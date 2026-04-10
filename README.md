@@ -106,7 +106,7 @@ const txIds = graph
 
 | Guide | Description |
 |---|---|
-| [Graph](docs/proxy-graph.md) | Full reference for `createGraph` — the standard API with clean `graph.entity("id")` / `node.relation()` syntax powered by `Proxy`. |
+| [Graph](docs/graph.md) | Full reference for `createGraph` — the standard API with clean `graph.entity("id")` / `node.relation()` syntax powered by `Proxy`. |
 | [Non-Proxy Graph](docs/non-proxy-graph.md) | Full reference for `createNonProxyGraph` — identical behaviour using a `.to()` calling convention, compatible with environments that do not support `Proxy`. |
 | [Graph Modification](docs/modification.md) | Insert, update (upsert), delete, and cascade-delete entities at runtime with automatic index maintenance. |
 | [Debugging](docs/debugging.md) | Use `graph.info()` to inspect entity counts, missing FK targets, and orphan entities. |
