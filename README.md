@@ -4,35 +4,26 @@
 
 Entity Walker is a small, zero-dependency TypeScript library for working with normalised relational data as an immutable, type-safe graph.
 
-It lets you define entities and their relationships via foreign keys, then traverse the graph with fully typed, autocompleted accessors. Every entity and relation is typed, so your IDE will guide you with autocomplete and prevent mistakes.
+Define your entities and their relationships via foreign keys, then traverse the graph with fully typed, autocompleted accessors. Every entity type and relation is known at compile time, so your IDE guides you with autocomplete and catches mistakes before they reach runtime.
 
 ## What You Can Use It For
 
-* Normalized API data: fetch entities from an API, normalize them, and query them efficiently.
-
-* Read-heavy applications: dashboards, reporting tools, analytics, finance trackers.
-
-* Complex relationships: easily navigate nested relations without writing nested loops.
-
-* Reverse lookups: find all entities pointing to a given entity.
-
-* Safe queries: optional relations, missing entities, and broken foreign keys are handled gracefully.
-
-If your data has multiple types of entities referencing each other and you need fast, readable, safe access, Entity Walker is designed for that.
+* **Normalized API data** — fetch, normalize, and query relational data without nested loops.
+* **Read-heavy applications** — dashboards, reporting tools, analytics, finance trackers.
+* **Complex relationships** — navigate deeply nested relations in a single readable chain.
+* **Reverse lookups** — find every entity that points to a given entity.
+* **Safe queries** — missing entities and broken foreign keys are always handled gracefully.
 
 ## Features
 
-* Immutable & safe: returned entities are frozen.
-
-* Type-safe & autocompleted: TypeScript knows every entity type and relation.
-
-* Bidirectional and optional relations: traverse forwards or backwards safely.
-
-* Filter/map/flatMap references: work directly on related entities like arrays.
-
-* Safe defaults: missing relations return empty arrays or undefined.
-
-* Performance-friendly: rebuilding the graph frequently is still faster than nested loops for large datasets.
+* **Immutable & safe** — returned entities are frozen objects.
+* **Type-safe & autocompleted** — TypeScript knows every entity type and every relation.
+* **Bidirectional relations** — traverse forwards (1-to-1) or backwards (1-to-many) safely.
+* **Rich node-list API** — `.filter()`, `.map()`, `.flatMap()`, `.where()`, `.ids()`, `.entities()`, `.select()`, `.unique()`, and more work directly on related entity collections.
+* **Consistent defaults** — every node exposes `.value()` (safe, returns `undefined` when missing) and `.valueOrThrow()` (throws when missing). No split between optional and required at the type level.
+* **Performance-friendly** — indexed O(1) lookups; even rebuilding the graph per query beats nested loops at scale.
+* **Proxy-free alternative** — `createNonProxyGraph` produces an equivalent graph for environments without `Proxy` support.
+* **Data integrity checks** — `graph.info()` detects missing FK targets and orphan entities at runtime.
 
 ## Installation
 
@@ -40,156 +31,100 @@ If your data has multiple types of entities referencing each other and you need 
 npm install entity-walker
 ```
 
-## Usage
-
-### 1. Define Your Entity Types
-You can define any type with `id` and any foreign keys (the foraign key names can't end with "References" suffix).
-```typescript
-// Example entity types
-type Transaction = { id: string; subcategoryId: string };
-type Subcategory = { id: string; name: string; mainCategoryId: string };
-type MainCategory = { id: string; name: string; expenseTypeId?: string; incomeTypeId?: string };
-type ExpenseType = { id: string; description: string };
-type IncomeType = { id: string; description: string };
-```
-
-### 1. Define Your Schema & Edges
-
-First define custom schema type. Here it called `Schema`. The edges object should have the `as const satisfies GraphEdges<Schema>` type assertion to ensure type safety.
+## Quick Example
 
 ```typescript
-type Schema = {
-  transaction: Transaction;
-  subcategory: Subcategory;
+import { createGraph, ValidSchema, GraphEdges, GraphDef, Entities, EntityGraph } from "entity-walker";
+
+type Transaction  = { id: string; subcategoryId: string };
+type Subcategory  = { id: string; name: string; mainCategoryId: string };
+type MainCategory = { id: string; name: string; expenseTypeId?: string };
+
+type Schema = ValidSchema<{
+  transaction:  Transaction;
+  subcategory:  Subcategory;
   mainCategory: MainCategory;
-  expenseType: ExpenseType;
-  incomeType: IncomeType;
-};
+}>;
 
-// Child to parent relationships with foreign keys
-//
-//    Transaction
-//        |
-//        |  (subcategoryId)
-//        v
-//    Subcategory
-//        |
-//        |  (mainCategoryId)
-//        v
-//    MainCategory
-//        |\
-//        | \
-//        |  \ (expenseTypeId)
-//        |   \
-//        |    \
-//        |     v
-//        |     ExpenseType
-//        |
-//        |
-//        | (incomeTypeId)
-//        v
-//    IncomeType
-
-export const edges = {
+const edges = {
   transaction: {
     subcategory: { bidirectional: true, resolve: t => t.subcategoryId },
   },
   subcategory: {
-    mainCategory: { bidirectional: true, optional: true, resolve: s => s.mainCategoryId },
-  },
-  mainCategory: {
-    expenseType: { bidirectional: true, optional: true, resolve: m => m.expenseTypeId },
-    incomeType: { resolve: m => m.incomeTypeId },
+    mainCategory: { bidirectional: true, resolve: s => s.mainCategoryId },
   },
 } as const satisfies GraphEdges<Schema>;
 
-// Define the graph type for more convenient usage
 type CustomGraph = GraphDef<Schema, typeof edges>;
 
-```
-
-### 3. Build the Graph with Data
-
-```typescript
-// List of entities wrapped in Entities<Schema>
 const entities: Entities<Schema> = {
-    transaction: [
-        { id: "tx1", subcategoryId: "sub1" },
-        { id: "tx2", subcategoryId: "sub2" },
-        { id: "tx3", subcategoryId: "sub1" },
-    ],
-    subcategory: [
-        { id: "sub1", name: "sub1", mainCategoryId: "cat1" },
-        { id: "sub2", name: "sub2", mainCategoryId: "cat1" },
-    ],
-    mainCategory: [
-        { id: "cat1", name: "Food", expenseTypeId: "et1", incomeTypeId: "it1" },
-        { id: "cat2", name: "Food", expenseTypeId: "error", incomeTypeId: "error" },
-        { id: "cat3", name: "Food" },
-    ],
-    expenseType: [{ id: "et1", description: "Groceries" }],
-    incomeType: [{ id: "it1", description: "Salary" }],
+  transaction:  [{ id: "tx1", subcategoryId: "sub1" }],
+  subcategory:  [{ id: "sub1", name: "Groceries", mainCategoryId: "cat1" }],
+  mainCategory: [{ id: "cat1", name: "Food" }],
 };
 
-const graph: EntityGraph<CustomGraph> = createEntityGraph<Schema>().create({
-    entities,
-    edges,
-});
-```
+const graph: EntityGraph<CustomGraph> = createGraph({ entities, edges });
 
-
-Note: The graph only reads immutable data; it does not modify your original dataset.
-
-### 4. Access Entities
-By going into the direction of the defined edges we assume 1-to-1 relations. If an ege is bidirectional, you can also go in the reverse direction which assumes 1-to-many relations. The reverse relations can be accessed via `[...]References` suffixed methods that return arrays of references.
-
-```typescript
-// Access a single entity
-const tx = graph.transaction("tx1").get();
-
-// Traverse relations
-const expenseTypeDesc = graph
+// Forward traversal
+const categoryName = graph
   .transaction("tx1")
   .subcategory()
   .mainCategory()
-  .expenseType()
-  .get();
+  .value()?.name; // "Food"
 
 // Reverse traversal
-const transactionsByCategory = graph
+const txIds = graph
   .mainCategory("cat1")
-  .subcategoryReferences()
-  .flatMap(sc => sc.transactionReferences())
-  .map(tn => tn.get().id);
-
+  .subcategoryNodes()
+  .transactionNodes()
+  .ids(); // ["tx1"]
 ```
 
-### 5.  Safe Handling of Missing Data
+## Detailed Guides
 
-Optional edges only provide `tryGet()` methods that return `undefined` if the relation is missing, while required edges can use `tryGet()` and `get()`. Using `get()` on a required relation throws an error if the relation is not found.
+| Guide | Description |
+|---|---|
+| [Graph](docs/proxy-graph.md) | Full reference for `createGraph` — the standard API with clean `graph.entity("id")` / `node.relation()` syntax powered by `Proxy`. |
+| [Non-Proxy Graph](docs/non-proxy-graph.md) | Full reference for `createNonProxyGraph` — identical behaviour using a `.to()` calling convention, compatible with environments that do not support `Proxy`. |
+
+## Debugging
+
+Call `graph.info()` at any time to inspect the state of the graph:
 
 ```typescript
-// ExpenseTpe | undefined
-const missingExpense = graph.mainCategory("cat3").expenseType().tryGet();
-
-// Throws an error
-graph.mainCategory("cat3").incomeType().get();
-
+const info = graph.info();
 ```
 
-### 6.  Filtering & Mapping References
+| Field | Type | Description |
+|---|---|---|
+| `entityCounts` | `Record<string, number>` | Number of entities stored per type. |
+| `cache.nodeCount` | `number` | Number of nodes currently held in the internal node cache. |
+| `missingEntities` | `{ type: string; id: string }[]` | FK values that resolve to an id that does not exist in the graph. For example, a transaction whose `subcategoryId` points to a subcategory that was never loaded. |
+| `orphanEntities` | `Record<string, string[]>` | Entities that are never referenced by any edge. Only types that appear as a target in at least one edge are checked. A type absent from this record is either fully referenced or not a relation target. |
+
+**Example — a graph with bad data:**
 
 ```typescript
-const treansactionIds = graph.subcategory("sub1")
-  .transactionReferences()
-  .filter(tn => tn.subcategory().mainCategory().tryGet()?.expenseTypeId === "et1")
-  .map(tn => tn.get().id);
+// sub2 has mainCategoryId: "cat99" which does not exist
+// cat3 is loaded but no subcategory points to it
+
+const info = graph.info();
+
+info.missingEntities;
+// [{ type: "mainCategory", id: "cat99" }]
+
+info.orphanEntities;
+// { mainCategory: ["cat3"] }
 ```
+
+`missingEntities` and `orphanEntities` make it easy to spot data quality problems — broken foreign keys, incomplete data loads, or stale ids — without traversing the graph manually.
+
+---
 
 ## Performance & Benchmarks
 
-Entity Walker uses indexed lookups. Graph building creates efficient data structures for fast access. Frequent rebuilds can add minimal overhead, but using the graph for queries are still often faster than nested loops. Even rebuilding the graph for each query is often faster than nested loops:
+Entity Walker builds an in-memory index at construction time so every lookup is O(1). Even rebuilding the graph fresh for every query out-performs hand-written nested loops at scale:
 
-![image](assets/benchmark.png)
+![image](docs/benchmark.png)
 
-This benchmark shows Entity Walker's performance against nested loops for various dataset sizes (pure for loops with indexes) against Entity Walker with graph rebuilds for each query. The test uses random id accesses on komplex relations. As the dataset size increases, Entity Walker's indexed lookups outperform nested loops significantly even with the overhead of rebuilding the graph each time.
+The benchmark compares pure indexed `for` loops against Entity Walker (with a full graph rebuild per query) across increasing dataset sizes with random id access patterns on multi-hop relations. Entity Walker's indexed lookups dominate as dataset size grows.

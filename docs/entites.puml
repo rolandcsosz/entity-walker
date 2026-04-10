@@ -1,0 +1,34 @@
+@startuml
+
+left to right direction
+
+entity Transaction {
+  id
+  subcategoryId
+}
+
+entity Subcategory {
+  id
+  mainCategoryId
+}
+
+entity MainCategory {
+  id
+  expenseTypeId
+  incomeTypeId
+}
+
+entity ExpenseType {
+  id
+}
+
+entity IncomeType {
+  id
+}
+
+Transaction <--> Subcategory : subcategoryId
+Subcategory <--> MainCategory : mainCategoryId
+MainCategory <--> ExpenseType : expenseTypeId
+MainCategory --> IncomeType : incomeTypeId
+
+@enduml
