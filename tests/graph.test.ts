@@ -1,7 +1,6 @@
 
 import { describe, it, expect } from "vitest";
-import { createGraph } from "../src/graph";
-import { Entities, EntityGraph } from "../src/types";
+import { Entities, EntityGraph, createGraph, createNonProxyGraph} from "../src/index";
 import { CustomGraph, edges, Schema } from "./types";
 
 
@@ -849,4 +848,115 @@ describe("info helpers", () => {
         });
     });
 
+});
+
+describe("useProxy: false — to() API", () => {
+    const noProxyGraph = createNonProxyGraph({ entities, edges });
+
+    it("to(type, id) returns an EntityNode", () => {
+        const node = noProxyGraph.to("transaction", "tx1");
+        expect(node.value()?.id).toBe("tx1");
+    });
+
+    it("to(type, id) exists() works", () => {
+        expect(noProxyGraph.to("transaction", "tx1").exists()).toBe(true);
+        expect(noProxyGraph.to("transaction", "nonexistent").exists()).toBe(false);
+    });
+
+    it("to(type, id) valueOrThrow() works", () => {
+        expect(noProxyGraph.to("subcategory", "sub1").valueOrThrow().name).toBe("sub1");
+    });
+
+    it("to(type, id) valueOrThrow() throws for missing entity", () => {
+        expect(() => noProxyGraph.to("transaction", "bad").valueOrThrow()).toThrow();
+    });
+
+    it("to(type, id) chained traversal works", () => {
+        const name = noProxyGraph.to("transaction", "tx1").to("subcategory").value()?.name;
+        expect(name).toBe("sub1");
+    });
+
+    it("to(type, id) deep chained traversal works", () => {
+        const desc = noProxyGraph.to("transaction", "tx1")
+            .to("subcategory")
+            .to("mainCategory")
+            .to("expenseType")
+            .value()?.description;
+        expect(desc).toBe("Groceries");
+    });
+
+    it("to() on node with reverse edge returns list", () => {
+        const txIds = noProxyGraph.to("subcategory", "sub1").to("transactionNodes").ids();
+        expect(txIds).toEqual(["tx1", "tx3"]);
+    });
+
+    it("relation methods are hidden on noProxy nodes (under NODE_PROP, not on node itself)", () => {
+        const node = noProxyGraph.to("transaction", "tx1");
+        expect((node as any).subcategory).toBeUndefined();
+        expect(typeof node.to).toBe("function");
+    });
+
+    it("noProxy lists expose to() but not direct relation methods as user API", () => {
+        const list = noProxyGraph.to("subcategoryNodes");
+        expect(typeof list.to).toBe("function");
+        // transactionNodes exists internally (used by toNodeList), but to() is the user API
+        expect(() => list.to("transactionNodes")).not.toThrow();
+    });
+
+    it("to('typeNodes') returns an EntityNodeList", () => {
+        const list = noProxyGraph.to("subcategoryNodes");
+        expect(list.entities().map(s => s.id)).toEqual(["sub1", "sub2"]);
+    });
+
+    it("to('typeNodes', where) filters the list", () => {
+        const list = noProxyGraph.to("subcategoryNodes", (s: any) => s.name === "sub1");
+        expect(list.entities()).toHaveLength(1);
+        expect(list.entities()[0].id).toBe("sub1");
+    });
+
+    it("to('typeNodes') ids() works", () => {
+        expect(noProxyGraph.to("transactionNodes").ids()).toEqual(["tx1", "tx2", "tx3"]);
+    });
+
+    it("to('typeNodes') first() works", () => {
+        expect(noProxyGraph.to("subcategoryNodes").first()?.id).toBe("sub1");
+    });
+
+    it("to('typeNodes') isEmpty() / isNotEmpty() work", () => {
+        expect(noProxyGraph.to("subcategoryNodes").isEmpty()).toBe(false);
+        expect(noProxyGraph.to("subcategoryNodes").isNotEmpty()).toBe(true);
+    });
+
+    it("to('typeNodes') where() works", () => {
+        const subs = noProxyGraph.to("subcategoryNodes").where(s => s.name === "sub2");
+        expect(subs.entities()[0].id).toBe("sub2");
+    });
+
+    it("to('typeNodes') unique() works", () => {
+        const nodes = noProxyGraph.to("mainCategoryNodes")
+            .to("subcategoryNodes")
+            .to("mainCategoryNodes")
+            .unique();
+        expect(nodes.ids()).toEqual(["cat1"]);
+    });
+
+    it("to('typeNodes') chained traversal via reverse edge works", () => {
+        const txs = noProxyGraph.to("subcategoryNodes")
+            .where(s => s.id === "sub1")
+            .to("transactionNodes")
+            .ids();
+        expect(txs).toEqual(["tx1", "tx3"]);
+    });
+
+    it("info() is available on noProxy graph", () => {
+        const info = noProxyGraph.info();
+        expect(info.entityCounts.transaction).toBe(3);
+        expect(typeof info.cache.nodeCount).toBe("number");
+    });
+
+    it("schema() is available on noProxy graph", () => {
+        const schema = noProxyGraph.schema();
+        expect(schema.entities).toContain("transaction");
+        expect(schema.edges.length).toBeGreaterThan(0);
+    });
 });

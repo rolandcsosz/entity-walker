@@ -1,262 +1,14 @@
-import { EntityGraph, EntityMap, GraphDef, GraphDebugInfo, GraphEdges, GraphSchema, MissingEntityRef, NodeDebugInfo } from "./types";
+import { buildCore } from "./core";
+import { EntityGraph, EntityMap, GraphDef, GraphEdges, NodeDebugInfo } from "./types";
 
-export const createGraph = <EM extends EntityMap, E extends GraphEdges<EM>>(config: {
-    entities: { [K in keyof EM]: EM[K][] };
-    edges: E;
-}): EntityGraph<GraphDef<EM, E>> => {
-    const { entities, edges } = config;
-    const byId: Record<string, Record<string, any>> = {};
+export function buildGraphCore<EM extends EntityMap, E extends GraphEdges<EM>>(
+    entities: { [K in keyof EM]: EM[K][] },
+    edges: E,
+) {
+    let _createNode: (key: keyof EM, id: string | null, path?: string[]) => any;
 
-    const reverseIndex: Record<
-        string,
-        Record<string, Record<string, string[]>>
-    > = {};
-
-    for (const key in entities) {
-        byId[key] = {};
-        if (!reverseIndex[key]) reverseIndex[key] = {};
-
-        for (const item of entities[key]!) {
-            byId[key][item.id] = item;
-        }
-    }
-
-    for (const sourceType in edges) {
-        const entityEdges = (edges as any)[sourceType];
-        if (!entityEdges) continue;
-
-        for (const targetType in entityEdges) {
-            const edge = entityEdges[targetType];
-            if (!edge.bidirectional) continue;
-
-            if (!reverseIndex[targetType]) reverseIndex[targetType] = {};
-            if (!reverseIndex[targetType][sourceType]) reverseIndex[targetType][sourceType] = {};
-
-            for (const sourceEntity of entities[sourceType]!) {
-                const targetId = edge.resolve(sourceEntity);
-                if (!targetId) continue;
-
-                if (!reverseIndex[targetType][sourceType][targetId]) {
-                    reverseIndex[targetType][sourceType][targetId] = [];
-                }
-                reverseIndex[targetType][sourceType][targetId].push(sourceEntity.id);
-            }
-        }
-    }
-
-    const resolveEntities = (nodes: any[]): any[] => {
-        const result: any[] = [];
-        for (const n of nodes) {
-            const e = n.value();
-            if (e !== undefined) result.push(e);
-        }
-        return result;
-    }
-
-    const toNodeList = (nodes: any[], nodeKey: string): any => {
-        const list = [...nodes] as any;
-        Object.defineProperty(list, 'entities', {
-            value: () => resolveEntities(nodes),
-            enumerable: false,
-        });
-
-        Object.defineProperty(list, 'select', {
-            value: (fn: (entity: any) => any) => {
-                const result: any[] = [];
-                for (const n of nodes) {
-                    const e = n.value();
-                    if (e !== undefined) result.push(fn(e));
-                }
-                return result;
-            },
-            enumerable: false,
-        });
-
-        Object.defineProperty(list, 'ids', {
-            value: () => {
-                const result: string[] = [];
-                for (const n of nodes) {
-                    const e = n.value();
-                    if (e !== undefined) result.push(e.id);
-                }
-                return result;
-            },
-            enumerable: false,
-        });
-
-        Object.defineProperty(list, 'first', {
-            value: () => {
-                for (const n of nodes) {
-                    const e = n.value();
-                    if (e !== undefined) return e;
-                }
-                return undefined;
-            },
-            enumerable: false,
-        });
-
-        Object.defineProperty(list, 'findEntity', {
-            value: (predicate: (entity: any) => boolean) => {
-                for (const n of nodes) {
-                    const e = n.value();
-                    if (e !== undefined && predicate(e)) return e;
-                }
-                return undefined;
-            },
-            enumerable: false,
-        });
-
-        Object.defineProperty(list, 'isEmpty', {
-            value: () => {
-                for (const n of nodes) {
-                    if (n.value() !== undefined) return false;
-                }
-                return true;
-            },
-            enumerable: false,
-        });
-
-        Object.defineProperty(list, 'isNotEmpty', {
-            value: () => {
-                for (const n of nodes) {
-                    if (n.value() !== undefined) return true;
-                }
-                return false;
-            },
-            enumerable: false,
-        });
-
-        Object.defineProperty(list, 'unique', {
-            value: () => {
-                const seen = new Set<string>();
-                const uniqueNodes: any[] = [];
-                for (const n of nodes) {
-                    const e = n.value();
-                    if (e !== undefined && !seen.has(e.id)) {
-                        seen.add(e.id);
-                        uniqueNodes.push(createNode(nodeKey as keyof EM, e.id));
-                    }
-                }
-                return toNodeList(uniqueNodes, nodeKey);
-            },
-            enumerable: false,
-        });
-
-        Object.defineProperty(list, 'where', {
-            value: (where?: (entity: any) => boolean) => {
-                if (!where) return list;
-                const filtered = nodes.filter((n: any) => {
-                    const e = n.value();
-                    return e !== undefined && where(e);
-                });
-                return toNodeList(filtered, nodeKey);
-            },
-            enumerable: false,
-        });
-
-        const reverseEntries = reverseIndex[nodeKey] || {};
-        for (const sourceKey in reverseEntries) {
-            const refName = `${sourceKey}Nodes`;
-            Object.defineProperty(list, refName, {
-                value: (where?: (entity: any) => boolean) => {
-                    const result: any[] = [];
-                    for (const node of nodes) {
-                        const refs = node[refName]();
-                        for (const r of refs) result.push(r);
-                    }
-                    const filtered = where
-                        ? result.filter(n => { const e = n.value(); return e !== undefined && where(e); })
-                        : result;
-                    return toNodeList(filtered, sourceKey);
-                },
-                enumerable: false,
-            });
-        }
-
-        const forwardEdges = (edges as any)[nodeKey] || {};
-        for (const rel in forwardEdges) {
-            const refName = `${rel}Nodes`;
-            if (list[refName] !== undefined) continue;
-            Object.defineProperty(list, refName, {
-                value: (where?: (entity: any) => boolean) => {
-                    const result: any[] = [];
-                    for (const node of nodes) {
-                        result.push(node[rel]());
-                    }
-                    const filtered = where
-                        ? result.filter(n => { const e = n.value(); return e !== undefined && where(e); })
-                        : result;
-                    return toNodeList(filtered, rel);
-                },
-                enumerable: false,
-            });
-        }
-
-        return list;
-    }
-
-    const nodeCache = new Map<string, any>();
-
-    const buildEdgeSummary = (): GraphSchema['edges'] => {
-        const result: GraphSchema['edges'] = [];
-        for (const sourceType in edges) {
-            const entityEdges = (edges as any)[sourceType];
-            if (!entityEdges) continue;
-            for (const targetType in entityEdges) {
-                result.push({ from: sourceType, to: targetType, bidirectional: !!entityEdges[targetType].bidirectional });
-            }
-        }
-        return result;
-    };
-
-    const graphSchema = (): GraphSchema => ({
-        entities: Object.keys(byId),
-        edges: buildEdgeSummary(),
-    });
-
-    const graphInfo = (): GraphDebugInfo => {
-        const missingEntities: { type: string; id: string }[] = [];
-        for (const sourceType in edges) {
-            const entityEdges = (edges as any)[sourceType];
-            if (!entityEdges) continue;
-            for (const targetType in entityEdges) {
-                const edge = entityEdges[targetType];
-                for (const sourceEntity of entities[sourceType] ?? []) {
-                    const targetId = edge.resolve(sourceEntity);
-                    if (targetId && !byId[targetType]?.[targetId]) {
-                        missingEntities.push({ type: targetType, id: targetId });
-                    }
-                }
-            }
-        }
-
-        const referencedIds: Record<string, Set<string>> = {};
-        for (const sourceType in edges) {
-            const entityEdges = (edges as any)[sourceType];
-            if (!entityEdges) continue;
-            for (const targetType in entityEdges) {
-                const edge = entityEdges[targetType];
-                if (!referencedIds[targetType]) referencedIds[targetType] = new Set();
-                for (const sourceEntity of entities[sourceType] ?? []) {
-                    const targetId = edge.resolve(sourceEntity);
-                    if (targetId) referencedIds[targetType].add(targetId);
-                }
-            }
-        }
-        const orphanEntities: Record<string, string[]> = {};
-        for (const type in referencedIds) {
-            const refs = referencedIds[type];
-            const orphans = Object.keys(byId[type] ?? {}).filter(id => !refs.has(id));
-            if (orphans.length > 0) orphanEntities[type] = orphans;
-        }
-
-        return {
-            entityCounts: Object.fromEntries(Object.keys(byId).map(k => [k, Object.keys(byId[k]).length])),
-            cache: { nodeCount: nodeCache.size },
-            missingEntities,
-            orphanEntities,
-        };
-    };
+    const core = buildCore<EM, E>(entities, edges, () => _createNode);
+    const { byId, reverseIndex, nodeCache, toNodeList, graphSchema, graphInfo } = core;
 
     function createNode(key: keyof EM, id: string | null, path: string[] = []): any {
         const cacheKey = id !== null ? `${String(key)}:${id}` : null;
@@ -306,7 +58,8 @@ export const createGraph = <EM extends EntityMap, E extends GraphEdges<EM>>(conf
         });
 
         const node = new Proxy({}, {
-            get(_, prop: string) {
+            get(_, prop: string | symbol) {
+                if (typeof prop === 'symbol') return undefined;
                 if (prop === "value") return getValue;
                 if (prop === "valueOrThrow") return valueOrThrowMethod;
                 if (prop === "exists") return existsMethod;
@@ -327,15 +80,11 @@ export const createGraph = <EM extends EntityMap, E extends GraphEdges<EM>>(conf
                     if (edge) {
                         const entity = getValue();
                         const targetType = prop as keyof EM;
-
                         if (!entity) return createNode(targetType, null, nodePath);
-
                         const nextId = edge.resolve(entity);
                         if (!nextId) return createNode(targetType, null, nodePath);
-
                         const targetExists = !!byId[targetType as string]?.[nextId];
                         if (!targetExists) return createNode(targetType, null, nodePath);
-
                         return createNode(targetType, nextId, nodePath);
                     }
 
@@ -366,19 +115,31 @@ export const createGraph = <EM extends EntityMap, E extends GraphEdges<EM>>(conf
         return node;
     }
 
+    _createNode = createNode;
+
+    return { createNode, toNodeList, graphSchema, graphInfo, entities: core.entities };
+}
+
+export const createGraph = <EM extends EntityMap, E extends GraphEdges<EM>>(config: {
+    entities: { [K in keyof EM]: EM[K][] };
+    edges: E;
+}): EntityGraph<GraphDef<EM, E>> => {
+    const { createNode, toNodeList, graphSchema, graphInfo, entities } = buildGraphCore<EM, E>(config.entities, config.edges);
+
     return new Proxy({}, {
-        get(_, prop: string) {
-            if (prop === "info") return graphInfo
+        get(_, prop: string | symbol) {
+            if (typeof prop === 'symbol') return undefined;
+            if (prop === "info") return graphInfo;
             if (prop === "schema") return graphSchema;
             if (prop.endsWith("Nodes")) {
                 const entityKey = prop.slice(0, -"Nodes".length);
                 return (where?: (entity: any) => boolean) => {
                     const all = entities[entityKey] || [];
                     const filtered = where ? all.filter(where) : all;
-                    return toNodeList(filtered.map(item => createNode(entityKey as keyof EM, item.id)), entityKey);
+                    return toNodeList(filtered.map((item: any) => createNode(entityKey as keyof EM, item.id)), entityKey);
                 };
             }
             return (id: string) => createNode(prop as keyof EM, id);
         },
     }) as any;
-}
+};

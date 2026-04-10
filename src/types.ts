@@ -130,7 +130,7 @@ export type EntityNode<
 };
 
 export type EntityGraph<D extends GraphDef<any, any>> = {
-    [K in keyof D["entityModel"]]: (id: string) => EntityNode<D, K>;
+    [K in keyof D["entityModel"]]: (id: D["entityModel"][K]["id"]) => EntityNode<D, K>;
 } & {
     [K in keyof D["entityModel"] as `${string & K}Nodes`]: (
         where?: Where<D["entityModel"][K]>
@@ -139,3 +139,40 @@ export type EntityGraph<D extends GraphDef<any, any>> = {
     info(): GraphDebugInfo;
     schema(): GraphSchema;
 };
+
+export type EntityNodeNoProxy<
+    D extends GraphDef<any, any>,
+    K extends keyof D["entityModel"]
+> = {
+    value(): D["entityModel"][K] | undefined;
+    valueOrThrow(): D["entityModel"][K];
+    exists(): boolean;
+    path(): string[];
+    info(): NodeDebugInfo;
+    to<Rel extends string & keyof D["edges"][K]>(rel: Rel): EntityNodeNoProxy<D, Rel & keyof D["entityModel"]>;
+    to<Src extends string & ReverseKeys<D, K>>(rel: `${Src}Nodes`, where?: Where<D["entityModel"][Src]>): EntityNodeListNoProxy<D, Src>;
+};
+
+export type EntityNodeListNoProxy<
+    D extends GraphDef<any, any>,
+    K extends keyof D["entityModel"]
+> = EntityNodeNoProxy<D, K>[] & {
+    entities(): D["entityModel"][K][];
+    select<R>(fn: (entity: D["entityModel"][K]) => R): R[];
+    ids(): string[];
+    first(): D["entityModel"][K] | undefined;
+    findEntity(predicate: (entity: D["entityModel"][K]) => boolean): D["entityModel"][K] | undefined;
+    isEmpty(): boolean;
+    isNotEmpty(): boolean;
+    unique(): EntityNodeListNoProxy<D, K>;
+    where(where: Where<D["entityModel"][K]>): EntityNodeListNoProxy<D, K>;
+    to<Rel extends string & keyof D["edges"][K]>(rel: `${Rel}Nodes`, where?: Where<D["entityModel"][Rel & keyof D["entityModel"]]>): EntityNodeListNoProxy<D, Rel & keyof D["entityModel"]>;
+    to<Src extends string & ReverseKeys<D, K>>(rel: `${Src}Nodes`, where?: Where<D["entityModel"][Src]>): EntityNodeListNoProxy<D, Src>;
+};
+
+export interface EntityGraphNoProxy<D extends GraphDef<any, any>> {
+    to<K extends keyof D["entityModel"] & string>(type: K, id: D["entityModel"][K]["id"]): EntityNodeNoProxy<D, K>;
+    to<K extends keyof D["entityModel"] & string>(type: `${K}Nodes`, where?: Where<D["entityModel"][K]>): EntityNodeListNoProxy<D, K>;
+    info(): GraphDebugInfo;
+    schema(): GraphSchema;
+}
