@@ -1,6 +1,6 @@
 import fs from "fs";
 import { performance } from "perf_hooks";
-import { createEntityGraph } from "../src/graph";
+import { createGraph } from "../src/graph";
 import { Entities, EntityGraph } from "../src/types";
 import { CustomGraph, edges, ExpenseType, IncomeType, MainCategory, Schema, Subcategory, Transaction } from "./types";
 
@@ -71,7 +71,7 @@ function nestedLoop(entities: Entities<Schema>, expenseTypeId: string) {
 
 
 function createGraph(entities: any): EntityGraph<CustomGraph> {
-    return createEntityGraph({ entities, edges }) as EntityGraph<CustomGraph>;
+    return createGraph({ entities, edges }) as EntityGraph<CustomGraph>;
 }
 
 function graphTraversal(graph: EntityGraph<CustomGraph>, expenseTypeId: string) {

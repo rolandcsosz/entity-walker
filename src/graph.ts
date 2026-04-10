@@ -1,6 +1,6 @@
 import { EntityGraph, EntityMap, GraphDef, GraphDebugInfo, GraphEdges, GraphSchema, MissingEntityRef, NodeDebugInfo } from "./types";
 
-export const createEntityGraph = <EM extends EntityMap, E extends GraphEdges<EM>>(config: {
+export const createGraph = <EM extends EntityMap, E extends GraphEdges<EM>>(config: {
     entities: { [K in keyof EM]: EM[K][] };
     edges: E;
 }): EntityGraph<GraphDef<EM, E>> => {

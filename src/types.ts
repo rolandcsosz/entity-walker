@@ -1,7 +1,25 @@
 
 
 export type EntityBase = { id: string };
-export type EntityMap = Record<string, EntityBase>;
+
+type ForbiddenKeys =
+  | "info"
+  | "schema"
+  | `${string}Nodes`;
+
+type InvalidKeys<T> = {
+  [K in keyof T as K extends ForbiddenKeys ? K : never]: never;
+};
+
+export type ValidSchema<T extends EntityMap> =
+  keyof InvalidKeys<T> extends never
+    ? T
+    : "❌ Schema contains forbidden keys";
+
+export type EntityMap = {
+  [key: string]: EntityBase;
+};
+
 type Where<T> = (entity: T) => boolean;
 
 export type Entities<T> = {

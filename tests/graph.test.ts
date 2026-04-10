@@ -1,6 +1,6 @@
 
 import { describe, it, expect } from "vitest";
-import { createEntityGraph } from "../src/graph";
+import { createGraph } from "../src/graph";
 import { Entities, EntityGraph } from "../src/types";
 import { CustomGraph, edges, Schema } from "./types";
 
@@ -24,7 +24,7 @@ const entities: Entities<Schema> = {
     incomeType: [{ id: "it1", description: "Salary" }],
 };
 
-const graph: EntityGraph<CustomGraph> = createEntityGraph({
+const graph: EntityGraph<CustomGraph> = createGraph({
     entities,
     edges,
 });
@@ -240,7 +240,7 @@ describe("entity graph", () => {
     });
 
     it("returns an empty array for references with no matches", () => {
-        const emptyGraph = createEntityGraph({
+        const emptyGraph = createGraph({
             entities: {
                 transaction: [],
                 subcategory: [],
@@ -753,7 +753,7 @@ describe("info helpers", () => {
         });
 
         it("returns empty missingEntities when all FKs resolve", () => {
-            const clean = createEntityGraph({
+            const clean = createGraph({
                 entities: {
                     transaction: [{ id: "t1", subcategoryId: "s1" }],
                     subcategory: [{ id: "s1", name: "s1", mainCategoryId: "c1" }],

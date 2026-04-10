@@ -1,4 +1,4 @@
-import { GraphDef, GraphEdges } from "../src/types";
+import { GraphDef, GraphEdges, ValidSchema } from "../src/types";
 
 export type Transaction = { id: string; subcategoryId: string };
 export type Subcategory = { id: string; name: string, mainCategoryId: string };
@@ -6,13 +6,13 @@ export type MainCategory = { id: string; name: string; expenseTypeId?: string; i
 export type ExpenseType = { id: string; description: string };
 export type IncomeType = { id: string; description: string };
 
-export type Schema = {
+export type Schema = ValidSchema<{
     transaction: Transaction;
     subcategory: Subcategory;
     mainCategory: MainCategory;
     expenseType: ExpenseType;
     incomeType: IncomeType;
-}
+}>;
 
 export const edges = {
     transaction: {
