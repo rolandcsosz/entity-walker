@@ -49,6 +49,58 @@ export function buildGraphCore<EM extends EntityMap, E extends GraphEdges<EM>>(
         };
         const existsMethod = () => getValue() !== undefined;
         const pathMethod = () => nodePath;
+        const deleteMethod = () => {
+            if (id === null || !byId[key as string]?.[id]) return;
+            const entity = byId[key as string][id];
+            const ents = entities as Record<string, any[]>;
+            const entityEdges = (edges as any)[key as string];
+            // remove forward bidirectional reverse index entries
+            if (entityEdges) {
+                for (const targetType in entityEdges) {
+                    const edge = entityEdges[targetType];
+                    if (!edge.bidirectional) continue;
+                    const targetId = edge.resolve(entity);
+                    if (!targetId) continue;
+                    const bucket = reverseIndex[targetType]?.[key as string]?.[targetId];
+                    if (bucket) {
+                        const idx = bucket.indexOf(id);
+                        if (idx !== -1) bucket.splice(idx, 1);
+                    }
+                }
+            }
+            // remove this entity from reverse index buckets pointing at it
+            for (const sourceType in reverseIndex[key as string] ?? {}) {
+                for (const targetId in reverseIndex[key as string][sourceType]) {
+                    const bucket = reverseIndex[key as string][sourceType][targetId];
+                    const idx = bucket.indexOf(id);
+                    if (idx !== -1) bucket.splice(idx, 1);
+                }
+            }
+            // remove from byId and entities array
+            delete byId[key as string][id];
+            const arrIdx = ents[key as string]?.findIndex((e: any) => e.id === id);
+            if (arrIdx !== undefined && arrIdx !== -1) ents[key as string].splice(arrIdx, 1);
+            nodeCache.delete(`${String(key)}:${id}`);
+        };
+        const deleteCascadeMethod = () => {
+            if (id === null || !byId[key as string]?.[id]) return;
+            // find all entities pointing to this one via any edge and cascade-delete them first
+            for (const sourceType in edges) {
+                const sourceEdges = (edges as any)[sourceType];
+                if (!sourceEdges) continue;
+                for (const targetType in sourceEdges) {
+                    if (targetType !== String(key)) continue;
+                    const edge = sourceEdges[targetType];
+                    const sourceArr = (entities as Record<string, any[]>)[sourceType] ?? [];
+                    // snapshot ids before mutating
+                    const pointingIds = sourceArr.filter(e => edge.resolve(e) === id).map(e => e.id);
+                    for (const pid of pointingIds) {
+                        createNode(sourceType as keyof EM, pid).deleteCascade();
+                    }
+                }
+            }
+            deleteMethod();
+        };
         const infoMethod = (): NodeDebugInfo => ({
             type: String(key),
             id,
@@ -65,6 +117,8 @@ export function buildGraphCore<EM extends EntityMap, E extends GraphEdges<EM>>(
                 if (prop === "exists") return existsMethod;
                 if (prop === "path") return pathMethod;
                 if (prop === "info") return infoMethod;
+                if (prop === "delete") return deleteMethod;
+                if (prop === "deleteCascade") return deleteCascadeMethod;
 
                 return (...args: any[]) => {
                     const edge = (edges as any)[key]?.[prop];
@@ -117,20 +171,100 @@ export function buildGraphCore<EM extends EntityMap, E extends GraphEdges<EM>>(
 
     _createNode = createNode;
 
-    return { createNode, toNodeList, graphSchema, graphInfo, entities: core.entities };
+    return { createNode, toNodeList, graphSchema, graphInfo, entities: core.entities, byId: core.byId, reverseIndex: core.reverseIndex, nodeCache: core.nodeCache };
 }
 
 export const createGraph = <EM extends EntityMap, E extends GraphEdges<EM>>(config: {
     entities: { [K in keyof EM]: EM[K][] };
     edges: E;
 }): EntityGraph<GraphDef<EM, E>> => {
-    const { createNode, toNodeList, graphSchema, graphInfo, entities } = buildGraphCore<EM, E>(config.entities, config.edges);
+    const { createNode, toNodeList, graphSchema, graphInfo, entities, byId, reverseIndex, nodeCache } = buildGraphCore<EM, E>(config.entities, config.edges);
+
+    function insert<K extends keyof EM>(type: K, entityOrEntities: EM[K] | EM[K][]): void {
+        const items = Array.isArray(entityOrEntities) ? entityOrEntities : [entityOrEntities];
+        const key = String(type);
+        const ents = entities as Record<string, any[]>;
+        for (const entity of items) {
+            ents[key] = ents[key] ?? [];
+            ents[key].push(entity);
+            byId[key] = byId[key] ?? {};
+            byId[key][entity.id] = entity;
+            nodeCache.delete(`${key}:${entity.id}`);
+            const entityEdges = (config.edges as any)[key];
+            if (entityEdges) {
+                for (const targetType in entityEdges) {
+                    const edge = entityEdges[targetType];
+                    if (!edge.bidirectional) continue;
+                    const targetId = edge.resolve(entity);
+                    if (!targetId) continue;
+                    if (!reverseIndex[targetType]) reverseIndex[targetType] = {};
+                    if (!reverseIndex[targetType][key]) reverseIndex[targetType][key] = {};
+                    if (!reverseIndex[targetType][key][targetId]) reverseIndex[targetType][key][targetId] = [];
+                    reverseIndex[targetType][key][targetId].push(entity.id);
+                }
+            }
+        }
+    }
+
+    function update<K extends keyof EM>(type: K, entityOrEntities: EM[K] | EM[K][]): void {
+        const items = Array.isArray(entityOrEntities) ? entityOrEntities : [entityOrEntities];
+        const key = String(type);
+        const ents = entities as Record<string, any[]>;
+        const entityEdges = (config.edges as any)[key];
+        for (const entity of items) {
+            const existing = byId[key]?.[entity.id];
+            if (!existing) {
+                insert(type, entity);
+                continue;
+            }
+            // remove old bidirectional reverse index entries
+            if (entityEdges) {
+                for (const targetType in entityEdges) {
+                    const edge = entityEdges[targetType];
+                    if (!edge.bidirectional) continue;
+                    const oldTargetId = edge.resolve(existing);
+                    if (!oldTargetId) continue;
+                    const bucket = reverseIndex[targetType]?.[key]?.[oldTargetId];
+                    if (bucket) {
+                        const idx = bucket.indexOf(entity.id);
+                        if (idx !== -1) bucket.splice(idx, 1);
+                    }
+                }
+            }
+            // replace in byId and entities array
+            byId[key][entity.id] = entity;
+            const arrIdx = ents[key].findIndex((e: any) => e.id === entity.id);
+            if (arrIdx !== -1) ents[key][arrIdx] = entity;
+            nodeCache.delete(`${key}:${entity.id}`);
+            // add new bidirectional reverse index entries
+            if (entityEdges) {
+                for (const targetType in entityEdges) {
+                    const edge = entityEdges[targetType];
+                    if (!edge.bidirectional) continue;
+                    const newTargetId = edge.resolve(entity);
+                    if (!newTargetId) continue;
+                    if (!reverseIndex[targetType]) reverseIndex[targetType] = {};
+                    if (!reverseIndex[targetType][key]) reverseIndex[targetType][key] = {};
+                    if (!reverseIndex[targetType][key][newTargetId]) reverseIndex[targetType][key][newTargetId] = [];
+                    reverseIndex[targetType][key][newTargetId].push(entity.id);
+                }
+            }
+        }
+    }
 
     return new Proxy({}, {
         get(_, prop: string | symbol) {
             if (typeof prop === 'symbol') return undefined;
             if (prop === "info") return graphInfo;
             if (prop === "schema") return graphSchema;
+            if (prop.startsWith("insert") && prop.length > 6) {
+                const rawKey = prop[6].toLowerCase() + prop.slice(7);
+                return (entityOrEntities: any) => insert(rawKey as keyof EM, entityOrEntities);
+            }
+            if (prop.startsWith("update") && prop.length > 6) {
+                const rawKey = prop[6].toLowerCase() + prop.slice(7);
+                return (entityOrEntities: any) => update(rawKey as keyof EM, entityOrEntities);
+            }
             if (prop.endsWith("Nodes")) {
                 const entityKey = prop.slice(0, -"Nodes".length);
                 return (where?: (entity: any) => boolean) => {

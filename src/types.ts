@@ -3,22 +3,23 @@
 export type EntityBase = { id: string };
 
 type ForbiddenKeys =
-  | "to"
-  | "info"
-  | "schema"
-  | `${string}Nodes`;
-
+    | "to"
+    | "info"
+    | "schema"
+    | `${string}Nodes`
+    | `insert${string}`
+    | `update${string}`;
 type InvalidKeys<T> = {
-  [K in keyof T as K extends ForbiddenKeys ? K : never]: never;
+    [K in keyof T as K extends ForbiddenKeys ? K : never]: never;
 };
 
 export type ValidSchema<T extends EntityMap> =
-  keyof InvalidKeys<T> extends never
+    keyof InvalidKeys<T> extends never
     ? T
     : "❌ Schema contains forbidden keys";
 
 export type EntityMap = {
-  [key: string]: EntityBase;
+    [key: string]: EntityBase;
 };
 
 type Where<T> = (entity: T) => boolean;
@@ -57,12 +58,21 @@ type ReverseKeys<
     }[keyof D["edges"][SourceKey]];
 }[keyof D["edges"]];
 
+type AllIncomingSourceKeys<
+    D extends GraphDef<any, any>,
+    TargetKey extends keyof D["entityModel"]
+> = {
+    [SourceKey in keyof D["edges"]]: TargetKey extends keyof D["edges"][SourceKey]
+    ? SourceKey
+    : never;
+}[keyof D["edges"]];
+
 type KeyOf<D extends GraphDef<any, any>, E> = {
     [K in keyof D["entityModel"]]: D["entityModel"][K] extends E
-        ? E extends D["entityModel"][K]
-            ? K
-            : never
-        : never;
+    ? E extends D["entityModel"][K]
+    ? K
+    : never
+    : never;
 }[keyof D["entityModel"]];
 
 export type EntityNodeList<
@@ -79,15 +89,15 @@ export type EntityNodeList<
     unique(): EntityNodeList<D, K>;
     where(where: Where<D["entityModel"][K]>): EntityNodeList<D, K>;
 } & {
-    [Rel in keyof D["edges"][K] as `${string & Rel}Nodes`]: (
-        where?: Where<D["entityModel"][Rel & keyof D["entityModel"]]>
-    ) => EntityNodeList<D, Rel & keyof D["entityModel"]>;
-} & {
-    [SourceEntity in ReverseKeys<D, K> as `${string &
-    SourceEntity}Nodes`]: (
-        where?: Where<D["entityModel"][SourceEntity]>
-    ) => EntityNodeList<D, SourceEntity>;
-};
+        [Rel in keyof D["edges"][K]as `${string & Rel}Nodes`]: (
+            where?: Where<D["entityModel"][Rel & keyof D["entityModel"]]>
+        ) => EntityNodeList<D, Rel & keyof D["entityModel"]>;
+    } & {
+        [SourceEntity in ReverseKeys<D, K> as `${string &
+        SourceEntity}Nodes`]: (
+            where?: Where<D["entityModel"][SourceEntity]>
+        ) => EntityNodeList<D, SourceEntity>;
+    };
 
 export type GraphEdgeSummary = {
     from: string;
@@ -126,27 +136,36 @@ export type EntityNode<
     exists(): boolean;
     path(): string[];
     info(): NodeDebugInfo;
-} & {
-    [Rel in keyof D["edges"][KeyOf<D, E>]]: () => EntityNode<
-        D,
-        D["entityModel"][Rel & keyof D["entityModel"]]
-    >;
-} & {
-    [SourceEntity in ReverseKeys<D, KeyOf<D, E>> as `${string &
-    SourceEntity}Nodes`]: (
-        where?: Where<D["entityModel"][SourceEntity]>
-    ) => EntityNodeList<D, SourceEntity>;
-};
+    delete(): void;
+} & ([AllIncomingSourceKeys<D, KeyOf<D, E>>] extends [never] ? {} : { deleteCascade(): void }) & {
+        [Rel in keyof D["edges"][KeyOf<D, E>]]: () => EntityNode<
+            D,
+            D["entityModel"][Rel & keyof D["entityModel"]]
+        >;
+    } & {
+        [SourceEntity in ReverseKeys<D, KeyOf<D, E>> as `${string &
+        SourceEntity}Nodes`]: (
+            where?: Where<D["entityModel"][SourceEntity]>
+        ) => EntityNodeList<D, SourceEntity>;
+    };
 
 export type EntityGraph<D extends GraphDef<any, any>> = {
     [K in keyof D["entityModel"]]: (id: D["entityModel"][K]["id"]) => EntityNode<D, D["entityModel"][K]>;
 } & {
-    [K in keyof D["entityModel"] as `${string & K}Nodes`]: (
+    [K in keyof D["entityModel"]as `${string & K}Nodes`]: (
         where?: Where<D["entityModel"][K]>
     ) => EntityNodeList<D, K>;
 } & {
     info(): GraphDebugInfo;
     schema(): GraphSchema;
+} & {
+    [K in keyof D["entityModel"]as `insert${Capitalize<string & K>}`]: (
+        entity: D["entityModel"][K] | D["entityModel"][K][]
+    ) => void;
+} & {
+    [K in keyof D["entityModel"]as `update${Capitalize<string & K>}`]: (
+        entity: D["entityModel"][K] | D["entityModel"][K][]
+    ) => void;
 };
 
 export type EntityNodeNoProxy<
