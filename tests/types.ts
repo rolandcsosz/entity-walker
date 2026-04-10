@@ -39,3 +39,41 @@ export const edges = {
 } as const satisfies GraphEdges<Schema>;
 
 export type CustomGraph = GraphDef<Schema, typeof edges>;
+
+export type TransactionN  = { id: number; subcategoryId: number };
+export type SubcategoryN  = { id: number; name: string; mainCategoryId: number };
+export type MainCategoryN = { id: number; name: string; expenseTypeId?: number; incomeTypeId?: number };
+export type ExpenseTypeN  = { id: number; description: string };
+export type IncomeTypeN   = { id: number; description: string };
+
+export type SchemaNumeric = ValidSchema<{
+    transaction:  TransactionN;
+    subcategory:  SubcategoryN;
+    mainCategory: MainCategoryN;
+    expenseType:  ExpenseTypeN;
+    incomeType:   IncomeTypeN;
+}>;
+
+export const numericEdges = {
+    transaction: {
+        subcategory: {
+            bidirectional: true,
+            resolve: (t: TransactionN) => t.subcategoryId,
+        },
+    },
+    subcategory: {
+        mainCategory: {
+            bidirectional: true,
+            resolve: (s: SubcategoryN) => s.mainCategoryId,
+        },
+    },
+    mainCategory: {
+        expenseType: {
+            bidirectional: true,
+            resolve: (m: MainCategoryN) => m.expenseTypeId,
+        },
+        incomeType: {
+            resolve: (m: MainCategoryN) => m.incomeTypeId,
+        },
+    },
+} as const satisfies GraphEdges<SchemaNumeric>;

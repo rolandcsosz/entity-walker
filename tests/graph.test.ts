@@ -2,7 +2,7 @@
 import { describe, it, expect } from "vitest";
 import { Schema } from "./types";
 import { Entities } from "../src";
-import { baseEntities, GraphWrapper, nonProxyAdapter, proxyAdapter } from "./shared";
+import { baseEntities, baseEntitiesNumeric, GraphWrapper, nonProxyAdapter, nonProxyAdapterN, proxyAdapter, proxyAdapterN } from "./shared";
 
 function runEntityGraphTests(label: string, { rootNode, nodeList, path, makeGraph }: GraphWrapper) {
     describe(label, () => {
@@ -694,3 +694,117 @@ function runInfoHelperTests(label: string, { graph, rootNode , path, makeGraph }
 
 runInfoHelperTests("info helpers [proxy]",     proxyAdapter(baseEntities));
 runInfoHelperTests("info helpers [non-proxy]", nonProxyAdapter(baseEntities));
+
+function runNumericIdTests(label: string, { rootNode, nodeList, path, makeGraph }: GraphWrapper) {
+    describe(label, () => {
+
+    it("resolves entity by numeric id", () => {
+        expect(rootNode("transaction", 1).value()?.subcategoryId).toBe(10);
+    });
+
+    it("returns undefined for missing numeric id", () => {
+        expect(rootNode("transaction", 999).value()).toBeUndefined();
+    });
+
+    it("exists() returns true for valid numeric id", () => {
+        expect(rootNode("transaction", 1).exists()).toBe(true);
+    });
+
+    it("exists() returns false for missing numeric id", () => {
+        expect(rootNode("transaction", 999).exists()).toBe(false);
+    });
+
+    it("valueOrThrow() works for valid numeric id", () => {
+        expect(() => rootNode("transaction", 1).valueOrThrow()).not.toThrow();
+        expect(rootNode("transaction", 1).valueOrThrow().id).toBe(1);
+    });
+
+    it("valueOrThrow() throws for missing numeric id", () => {
+        expect(() => rootNode("transaction", 999).valueOrThrow()).toThrow();
+    });
+
+    it("traverses forward edge via numeric FK", () => {
+        const sub = path(rootNode("transaction", 1), "subcategory").value();
+        expect(sub?.id).toBe(10);
+        expect(sub?.name).toBe("sub1");
+    });
+
+    it("traverses reverse edge via numeric-id entity", () => {
+        const txs = path(rootNode("subcategory", 10), "transactionNodes");
+        expect(txs).toHaveLength(1);
+        expect(txs[0].value()?.id).toBe(1);
+    });
+
+    it("chains multiple forward traversals", () => {
+        const expType = path(
+            path(path(rootNode("transaction", 1), "subcategory"), "mainCategory"),
+            "expenseType",
+        ).value();
+        expect(expType?.description).toBe("Groceries");
+    });
+
+    it("nodeList returns all entities with numeric ids", () => {
+        const txs = nodeList("transaction");
+        expect(txs).toHaveLength(2);
+    });
+
+    it("ids() returns numeric ids", () => {
+        expect(nodeList("transaction").ids()).toEqual([1, 2]);
+    });
+
+    it("ids() on reverse edge result returns numeric ids", () => {
+        const txIds = path(rootNode("subcategory", 10), "transactionNodes").ids();
+        expect(txIds).toContain(1);
+    });
+
+    it("nodeList with where predicate on numeric field", () => {
+        const filtered = nodeList("transaction", (t: any) => t.subcategoryId === 10);
+        expect(filtered).toHaveLength(1);
+        expect(filtered[0].value()?.id).toBe(1);
+    });
+
+    it("forward edge to missing entity resolves to null node", () => {
+        const ghost = path(rootNode("transaction", 999), "subcategory");
+        expect(ghost.exists()).toBe(false);
+        expect(ghost.value()).toBeUndefined();
+    });
+
+    it("reverse edge from missing entity returns empty array", () => {
+        const result = path(rootNode("subcategory", 999), "transactionNodes");
+        expect(result).toHaveLength(0);
+    });
+
+    it("select() maps resolved entities with numeric ids", () => {
+        const ids = nodeList("subcategory").select((s: any) => s.id);
+        expect(ids).toEqual([10, 20]);
+    });
+
+    it("first() returns first entity with numeric id", () => {
+        const tx = nodeList("transaction").first();
+        expect(tx?.id).toBe(1);
+    });
+
+    it("insert then retrieve by numeric id", () => {
+        const { rootNode, insert } = makeGraph(structuredClone({ transaction: [], subcategory: [{ id: 10, name: "sub1", mainCategoryId: 100 }], mainCategory: [], expenseType: [], incomeType: [] }) as any);
+        insert("transaction", { id: 5, subcategoryId: 10 });
+        expect(rootNode("transaction", 5).exists()).toBe(true);
+        expect(rootNode("transaction", 5).value()?.subcategoryId).toBe(10);
+    });
+
+    it("update then retrieve updated value by numeric id", () => {
+        const { rootNode, update } = makeGraph(structuredClone({ transaction: [{ id: 1, subcategoryId: 10 }], subcategory: [], mainCategory: [], expenseType: [], incomeType: [] }) as any);
+        update("transaction", { id: 1, subcategoryId: 20 });
+        expect(rootNode("transaction", 1).value()?.subcategoryId).toBe(20);
+    });
+
+    it("delete removes entity with numeric id", () => {
+        const { rootNode } = makeGraph(structuredClone({ transaction: [{ id: 1, subcategoryId: 10 }], subcategory: [], mainCategory: [], expenseType: [], incomeType: [] }) as any);
+        rootNode("transaction", 1).delete();
+        expect(rootNode("transaction", 1).exists()).toBe(false);
+    });
+
+    });
+}
+
+runNumericIdTests("numeric IDs [proxy]",     proxyAdapterN(structuredClone(baseEntitiesNumeric)));
+runNumericIdTests("numeric IDs [non-proxy]", nonProxyAdapterN(structuredClone(baseEntitiesNumeric)));

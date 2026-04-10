@@ -1,5 +1,5 @@
 import { Entities, createGraph, createNonProxyGraph } from "../src/index";
-import { edges, Schema } from "./types";
+import { edges, Schema, SchemaNumeric, numericEdges } from "./types";
 
 
 export const baseEntities: Entities<Schema> = {
@@ -23,7 +23,7 @@ export const baseEntities: Entities<Schema> = {
 
 export type GraphWrapper = {
     /** rootNode: single node by type + id */
-    rootNode:   (type: string, id: string) => any;
+    rootNode:   (type: string, id: string | number) => any;
     /** l: root node list, optionally filtered */
     nodeList:   (type: string, where?: (e: any) => boolean) => any;
     /** path: traverse from node/list via relation, optionally filtered */
@@ -66,3 +66,50 @@ export function nonProxyAdapter(ents: Entities<Schema>): GraphWrapper {
 
 export function makeProxy()    { return proxyAdapter(structuredClone(baseEntities)); }
 export function makeNonProxy() { return nonProxyAdapter(structuredClone(baseEntities)); }
+
+// --- Numeric ID fixtures ---
+
+export const baseEntitiesNumeric: Entities<SchemaNumeric> = {
+    transaction:  [
+        { id: 1, subcategoryId: 10 },
+        { id: 2, subcategoryId: 20 },
+    ],
+    subcategory:  [
+        { id: 10, name: "sub1", mainCategoryId: 100 },
+        { id: 20, name: "sub2", mainCategoryId: 100 },
+    ],
+    mainCategory: [
+        { id: 100, name: "Food", expenseTypeId: 1000, incomeTypeId: 2000 },
+    ],
+    expenseType:  [{ id: 1000, description: "Groceries" }],
+    incomeType:   [{ id: 2000, description: "Salary" }],
+};
+
+export function proxyAdapterN(ents: Entities<SchemaNumeric>): GraphWrapper {
+    const graph = createGraph({ entities: ents, edges: numericEdges }) as any;
+    return {
+        graph,
+        rootNode:   (type, id)               => graph[type](id),
+        nodeList:   (type, where?)            => graph[`${type}Nodes`](where),
+        path:       (nodeOrList, rel, where?) => nodeOrList[rel](where),
+        insert:     (type, e)                 => graph[`insert${cap(type)}`](e),
+        update:     (type, e)                 => graph[`update${cap(type)}`](e),
+        makeGraph:  (e) => proxyAdapterN(e as any),
+    };
+}
+
+export function nonProxyAdapterN(ents: Entities<SchemaNumeric>): GraphWrapper {
+    const graph = createNonProxyGraph({ entities: ents, edges: numericEdges }) as any;
+    return {
+        graph,
+        rootNode:   (type, id)               => graph.to(type, id),
+        nodeList:   (type, where?)            => graph.to(`${type}Nodes`, where),
+        path:       (nodeOrList, rel, where?) => nodeOrList.to(rel, where),
+        insert:     (type, e)                 => graph[`insert${cap(type)}`](e),
+        update:     (type, e)                 => graph[`update${cap(type)}`](e),
+        makeGraph:  (e) => nonProxyAdapterN(e as any),
+    };
+}
+
+export function makeProxyN()    { return proxyAdapterN(structuredClone(baseEntitiesNumeric)); }
+export function makeNonProxyN() { return nonProxyAdapterN(structuredClone(baseEntitiesNumeric)); }

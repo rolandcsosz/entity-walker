@@ -5,12 +5,12 @@ export function buildGraphCore<EM extends EntityMap, E extends GraphEdges<EM>>(
     entities: { [K in keyof EM]: EM[K][] },
     edges: E,
 ) {
-    let _createNode: (key: keyof EM, id: string | null, path?: string[]) => any;
+    let _createNode: (key: keyof EM, id: string | number | null, path?: string[]) => any;
 
     const core = buildCore<EM, E>(entities, edges, () => _createNode);
     const { byId, reverseIndex, nodeCache, toNodeList, graphSchema, graphInfo } = core;
 
-    function createNode(key: keyof EM, id: string | null, path: string[] = []): any {
+    function createNode(key: keyof EM, id: string | number | null, path: string[] = []): any {
         const cacheKey = id !== null ? `${String(key)}:${id}` : null;
         if (cacheKey) {
             const cached = nodeCache.get(cacheKey);
@@ -63,7 +63,7 @@ export function buildGraphCore<EM extends EntityMap, E extends GraphEdges<EM>>(
                     if (!targetId) continue;
                     const bucket = reverseIndex[targetType]?.[key as string]?.[targetId];
                     if (bucket) {
-                        const idx = bucket.indexOf(id);
+                        const idx = bucket.indexOf(String(id));
                         if (idx !== -1) bucket.splice(idx, 1);
                     }
                 }
@@ -72,13 +72,13 @@ export function buildGraphCore<EM extends EntityMap, E extends GraphEdges<EM>>(
             for (const sourceType in reverseIndex[key as string] ?? {}) {
                 for (const targetId in reverseIndex[key as string][sourceType]) {
                     const bucket = reverseIndex[key as string][sourceType][targetId];
-                    const idx = bucket.indexOf(id);
+                    const idx = bucket.indexOf(String(id));
                     if (idx !== -1) bucket.splice(idx, 1);
                 }
             }
             // remove from byId and entities array
             delete byId[key as string][id];
-            const arrIdx = ents[key as string]?.findIndex((e: any) => e.id === id);
+            const arrIdx = ents[key as string]?.findIndex((e: any) => e.id.toString() === id.toString());
             if (arrIdx !== undefined && arrIdx !== -1) ents[key as string].splice(arrIdx, 1);
             nodeCache.delete(`${String(key)}:${id}`);
         };
@@ -93,7 +93,7 @@ export function buildGraphCore<EM extends EntityMap, E extends GraphEdges<EM>>(
                     const edge = sourceEdges[targetType];
                     const sourceArr = (entities as Record<string, any[]>)[sourceType] ?? [];
                     // snapshot ids before mutating
-                    const pointingIds = sourceArr.filter(e => edge.resolve(e) === id).map(e => e.id);
+                    const pointingIds = sourceArr.filter(e => edge.resolve(e) === id).map(e => e.id.toString());
                     for (const pid of pointingIds) {
                         createNode(sourceType as keyof EM, pid).deleteCascade();
                     }
@@ -188,8 +188,8 @@ export const createGraph = <EM extends EntityMap, E extends GraphEdges<EM>>(conf
             ents[key] = ents[key] ?? [];
             ents[key].push(entity);
             byId[key] = byId[key] ?? {};
-            byId[key][entity.id] = entity;
-            nodeCache.delete(`${key}:${entity.id}`);
+            byId[key][entity.id.toString()] = entity;
+            nodeCache.delete(`${key}:${entity.id.toString()}`);
             const entityEdges = (config.edges as any)[key];
             if (entityEdges) {
                 for (const targetType in entityEdges) {
@@ -200,7 +200,7 @@ export const createGraph = <EM extends EntityMap, E extends GraphEdges<EM>>(conf
                     if (!reverseIndex[targetType]) reverseIndex[targetType] = {};
                     if (!reverseIndex[targetType][key]) reverseIndex[targetType][key] = {};
                     if (!reverseIndex[targetType][key][targetId]) reverseIndex[targetType][key][targetId] = [];
-                    reverseIndex[targetType][key][targetId].push(entity.id);
+                    reverseIndex[targetType][key][targetId].push(entity.id.toString());
                 }
             }
         }
@@ -212,7 +212,7 @@ export const createGraph = <EM extends EntityMap, E extends GraphEdges<EM>>(conf
         const ents = entities as Record<string, any[]>;
         const entityEdges = (config.edges as any)[key];
         for (const entity of items) {
-            const existing = byId[key]?.[entity.id];
+            const existing = byId[key]?.[entity.id.toString()];
             if (!existing) {
                 insert(type, entity);
                 continue;
@@ -226,16 +226,16 @@ export const createGraph = <EM extends EntityMap, E extends GraphEdges<EM>>(conf
                     if (!oldTargetId) continue;
                     const bucket = reverseIndex[targetType]?.[key]?.[oldTargetId];
                     if (bucket) {
-                        const idx = bucket.indexOf(entity.id);
+                        const idx = bucket.indexOf(entity.id.toString());
                         if (idx !== -1) bucket.splice(idx, 1);
                     }
                 }
             }
             // replace in byId and entities array
-            byId[key][entity.id] = entity;
-            const arrIdx = ents[key].findIndex((e: any) => e.id === entity.id);
+            byId[key][entity.id.toString()] = entity;
+            const arrIdx = ents[key].findIndex((e: any) => e.id.toString() === entity.id.toString());
             if (arrIdx !== -1) ents[key][arrIdx] = entity;
-            nodeCache.delete(`${key}:${entity.id}`);
+            nodeCache.delete(`${key}:${entity.id.toString()}`);
             // add new bidirectional reverse index entries
             if (entityEdges) {
                 for (const targetType in entityEdges) {
@@ -246,7 +246,7 @@ export const createGraph = <EM extends EntityMap, E extends GraphEdges<EM>>(conf
                     if (!reverseIndex[targetType]) reverseIndex[targetType] = {};
                     if (!reverseIndex[targetType][key]) reverseIndex[targetType][key] = {};
                     if (!reverseIndex[targetType][key][newTargetId]) reverseIndex[targetType][key][newTargetId] = [];
-                    reverseIndex[targetType][key][newTargetId].push(entity.id);
+                    reverseIndex[targetType][key][newTargetId].push(entity.id.toString());
                 }
             }
         }
@@ -270,10 +270,10 @@ export const createGraph = <EM extends EntityMap, E extends GraphEdges<EM>>(conf
                 return (where?: (entity: any) => boolean) => {
                     const all = entities[entityKey] || [];
                     const filtered = where ? all.filter(where) : all;
-                    return toNodeList(filtered.map((item: any) => createNode(entityKey as keyof EM, item.id)), entityKey);
+                    return toNodeList(filtered.map((item: any) => createNode(entityKey as keyof EM, item.id.toString())), entityKey);
                 };
             }
-            return (id: string) => createNode(prop as keyof EM, id);
+            return (id: string | number) => createNode(prop as keyof EM, id.toString());
         },
     }) as any;
 };

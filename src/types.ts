@@ -1,6 +1,6 @@
 
 
-export type EntityBase = { id: string };
+export type EntityBase = { id: string | number };
 
 type ForbiddenKeys =
     | "to"
@@ -30,7 +30,7 @@ export type Entities<T> = {
 
 export type EdgeDef<Source> = {
     bidirectional?: boolean;
-    resolve: (entity: Source) => string | undefined;
+    resolve: (entity: Source) => string | number | undefined;
 };
 
 export type GraphEdges<EM extends EntityMap> = {
@@ -81,7 +81,7 @@ export type EntityNodeList<
 > = EntityNode<D, D["entityModel"][K]>[] & {
     entities(): D["entityModel"][K][];
     select<R>(fn: (entity: D["entityModel"][K]) => R): R[];
-    ids(): string[];
+    ids(): (string | number)[];
     first(): D["entityModel"][K] | undefined;
     findEntity(predicate: (entity: D["entityModel"][K]) => boolean): D["entityModel"][K] | undefined;
     isEmpty(): boolean;
@@ -110,7 +110,7 @@ export type GraphSchema = {
     edges: GraphEdgeSummary[];
 };
 
-export type MissingEntityRef = { type: string; id: string };
+export type MissingEntityRef = { type: string; id: string | number };
 
 export type GraphDebugInfo = {
     entityCounts: Record<string, number>;
@@ -121,7 +121,7 @@ export type GraphDebugInfo = {
 
 export type NodeDebugInfo = {
     type: string;
-    id: string | null;
+    id: string | number | null;
     exists: boolean;
     path: string[];
     value: any;
@@ -200,6 +200,7 @@ export type EntityNodeListNoProxy<
     findEntity(predicate: (entity: D["entityModel"][K]) => boolean): D["entityModel"][K] | undefined;
     isEmpty(): boolean;
     isNotEmpty(): boolean;
+    ids(): (string | number)[];
     unique(): EntityNodeListNoProxy<D, K>;
     where(where: Where<D["entityModel"][K]>): EntityNodeListNoProxy<D, K>;
     to<R extends `${string & (keyof D["edges"][K] | ReverseKeys<D, K>)}Nodes`>(

@@ -15,7 +15,7 @@ export interface CoreData<EM extends EntityMap> {
 export function buildCore<EM extends EntityMap, E extends GraphEdges<EM>>(
     entities: { [K in keyof EM]: EM[K][] },
     edges: E,
-    getCreateNode: () => (key: keyof EM, id: string | null, path?: string[]) => any,
+    getCreateNode: () => (key: keyof EM, id: string | number | null, path?: string[]) => any,
     transformList?: (list: any, nodeKey: string) => void,
 ): CoreData<EM> {
     const byId: Record<string, Record<string, any>> = {};
@@ -43,7 +43,7 @@ export function buildCore<EM extends EntityMap, E extends GraphEdges<EM>>(
                 if (!reverseIndex[targetType][sourceType][targetId]) {
                     reverseIndex[targetType][sourceType][targetId] = [];
                 }
-                reverseIndex[targetType][sourceType][targetId].push(sourceEntity.id);
+                reverseIndex[targetType][sourceType][targetId].push(String(sourceEntity.id));
             }
         }
     }
@@ -74,7 +74,7 @@ export function buildCore<EM extends EntityMap, E extends GraphEdges<EM>>(
             return result;
         });
         def('ids', () => {
-            const result: string[] = [];
+            const result: (string | number)[] = [];
             for (const n of nodes) { const e = n.value(); if (e !== undefined) result.push(e.id); }
             return result;
         });
@@ -95,7 +95,7 @@ export function buildCore<EM extends EntityMap, E extends GraphEdges<EM>>(
             return false;
         });
         def('unique', () => {
-            const seen = new Set<string>();
+            const seen = new Set<string | number>();
             const uniqueNodes: any[] = [];
             for (const n of nodes) {
                 const e = n.value();
