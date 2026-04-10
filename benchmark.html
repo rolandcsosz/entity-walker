@@ -1,14 +1,12 @@
-
+<!DOCTYPE html>
 <html>
   <head>
     <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
   </head>
   <body>
-    <div id="plot" style="width:100%;height:600px;"></div>
+    <div id="plot" style="width:100%;"></div>
     <script>
-      const data = [{"x":[400,40000,250000,1000000],"y":[0.34004000000001045,34.14455999999998,524.5367400000001,6601.693339999998],"type":"scatter","mode":"lines+markers","name":"Nested Loops","line":{"color":"#f1634c","width":4},"marker":{"color":"#f1634c","size":8,"symbol":"circle"}},{"x":[400,40000,250000,1000000],"y":[0.10092999999999393,3.0155700000000136,15.585880000000088,86.03337000000029],"type":"scatter","mode":"lines+markers","name":"Entity Graph","line":{"color":"#37b98b","width":4},"marker":{"color":"#37b98b","size":8,"symbol":"circle"}},{"x":[400,40000,250000,1000000],"y":[0.4525199999999927,8.46534999999999,77.04193999999988,365.7445599999992],"type":"scatter","mode":"lines+markers","name":"Entity Graph with Build","line":{"color":"#faa318","width":4},"marker":{"color":"#faa318","size":8,"symbol":"circle"}}];
-      const layout = {"xaxis":{"title":"Number of Transactions"},"yaxis":{"title":"Average runtime (ms)","tickformat":".0s"},"font":{"size":18},"legend":{"orientation":"h","x":0.5,"xanchor":"center","y":1.1},"margin":{"l":80,"r":40,"t":70,"b":80}};
-      Plotly.newPlot('plot', data, layout);
+      Plotly.newPlot('plot', [{"x":[400,10000,90000,490000,2250000],"y":[0.20382500000001377,0.9641416666666723,15.627250000000009,0.6243833333333271,5477.156908333334],"name":"Nested Loop","line":{"color":"#f1634c","width":3},"mode":"lines+markers","type":"scatter"},{"x":[400,10000,90000,490000,2250000],"y":[0.2774666666666595,0.37281666666666524,2.812500000000019,0.5320416666667143,146.5714916666669],"name":"Proxy Graph (pre-built)","line":{"color":"#37b98b","width":3},"mode":"lines+markers","type":"scatter"},{"x":[400,10000,90000,490000,2250000],"y":[0.19033333333332791,0.7021916666666735,2.556208333333359,0.6854249999999903,83.4335749999979],"name":"Non-Proxy Graph (pre-built)","line":{"color":"#6b8cff","width":3},"mode":"lines+markers","type":"scatter"}], {"xaxis":{"title":"Number of Transactions"},"yaxis":{"title":"Average runtime (ms)","tickformat":"~s"},"font":{"size":18},"legend":{"orientation":"h","x":0.5,"xanchor":"center","y":1.1},"margin":{"l":100,"r":40,"t":50,"b":80}});
     </script>
   </body>
 </html>

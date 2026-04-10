@@ -2,24 +2,46 @@
 
 ![CI](https://github.com/rolandcsosz/entity-walker/actions/workflows/ci.yml/badge.svg)
 
-Entity Walker is a small, zero-dependency TypeScript library for working with normalised relational data as an immutable, type-safe graph.
+**Entity Walker** is a zero-dependency, type-safe TypeScript graph library for navigating relational data through intuitive traversal chains.
 
-Define your entities and their relationships via foreign keys, then traverse the graph with fully typed, autocompleted accessors. Every entity type and relation is known at compile time, so your IDE guides you with autocomplete and catches mistakes before they reach runtime.
+Model your data as a graph of entities connected by foreign keys, then traverse relationships with full TypeScript autocomplete — forward and reverse — as if you were walking through your data.
+
+---
+
+## Core Idea
+
+Instead of writing nested loops or manual joins:
+
+```ts
+transactions.map(t =>
+  subcategories.find(s =>
+    mainCategories.find(m => ...)
+  )
+)
+```
+You simply walk the graph:
+
+```ts
+graph.transaction("tx1")
+  .subcategory()
+  .mainCategory()
+  .value()?.name
+```
 
 ## What You Can Use It For
-
-* **Normalized API data** — fetch, normalize, and query relational data without nested loops.
-* **Read-heavy applications** — dashboards, reporting tools, analytics, finance trackers.
-* **Complex relationships** — navigate deeply nested relations in a single readable chain.
-* **Reverse lookups** — find every entity that points to a given entity.
-* **Safe queries** — missing entities and broken foreign keys are always handled gracefully.
+* Read-heavy data models (dashboards, analytics, finance apps)
+* Normalized API data (client-side joins without nesting)
+* Deep entity navigation (multi-hop relationships)
+* Reverse lookups (find all entities pointing to another)
+* Data integrity validation
+* In-memory graph exploration
 
 ## Features
 
 * **Immutable & safe** — returned entities are frozen objects.
 * **Type-safe & autocompleted** — TypeScript knows every entity type and every relation.
 * **Bidirectional relations** — traverse forwards (1-to-1) or backwards (1-to-many) safely.
-* **Rich node-list API** — `.filter()`, `.map()`, `.flatMap()`, `.where()`, `.ids()`, `.entities()`, `.select()`, `.unique()`, and more work directly on related entity collections.
+* **Rich node-list API** — `.where()`, `.ids()`, `.entities()`, `.select()`, `.unique()`, `.unique()`, `.isEmpty()` and more work directly on related entity collections.
 * **Consistent defaults** — every node exposes `.value()` (safe, returns `undefined` when missing) and `.valueOrThrow()` (throws when missing). No split between optional and required at the type level.
 * **Performance-friendly** — indexed O(1) lookups; even rebuilding the graph per query beats nested loops at scale.
 * **Proxy-free alternative** — `createNonProxyGraph` produces an equivalent graph for environments without `Proxy` support.
@@ -86,45 +108,13 @@ const txIds = graph
 |---|---|
 | [Graph](docs/proxy-graph.md) | Full reference for `createGraph` — the standard API with clean `graph.entity("id")` / `node.relation()` syntax powered by `Proxy`. |
 | [Non-Proxy Graph](docs/non-proxy-graph.md) | Full reference for `createNonProxyGraph` — identical behaviour using a `.to()` calling convention, compatible with environments that do not support `Proxy`. |
-
-## Debugging
-
-Call `graph.info()` at any time to inspect the state of the graph:
-
-```typescript
-const info = graph.info();
-```
-
-| Field | Type | Description |
-|---|---|---|
-| `entityCounts` | `Record<string, number>` | Number of entities stored per type. |
-| `cache.nodeCount` | `number` | Number of nodes currently held in the internal node cache. |
-| `missingEntities` | `{ type: string; id: string }[]` | FK values that resolve to an id that does not exist in the graph. For example, a transaction whose `subcategoryId` points to a subcategory that was never loaded. |
-| `orphanEntities` | `Record<string, string[]>` | Entities that are never referenced by any edge. Only types that appear as a target in at least one edge are checked. A type absent from this record is either fully referenced or not a relation target. |
-
-**Example — a graph with bad data:**
-
-```typescript
-// sub2 has mainCategoryId: "cat99" which does not exist
-// cat3 is loaded but no subcategory points to it
-
-const info = graph.info();
-
-info.missingEntities;
-// [{ type: "mainCategory", id: "cat99" }]
-
-info.orphanEntities;
-// { mainCategory: ["cat3"] }
-```
-
-`missingEntities` and `orphanEntities` make it easy to spot data quality problems — broken foreign keys, incomplete data loads, or stale ids — without traversing the graph manually.
-
----
+| [Graph Modification](docs/modification.md) | Insert, update (upsert), delete, and cascade-delete entities at runtime with automatic index maintenance. |
+| [Debugging](docs/debugging.md) | Use `graph.info()` to inspect entity counts, missing FK targets, and orphan entities. |
 
 ## Performance & Benchmarks
 
-Entity Walker builds an in-memory index at construction time so every lookup is O(1). Even rebuilding the graph fresh for every query out-performs hand-written nested loops at scale:
+Entity Walker builds an in-memory index at construction time so every lookup is **O(1)**. Even with several rebuilding the graph out-performs hand-written nested loops at scale:
 
 ![image](docs/benchmark.png)
 
-The benchmark compares pure indexed `for` loops against Entity Walker (with a full graph rebuild per query) across increasing dataset sizes with random id access patterns on multi-hop relations. Entity Walker's indexed lookups dominate as dataset size grows.
+The benchmark compares pure indexed `for` loops against Entity Walker (with Proxy and without Proxy) across increasing dataset sizes with random id access patterns on multi-hop (4 relations). Entity Walker's indexed lookups dominate as dataset size grows. Proxy vs non-Proxy performance differs by a small constant factor, but both are much faster than nested loops at scale. The non-Proxy version is faster than Proxy (average ~1ms faster), but the difference is negligible compared to the gap with nested loops.

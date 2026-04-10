@@ -1,11 +1,11 @@
 import fs from "fs";
 import { performance } from "perf_hooks";
-import { createGraph } from "../src/graph";
-import { Entities, EntityGraph } from "../src/types";
-import { CustomGraph, edges, ExpenseType, IncomeType, MainCategory, Schema, Subcategory, Transaction } from "./types";
+import { createGraph as createProxyGraph } from "../src/graph";
+import { createNonProxyGraph } from "../src/graphNoProxy";
+import { Entities } from "../src/types";
+import { edges, ExpenseType, IncomeType, MainCategory, Schema, Subcategory, Transaction } from "./types";
 
-
-function generateLargeDataset({
+function generateDataset({
     expenseTypes,
     mainCategoriesPerExpense,
     subcategoriesPerMain,
@@ -17,22 +17,24 @@ function generateLargeDataset({
     transactionsPerSub: number;
 }): Entities<Schema> {
     const expenseType: ExpenseType[] = [];
+    const incomeType: IncomeType[] = [];
     const mainCategory: MainCategory[] = [];
     const subcategory: Subcategory[] = [];
     const transaction: Transaction[] = [];
-    const incomeType: IncomeType[] = [];
 
     for (let e = 0; e < expenseTypes; e++) {
         const etId = `et-${e}`;
+        const itId = `it-${e}`;
         expenseType.push({ id: etId, description: `Expense Type ${e}` });
+        incomeType.push({ id: itId, description: `Income Type ${e}` });
 
         for (let m = 0; m < mainCategoriesPerExpense; m++) {
             const mcId = `mc-${e}-${m}`;
-            mainCategory.push({ id: mcId, name: `Main Category ${m}`, expenseTypeId: etId });
+            mainCategory.push({ id: mcId, name: `Main ${e}-${m}`, expenseTypeId: etId, incomeTypeId: itId });
 
             for (let s = 0; s < subcategoriesPerMain; s++) {
                 const scId = `sc-${e}-${m}-${s}`;
-                subcategory.push({ id: scId, name: `Subcategory ${s}`, mainCategoryId: mcId });
+                subcategory.push({ id: scId, name: `Sub ${e}-${m}-${s}`, mainCategoryId: mcId });
 
                 for (let t = 0; t < transactionsPerSub; t++) {
                     transaction.push({ id: `tx-${e}-${m}-${s}-${t}`, subcategoryId: scId });
@@ -40,192 +42,150 @@ function generateLargeDataset({
             }
         }
     }
-    return { expenseType, mainCategory, subcategory, transaction, incomeType };
+
+    return { expenseType, incomeType, mainCategory, subcategory, transaction };
 }
 
-function createRandomIndex(maxLimit: number) {
-    return Math.floor(Math.random() * maxLimit);
-}
+function randIdx(len: number) { return Math.floor(Math.random() * len); }
 
-function nestedLoop(entities: Entities<Schema>, expenseTypeId: string) {
+/** Nested loop: expenseType → mainCategory → subcategory (filtered) → transactions */
+function loop_filteredReverse(entities: Entities<Schema>, expenseTypeId: string, subNamePrefix: string): string[] {
     const result: string[] = [];
-
-    for (let i = 0; i < entities.mainCategory.length; i++) {
-        const mc = entities.mainCategory[i];
+    for (const mc of entities.mainCategory) {
         if (mc.expenseTypeId !== expenseTypeId) continue;
-
-        for (let j = 0; j < entities.subcategory.length; j++) {
-            const sc = entities.subcategory[j];
+        for (const sc of entities.subcategory) {
             if (sc.mainCategoryId !== mc.id) continue;
-
-            for (let k = 0; k < entities.transaction.length; k++) {
-                const tx = entities.transaction[k];
+            if (!sc.name.startsWith(subNamePrefix)) continue;
+            for (const tx of entities.transaction) {
                 if (tx.subcategoryId !== sc.id) continue;
                 result.push(tx.id);
             }
         }
     }
-
     return result;
 }
 
-
-function createGraph(entities: any): EntityGraph<CustomGraph> {
-    return createGraph({ entities, edges }) as EntityGraph<CustomGraph>;
+function proxyGraphQuery(graph: any, expenseTypeId: string, subNamePrefix: string): string[] {
+    return graph.expenseType(expenseTypeId)
+        .mainCategoryNodes()
+        .subcategoryNodes((sc: any) => sc.name.startsWith(subNamePrefix))
+        .transactionNodes()
+        .ids();
 }
 
-function graphTraversal(graph: EntityGraph<CustomGraph>, expenseTypeId: string) {
-    return graph
-        .expenseType(expenseTypeId)
-        .mainCategoryNodes()
-        .flatMap((mc) => mc.subcategoryNodes())
-        .flatMap((sc) => sc.transactionNodes())
-        .map((tx) => tx.value()?.id);
-}
-
-function graphTraversalWithBuild(entities: Entities<Schema>, expenseTypeId: string) {
-    const graph = createGraph(entities);
-    return graph
-        .expenseType(expenseTypeId)
-        .mainCategoryNodes()
-        .flatMap((mc) => mc.subcategoryNodes())
-        .flatMap((sc) => sc.transactionNodes())
-        .map((tx) => tx.value()?.id);
+function nonProxyGraphQuery(graph: any, expenseTypeId: string, subNamePrefix: string): string[] {
+    return graph.to("expenseType", expenseTypeId)
+        .to("mainCategoryNodes")
+        .to("subcategoryNodes", (sc: any) => sc.name.startsWith(subNamePrefix))
+        .to("transactionNodes")
+        .ids();
 }
 
 type BenchmarkResult = {
     size: number;
     loop: number;
-    graph: number;
-    graphWithBuild: number;
+    proxy: number;
+    nonProxy: number;
 };
 
-async function runBenchmark() {
-    const datasetSizes = [
-        { sub: 2, tx: 2 },
-        { sub: 20, tx: 20 },
-        { sub: 50, tx: 50 },
-        { sub: 100, tx: 100 },
-    ];
+const DATASET_SIZES = [
+    { sub: 2, tx: 2 },
+    { sub: 10, tx: 10 },
+    { sub: 30, tx: 30 },
+    { sub: 70, tx: 70 },
+    { sub: 150, tx: 150 },
 
+
+];
+
+const N = 12;
+const SUB_PREFIX = "Sub 0";
+
+async function runBenchmark() {
     const results: BenchmarkResult[] = [];
 
-    for (const ds of datasetSizes) {
-        console.log(`Running dataset: subcategories=${ds.sub}, transactions=${ds.tx}`);
+    console.log("\n=== Filtered reverse (expenseType → mainCategory → subcategory[filtered] → transactions) ===");
 
-        const entities = generateLargeDataset({
+    for (const ds of DATASET_SIZES) {
+        const entities = generateDataset({
             expenseTypes: 10,
             mainCategoriesPerExpense: 10,
             subcategoriesPerMain: ds.sub,
             transactionsPerSub: ds.tx,
         });
 
-        const N = 10;
+        const queryEtIds = Array.from({ length: N }, () => entities.expenseType[randIdx(entities.expenseType.length)].id);
 
-        const lookupExpenseTypeId: string[] = [];
-        for (let i = 0; i < N; i++) {
-            const idx = createRandomIndex(entities.expenseType.length);
-            lookupExpenseTypeId.push(entities.expenseType[idx].id);
-        }
-
-        let loopTime = 0;
+        // ── nested loop ──
+        let loopMs = 0;
         for (let i = 0; i < N; i++) {
             const t0 = performance.now();
-            const result = nestedLoop(entities, lookupExpenseTypeId[i].toString());
-            const t1 = performance.now();
-            loopTime += t1 - t0;
+            loop_filteredReverse(entities, queryEtIds[i], SUB_PREFIX);
+            loopMs += performance.now() - t0;
         }
 
-        const graph = createGraph(entities);
-        let graphTime = 0;
+        // ── proxy graph, pre-built ──
+        const proxyGraph = createProxyGraph({ entities, edges });
+        let proxyMs = 0;
         for (let i = 0; i < N; i++) {
             const t0 = performance.now();
-            const result = graphTraversal(graph, lookupExpenseTypeId[i].toString());
-            const t1 = performance.now();
-            graphTime += t1 - t0;
+            proxyGraphQuery(proxyGraph, queryEtIds[i], SUB_PREFIX);
+            proxyMs += performance.now() - t0;
         }
 
-        let graphWithBuildTime = 0;
+        // ── non-proxy graph, pre-built ──
+        const npGraph = createNonProxyGraph({ entities, edges });
+        let npMs = 0;
         for (let i = 0; i < N; i++) {
             const t0 = performance.now();
-            const result = graphTraversalWithBuild(entities, lookupExpenseTypeId[i].toString());
-            const t1 = performance.now();
-            graphWithBuildTime += t1 - t0;
+            nonProxyGraphQuery(npGraph, queryEtIds[i], SUB_PREFIX);
+            npMs += performance.now() - t0;
         }
 
-        results.push({
+        const row: BenchmarkResult = {
             size: entities.transaction.length,
-            loop: loopTime / N,
-            graph: graphTime / N,
-            graphWithBuild: graphWithBuildTime / N,
-        });
+            loop: loopMs / N,
+            proxy: proxyMs / N,
+            nonProxy: npMs / N,
+        };
+        results.push(row);
+        console.log(`  tx=${row.size.toLocaleString()}  loop=${row.loop.toFixed(3)}ms  proxy=${row.proxy.toFixed(3)}ms  np=${row.nonProxy.toFixed(3)}ms`);
     }
 
-    console.log(results);
     generatePlot(results);
 }
 
 function generatePlot(results: BenchmarkResult[]) {
-    const traceLoop = {
-        x: results.map((r) => r.size),
-        y: results.map((r) => r.loop),
-        type: "scatter",
-        mode: "lines+markers",
-        name: "Nested Loops",
-        line: { color: "#f1634c", width: 4 },
-        marker: { color: "#f1634c", size: 8, symbol: "circle" }
-    };
-
-    const traceGraph = {
-        x: results.map((r) => r.size),
-        y: results.map((r) => r.graph),
-        type: "scatter",
-        mode: "lines+markers",
-        name: "Entity Graph",
-        line: { color: "#37b98b", width: 4 },
-        marker: { color: "#37b98b", size: 8, symbol: "circle" }
-    };
-
-    const traceGraphWithBuild = {
-        x: results.map((r) => r.size),
-        y: results.map((r) => r.graphWithBuild),
-        type: "scatter",
-        mode: "lines+markers",
-        name: "Entity Graph with Build",
-        line: { color: "#faa318", width: 4 },
-        marker: { color: "#faa318", size: 8, symbol: "circle" }
-    };
+    const xs = results.map(r => r.size);
+    const traces = [
+        { x: xs, y: results.map(r => r.loop), name: "Nested Loop", line: { color: "#f1634c", width: 3 }, mode: "lines+markers", type: "scatter" },
+        { x: xs, y: results.map(r => r.proxy), name: "Proxy Graph (pre-built)", line: { color: "#37b98b", width: 3 }, mode: "lines+markers", type: "scatter" },
+        { x: xs, y: results.map(r => r.nonProxy), name: "Non-Proxy Graph (pre-built)", line: { color: "#6b8cff", width: 3 }, mode: "lines+markers", type: "scatter" },
+    ];
 
     const layout = {
         xaxis: { title: "Number of Transactions", },
-        yaxis: { title: "Average runtime (ms)", tickformat: ".0s" },
+        yaxis: { title: "Average runtime (ms)", tickformat: "~s" },
         font: { size: 18 },
-        legend: {
-            orientation: "h",
-            x: 0.5,
-            xanchor: "center",
-            y: 1.1,
-        }, margin: { l: 80, r: 40, t: 70, b: 80 }
+        legend: { orientation: "h", x: 0.5, xanchor: "center", y: 1.1 },
+        margin: { l: 100, r: 40, t: 50, b: 80 },
     };
 
-    const html = `
+    const html = `<!DOCTYPE html>
 <html>
   <head>
     <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
   </head>
   <body>
-    <div id="plot" style="width:100%;height:600px;"></div>
+    <div id="plot" style="width:100%;"></div>
     <script>
-      const data = ${JSON.stringify([traceLoop, traceGraph, traceGraphWithBuild])};
-      const layout = ${JSON.stringify(layout)};
-      Plotly.newPlot('plot', data, layout);
+      Plotly.newPlot('plot', ${JSON.stringify(traces)}, ${JSON.stringify(layout)});
     </script>
   </body>
-</html>
-  `;
+</html>`;
 
     fs.writeFileSync("benchmark.html", html, "utf-8");
-    console.log("Plot saved as benchmark.html");
+    console.log("\nPlot saved as benchmark.html");
 }
 
 runBenchmark();
