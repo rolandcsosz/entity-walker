@@ -25,6 +25,75 @@ export const createNonProxyGraph = <EM extends EntityMap, E extends GraphEdges<E
     const core = buildCore<EM, E>(config.entities, config.edges, () => _createNode, addToList);
     const { byId, reverseIndex, nodeCache, toNodeList, graphSchema, graphInfo, entities } = core;
 
+    function insert<K extends keyof EM>(type: K, entityOrEntities: EM[K] | EM[K][]): void {
+        const items = Array.isArray(entityOrEntities) ? entityOrEntities : [entityOrEntities];
+        const key = String(type);
+        const ents = entities as Record<string, any[]>;
+        for (const entity of items) {
+            ents[key] = ents[key] ?? [];
+            ents[key].push(entity);
+            byId[key] = byId[key] ?? {};
+            byId[key][entity.id] = entity;
+            nodeCache.delete(`${key}:${entity.id}`);
+            const entityEdges = (config.edges as any)[key];
+            if (entityEdges) {
+                for (const targetType in entityEdges) {
+                    const edge = entityEdges[targetType];
+                    if (!edge.bidirectional) continue;
+                    const targetId = edge.resolve(entity);
+                    if (!targetId) continue;
+                    if (!reverseIndex[targetType]) reverseIndex[targetType] = {};
+                    if (!reverseIndex[targetType][key]) reverseIndex[targetType][key] = {};
+                    if (!reverseIndex[targetType][key][targetId]) reverseIndex[targetType][key][targetId] = [];
+                    reverseIndex[targetType][key][targetId].push(entity.id);
+                }
+            }
+        }
+    }
+
+    function update<K extends keyof EM>(type: K, entityOrEntities: EM[K] | EM[K][]): void {
+        const items = Array.isArray(entityOrEntities) ? entityOrEntities : [entityOrEntities];
+        const key = String(type);
+        const ents = entities as Record<string, any[]>;
+        const entityEdges = (config.edges as any)[key];
+        for (const entity of items) {
+            const existing = byId[key]?.[entity.id];
+            if (!existing) {
+                insert(type, entity);
+                continue;
+            }
+            if (entityEdges) {
+                for (const targetType in entityEdges) {
+                    const edge = entityEdges[targetType];
+                    if (!edge.bidirectional) continue;
+                    const oldTargetId = edge.resolve(existing);
+                    if (!oldTargetId) continue;
+                    const bucket = reverseIndex[targetType]?.[key]?.[oldTargetId];
+                    if (bucket) {
+                        const idx = bucket.indexOf(entity.id);
+                        if (idx !== -1) bucket.splice(idx, 1);
+                    }
+                }
+            }
+            byId[key][entity.id] = entity;
+            const arrIdx = ents[key].findIndex((e: any) => e.id === entity.id);
+            if (arrIdx !== -1) ents[key][arrIdx] = entity;
+            nodeCache.delete(`${key}:${entity.id}`);
+            if (entityEdges) {
+                for (const targetType in entityEdges) {
+                    const edge = entityEdges[targetType];
+                    if (!edge.bidirectional) continue;
+                    const newTargetId = edge.resolve(entity);
+                    if (!newTargetId) continue;
+                    if (!reverseIndex[targetType]) reverseIndex[targetType] = {};
+                    if (!reverseIndex[targetType][key]) reverseIndex[targetType][key] = {};
+                    if (!reverseIndex[targetType][key][newTargetId]) reverseIndex[targetType][key][newTargetId] = [];
+                    reverseIndex[targetType][key][newTargetId].push(entity.id);
+                }
+            }
+        }
+    }
+
     function createNode(key: keyof EM, id: string | null, path: string[] = []): any {
         const cacheKey = id !== null ? `${String(key)}:${id}` : null;
         if (cacheKey) {
@@ -105,6 +174,53 @@ export const createNonProxyGraph = <EM extends EntityMap, E extends GraphEdges<E
                 path: nodePath,
                 value: getValue(),
             }),
+            delete: () => {
+                if (id === null || !byId[key as string]?.[id]) return;
+                const entity = byId[key as string][id];
+                const ents = entities as Record<string, any[]>;
+                const entityEdges = (config.edges as any)[key as string];
+                if (entityEdges) {
+                    for (const targetType in entityEdges) {
+                        const edge = entityEdges[targetType];
+                        if (!edge.bidirectional) continue;
+                        const targetId = edge.resolve(entity);
+                        if (!targetId) continue;
+                        const bucket = reverseIndex[targetType]?.[key as string]?.[targetId];
+                        if (bucket) {
+                            const idx = bucket.indexOf(id);
+                            if (idx !== -1) bucket.splice(idx, 1);
+                        }
+                    }
+                }
+                for (const sourceType in reverseIndex[key as string] ?? {}) {
+                    for (const targetId in reverseIndex[key as string][sourceType]) {
+                        const bucket = reverseIndex[key as string][sourceType][targetId];
+                        const idx = bucket.indexOf(id);
+                        if (idx !== -1) bucket.splice(idx, 1);
+                    }
+                }
+                delete byId[key as string][id];
+                const arrIdx = ents[key as string]?.findIndex((e: any) => e.id === id);
+                if (arrIdx !== undefined && arrIdx !== -1) ents[key as string].splice(arrIdx, 1);
+                nodeCache.delete(`${String(key)}:${id}`);
+            },
+            deleteCascade: () => {
+                if (id === null || !byId[key as string]?.[id]) return;
+                for (const sourceType in config.edges) {
+                    const sourceEdges = (config.edges as any)[sourceType];
+                    if (!sourceEdges) continue;
+                    for (const targetType in sourceEdges) {
+                        if (targetType !== String(key)) continue;
+                        const edge = sourceEdges[targetType];
+                        const sourceArr = (entities as Record<string, any[]>)[sourceType] ?? [];
+                        const pointingIds = sourceArr.filter((e: any) => edge.resolve(e) === id).map((e: any) => e.id);
+                        for (const pid of pointingIds) {
+                            createNode(sourceType as keyof EM, pid).deleteCascade();
+                        }
+                    }
+                }
+                node.delete();
+            },
             to: (rel: string, idOrWhere?: any) => {
                 const fn = internal[rel];
                 if (!fn) throw new Error(
@@ -134,5 +250,11 @@ export const createNonProxyGraph = <EM extends EntityMap, E extends GraphEdges<E
         return createNode(type as keyof EM, idOrWhere as string);
     };
 
-    return { to, info: graphInfo, schema: graphSchema } as any;
+    const graph: any = { to, info: graphInfo, schema: graphSchema };
+    for (const key in config.entities) {
+        const capKey = key[0].toUpperCase() + key.slice(1);
+        graph[`insert${capKey}`] = (entityOrEntities: any) => insert(key as keyof EM, entityOrEntities);
+        graph[`update${capKey}`] = (entityOrEntities: any) => update(key as keyof EM, entityOrEntities);
+    }
+    return graph as any;
 };

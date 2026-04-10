@@ -177,6 +177,8 @@ export type EntityNodeNoProxy<
     exists(): boolean;
     path(): string[];
     info(): NodeDebugInfo;
+    delete(): void;
+} & ([AllIncomingSourceKeys<D, K>] extends [never] ? {} : { deleteCascade(): void }) & {
     to<R extends (string & keyof D["edges"][K]) | `${string & ReverseKeys<D, K>}Nodes`>(
         rel: R,
         where?: R extends `${infer Src}Nodes`
@@ -210,7 +212,7 @@ export type EntityNodeListNoProxy<
         : never;
 };
 
-export interface EntityGraphNoProxy<D extends GraphDef<any, any>> {
+export type EntityGraphNoProxy<D extends GraphDef<any, any>> = {
     to<R extends (keyof D["entityModel"] & string) | `${keyof D["entityModel"] & string}Nodes`>(
         type: R,
         idOrWhere?: R extends `${string}Nodes`
@@ -221,4 +223,12 @@ export interface EntityGraphNoProxy<D extends GraphDef<any, any>> {
         : EntityNodeNoProxy<D, R & keyof D["entityModel"]>;
     info(): GraphDebugInfo;
     schema(): GraphSchema;
+} & {
+    [K in keyof D["entityModel"] as `insert${Capitalize<string & K>}`]: (
+        entity: D["entityModel"][K] | D["entityModel"][K][]
+    ) => void;
+} & {
+    [K in keyof D["entityModel"] as `update${Capitalize<string & K>}`]: (
+        entity: D["entityModel"][K] | D["entityModel"][K][]
+    ) => void;
 }
