@@ -57,10 +57,18 @@ type ReverseKeys<
     }[keyof D["edges"][SourceKey]];
 }[keyof D["edges"]];
 
+type KeyOf<D extends GraphDef<any, any>, E> = {
+    [K in keyof D["entityModel"]]: D["entityModel"][K] extends E
+        ? E extends D["entityModel"][K]
+            ? K
+            : never
+        : never;
+}[keyof D["entityModel"]];
+
 export type EntityNodeList<
     D extends GraphDef<any, any>,
     K extends keyof D["entityModel"]
-> = EntityNode<D, K>[] & {
+> = EntityNode<D, D["entityModel"][K]>[] & {
     entities(): D["entityModel"][K][];
     select<R>(fn: (entity: D["entityModel"][K]) => R): R[];
     ids(): string[];
@@ -111,27 +119,27 @@ export type NodeDebugInfo = {
 
 export type EntityNode<
     D extends GraphDef<any, any>,
-    K extends keyof D["entityModel"]
+    E extends EntityBase
 > = {
-    value(): D["entityModel"][K] | undefined;
-    valueOrThrow(): D["entityModel"][K];
+    value(): E | undefined;
+    valueOrThrow(): E;
     exists(): boolean;
     path(): string[];
     info(): NodeDebugInfo;
 } & {
-    [Rel in keyof D["edges"][K]]: () => EntityNode<
+    [Rel in keyof D["edges"][KeyOf<D, E>]]: () => EntityNode<
         D,
-        Rel & keyof D["entityModel"]
+        D["entityModel"][Rel & keyof D["entityModel"]]
     >;
 } & {
-    [SourceEntity in ReverseKeys<D, K> as `${string &
+    [SourceEntity in ReverseKeys<D, KeyOf<D, E>> as `${string &
     SourceEntity}Nodes`]: (
         where?: Where<D["entityModel"][SourceEntity]>
     ) => EntityNodeList<D, SourceEntity>;
 };
 
 export type EntityGraph<D extends GraphDef<any, any>> = {
-    [K in keyof D["entityModel"]]: (id: D["entityModel"][K]["id"]) => EntityNode<D, K>;
+    [K in keyof D["entityModel"]]: (id: D["entityModel"][K]["id"]) => EntityNode<D, D["entityModel"][K]>;
 } & {
     [K in keyof D["entityModel"] as `${string & K}Nodes`]: (
         where?: Where<D["entityModel"][K]>
