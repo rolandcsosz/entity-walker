@@ -86,6 +86,10 @@ export function buildCore<EM extends EntityMap, E extends GraphEdges<EM>>(
             for (const n of nodes) { const e = n.value(); if (e !== undefined && predicate(e)) return e; }
             return undefined;
         });
+        def('findNode', (predicate: (entity: any) => boolean) => {
+            for (const n of nodes) { const e = n.value(); if (e !== undefined && predicate(e)) return n; }
+            return undefined;
+        });
         def('isEmpty', () => {
             for (const n of nodes) { if (n.value() !== undefined) return false; }
             return true;

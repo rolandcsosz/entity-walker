@@ -527,6 +527,34 @@ function runEntityGraphTests(label: string, { rootNode, nodeList, path, makeGrap
         expect(tx?.id).toBe("tx2");
     });
 
+    it("findNode() returns matching node", () => {
+        const node = nodeList("subcategory").findNode((s: any) => s.name === "sub2");
+        expect(node).toBeDefined();
+        expect(node!.value()?.id).toBe("sub2");
+    });
+
+    it("findNode() returns a traversable node", () => {
+        const node = nodeList("subcategory").findNode((s: any) => s.name === "sub1");
+        const cat = path(node, "mainCategory").value();
+        expect(cat?.id).toBe("cat1");
+    });
+
+    it("findNode() returns undefined when nothing matches", () => {
+        const node = nodeList("subcategory").findNode((s: any) => s.name === "nonexistent");
+        expect(node).toBeUndefined();
+    });
+
+    it("findNode() returns undefined for empty list", () => {
+        const node = path(rootNode("mainCategory", "nonexistent"), "subcategoryNodes").findNode(() => true);
+        expect(node).toBeUndefined();
+    });
+
+    it("findNode() works after chained traversal", () => {
+        const node = path(nodeList("subcategory"), "transactionNodes").findNode((t: any) => t.id === "tx2");
+        expect(node).toBeDefined();
+        expect(node!.value()?.subcategoryId).toBe("sub2");
+    });
+
     });
 }
 

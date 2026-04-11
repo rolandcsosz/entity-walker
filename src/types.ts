@@ -83,6 +83,7 @@ export type EntityNodeList<
     ids(): (string | number)[];
     first(): D["entityModel"][K] | undefined;
     findEntity(predicate: (entity: D["entityModel"][K]) => boolean): D["entityModel"][K] | undefined;
+    findNode(predicate: (entity: D["entityModel"][K]) => boolean): EntityNode<D, D["entityModel"][K]> | undefined;
     isEmpty(): boolean;
     isNotEmpty(): boolean;
     unique(): EntityNodeList<D, K>;
@@ -195,6 +196,7 @@ export type EntityNodeListNoProxy<
     ids(): string[];
     first(): D["entityModel"][K] | undefined;
     findEntity(predicate: (entity: D["entityModel"][K]) => boolean): D["entityModel"][K] | undefined;
+    findNode(predicate: (entity: D["entityModel"][K]) => boolean): EntityNodeNoProxy<D, K> | undefined;
     isEmpty(): boolean;
     isNotEmpty(): boolean;
     ids(): (string | number)[];
