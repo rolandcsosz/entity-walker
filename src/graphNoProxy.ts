@@ -221,6 +221,52 @@ export const createNonProxyGraph = <EM extends EntityMap, E extends GraphEdges<E
                 }
                 node.delete();
             },
+            update: (fn: (entity: any) => any) => {
+                const entity = getValue();
+                if (entity === undefined) {
+                    if (id === null) throw new Error(
+                        `[entity-walker] Cannot call update() on '${String(key)}': traversal led to a missing entity (null id).`
+                    );
+                    throw new Error(
+                        `[entity-walker] Entity '${String(key)}' with id '${id}' does not exist in the graph.`
+                    );
+                }
+                const result = fn(entity);
+                const { id: _ignoreId, ...resultFields } = result;
+                const updated = { ...resultFields, id: entity.id };
+                const ents = entities as Record<string, any[]>;
+                const entityEdges = (config.edges as any)[key as string];
+                if (entityEdges) {
+                    for (const targetType in entityEdges) {
+                        const edge = entityEdges[targetType];
+                        if (!edge.bidirectional) continue;
+                        const oldTargetId = edge.resolve(entity);
+                        if (!oldTargetId) continue;
+                        const bucket = reverseIndex[targetType]?.[key as string]?.[oldTargetId];
+                        if (bucket) {
+                            const idx = bucket.indexOf(String(id));
+                            if (idx !== -1) bucket.splice(idx, 1);
+                        }
+                    }
+                }
+                byId[key as string][id!.toString()] = updated;
+                const arrIdx = ents[key as string].findIndex((e: any) => e.id.toString() === id!.toString());
+                if (arrIdx !== -1) ents[key as string][arrIdx] = updated;
+                valueFetched = false;
+                nodeCache.delete(`${String(key)}:${id!.toString()}`);
+                if (entityEdges) {
+                    for (const targetType in entityEdges) {
+                        const edge = entityEdges[targetType];
+                        if (!edge.bidirectional) continue;
+                        const newTargetId = edge.resolve(updated);
+                        if (!newTargetId) continue;
+                        if (!reverseIndex[targetType]) reverseIndex[targetType] = {};
+                        if (!reverseIndex[targetType][key as string]) reverseIndex[targetType][key as string] = {};
+                        if (!reverseIndex[targetType][key as string][newTargetId]) reverseIndex[targetType][key as string][newTargetId] = [];
+                        reverseIndex[targetType][key as string][newTargetId].push(id!.toString());
+                    }
+                }
+            },
             to: (rel: string, idOrWhere?: any) => {
                 const fn = internal[rel];
                 if (!fn) throw new Error(
@@ -253,7 +299,6 @@ export const createNonProxyGraph = <EM extends EntityMap, E extends GraphEdges<E
     const graph: any = { to, info: graphInfo, schema: graphSchema };
     for (const key in config.entities) {
         const capKey = key[0].toUpperCase() + key.slice(1);
-        graph[`insert${capKey}`] = (entityOrEntities: any) => insert(key as keyof EM, entityOrEntities);
         graph[`update${capKey}`] = (entityOrEntities: any) => update(key as keyof EM, entityOrEntities);
     }
     return graph as any;

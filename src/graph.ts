@@ -101,6 +101,52 @@ export function buildGraphCore<EM extends EntityMap, E extends GraphEdges<EM>>(
             }
             deleteMethod();
         };
+        const updateNodeMethod = (fn: (entity: any) => any) => {
+            const entity = getValue();
+            if (entity === undefined) {
+                if (id === null) throw new Error(
+                    `[entity-walker] Cannot call update() on '${String(key)}': traversal led to a missing entity (null id).`
+                );
+                throw new Error(
+                    `[entity-walker] Entity '${String(key)}' with id '${id}' does not exist in the graph.`
+                );
+            }
+            const result = fn(entity);
+            const { id: _ignoreId, ...resultFields } = result;
+            const updated = { ...resultFields, id: entity.id };
+            const ents = entities as Record<string, any[]>;
+            const entityEdges = (edges as any)[key as string];
+            if (entityEdges) {
+                for (const targetType in entityEdges) {
+                    const edge = entityEdges[targetType];
+                    if (!edge.bidirectional) continue;
+                    const oldTargetId = edge.resolve(entity);
+                    if (!oldTargetId) continue;
+                    const bucket = reverseIndex[targetType]?.[key as string]?.[oldTargetId];
+                    if (bucket) {
+                        const idx = bucket.indexOf(String(id));
+                        if (idx !== -1) bucket.splice(idx, 1);
+                    }
+                }
+            }
+            byId[key as string][id!.toString()] = updated;
+            const arrIdx = ents[key as string].findIndex((e: any) => e.id.toString() === id!.toString());
+            if (arrIdx !== -1) ents[key as string][arrIdx] = updated;
+            valueFetched = false;
+            nodeCache.delete(`${String(key)}:${id}`);
+            if (entityEdges) {
+                for (const targetType in entityEdges) {
+                    const edge = entityEdges[targetType];
+                    if (!edge.bidirectional) continue;
+                    const newTargetId = edge.resolve(updated);
+                    if (!newTargetId) continue;
+                    if (!reverseIndex[targetType]) reverseIndex[targetType] = {};
+                    if (!reverseIndex[targetType][key as string]) reverseIndex[targetType][key as string] = {};
+                    if (!reverseIndex[targetType][key as string][newTargetId]) reverseIndex[targetType][key as string][newTargetId] = [];
+                    reverseIndex[targetType][key as string][newTargetId].push(id!.toString());
+                }
+            }
+        };
         const infoMethod = (): NodeDebugInfo => ({
             type: String(key),
             id,
@@ -119,6 +165,7 @@ export function buildGraphCore<EM extends EntityMap, E extends GraphEdges<EM>>(
                 if (prop === "info") return infoMethod;
                 if (prop === "delete") return deleteMethod;
                 if (prop === "deleteCascade") return deleteCascadeMethod;
+                if (prop === "update") return updateNodeMethod;
 
                 return (...args: any[]) => {
                     const edge = (edges as any)[key]?.[prop];
@@ -257,10 +304,6 @@ export const createGraph = <EM extends EntityMap, E extends GraphEdges<EM>>(conf
             if (typeof prop === 'symbol') return undefined;
             if (prop === "info") return graphInfo;
             if (prop === "schema") return graphSchema;
-            if (prop.startsWith("insert") && prop.length > 6) {
-                const rawKey = prop[6].toLowerCase() + prop.slice(7);
-                return (entityOrEntities: any) => insert(rawKey as keyof EM, entityOrEntities);
-            }
             if (prop.startsWith("update") && prop.length > 6) {
                 const rawKey = prop[6].toLowerCase() + prop.slice(7);
                 return (entityOrEntities: any) => update(rawKey as keyof EM, entityOrEntities);

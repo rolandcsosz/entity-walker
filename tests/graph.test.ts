@@ -785,8 +785,8 @@ function runNumericIdTests(label: string, { rootNode, nodeList, path, makeGraph 
     });
 
     it("insert then retrieve by numeric id", () => {
-        const { rootNode, insert } = makeGraph(structuredClone({ transaction: [], subcategory: [{ id: 10, name: "sub1", mainCategoryId: 100 }], mainCategory: [], expenseType: [], incomeType: [] }) as any);
-        insert("transaction", { id: 5, subcategoryId: 10 });
+        const { rootNode, update } = makeGraph(structuredClone({ transaction: [], subcategory: [{ id: 10, name: "sub1", mainCategoryId: 100 }], mainCategory: [], expenseType: [], incomeType: [] }) as any);
+        update("transaction", { id: 5, subcategoryId: 10 });
         expect(rootNode("transaction", 5).exists()).toBe(true);
         expect(rootNode("transaction", 5).value()?.subcategoryId).toBe(10);
     });

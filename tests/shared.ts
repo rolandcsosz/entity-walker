@@ -28,8 +28,6 @@ export type GraphWrapper = {
     nodeList:   (type: string, where?: (e: any) => boolean) => any;
     /** path: traverse from node/list via relation, optionally filtered */
     path:  (nodeOrList: any, rel: string, where?: (e: any) => boolean) => any;
-    /** ins: insertX on the graph */
-    insert: (type: string, entityOrEntities: any) => void;
     /** update: updateX on the graph */
     update: (type: string, entityOrEntities: any) => void;
     makeGraph:  (entities: Entities<Schema>) => GraphWrapper;
@@ -45,7 +43,6 @@ export function proxyAdapter(ents: Entities<Schema>): GraphWrapper {
         rootNode:   (type, id)               => graph[type](id),
         nodeList:   (type, where?)           => graph[`${type}Nodes`](where),
         path:  (nodeOrList, rel, where?) => nodeOrList[rel](where),
-        insert: (type, e)                => graph[`insert${cap(type)}`](e),
         update: (type, e)                => graph[`update${cap(type)}`](e),
         makeGraph: (e) => proxyAdapter(e),
     };
@@ -58,7 +55,6 @@ export function nonProxyAdapter(ents: Entities<Schema>): GraphWrapper {
         rootNode:   (type, id)               => graph.to(type, id),
         nodeList:   (type, where?)           => graph.to(`${type}Nodes`, where),
         path:  (nodeOrList, rel, where?) => nodeOrList.to(rel, where),
-        insert: (type, e)                => graph[`insert${cap(type)}`](e),
         update: (type, e)                => graph[`update${cap(type)}`](e),
         makeGraph: (e) => nonProxyAdapter(e),
     };
@@ -92,7 +88,6 @@ export function proxyAdapterN(ents: Entities<SchemaNumeric>): GraphWrapper {
         rootNode:   (type, id)               => graph[type](id),
         nodeList:   (type, where?)            => graph[`${type}Nodes`](where),
         path:       (nodeOrList, rel, where?) => nodeOrList[rel](where),
-        insert:     (type, e)                 => graph[`insert${cap(type)}`](e),
         update:     (type, e)                 => graph[`update${cap(type)}`](e),
         makeGraph:  (e) => proxyAdapterN(e as any),
     };
@@ -105,7 +100,6 @@ export function nonProxyAdapterN(ents: Entities<SchemaNumeric>): GraphWrapper {
         rootNode:   (type, id)               => graph.to(type, id),
         nodeList:   (type, where?)            => graph.to(`${type}Nodes`, where),
         path:       (nodeOrList, rel, where?) => nodeOrList.to(rel, where),
-        insert:     (type, e)                 => graph[`insert${cap(type)}`](e),
         update:     (type, e)                 => graph[`update${cap(type)}`](e),
         makeGraph:  (e) => nonProxyAdapterN(e as any),
     };
