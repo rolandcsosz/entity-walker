@@ -1,36 +1,19 @@
 # Graph Modification
 
-The graph is mutated in-place via typed methods on the graph object. All methods accept a single entity or an array of entities.
-
-## Insert
-
-`graph.insert<Type>(entity | entity[])` adds new entities to the graph. Forward and reverse indexes are updated immediately.
-
-```typescript
-// Insert a single entity
-graph.insertSubcategory({ id: "sub2", name: "Transport", mainCategoryId: "cat1" });
-
-// Insert multiple entities at once
-graph.insertTransaction([
-  { id: "tx2", subcategoryId: "sub1" },
-  { id: "tx3", subcategoryId: "sub2" },
-]);
-
-// The new entity is immediately traversable
-const name = graph.transaction("tx2").subcategory().value()?.name; // "Groceries"
-
-// And reachable via reverse edges
-const ids = graph.subcategory("sub1").transactionNodes().ids(); // includes "tx2"
-```
+The graph is mutated in-place via typed methods on the graph object and on individual nodes. All graph-level methods accept a single entity or an array of entities.
 
 ## Update (upsert)
 
-`graph.update<Type>(entity | entity[])` replaces an existing entity. If the id is not found the entity is inserted (upsert). Foreign-key indexes are rebuilt so reverse lookups remain correct after an FK change.
+`graph.update<Type>(entity | entity[])` replaces an existing entity by id. If the id is not found the entity is inserted (upsert). Foreign-key indexes are rebuilt so reverse lookups remain correct after an FK change.
 
 ```typescript
 // Rename a subcategory
 graph.updateSubcategory({ id: "sub1", name: "Groceries & Food", mainCategoryId: "cat1" });
 graph.subcategory("sub1").value()?.name; // "Groceries & Food"
+
+// Insert a new entity (id not yet in the graph → upsert)
+graph.updateSubcategory({ id: "sub2", name: "Transport", mainCategoryId: "cat1" });
+graph.subcategory("sub2").exists(); // true
 
 // Move tx1 to a different subcategory — reverse index is updated automatically
 graph.updateTransaction({ id: "tx1", subcategoryId: "sub2" });
@@ -43,6 +26,28 @@ graph.updateSubcategory([
   { id: "sub2", name: "B", mainCategoryId: "cat1" },
 ]);
 ```
+
+## Node-Level Update
+
+Call `.update(fn)` on any node to update individual fields via a callback. The callback receives the full entity and returns the updated entity. The `id` is always preserved — any `id` field in the return value is silently ignored.
+
+```typescript
+// Update a single field
+graph.subcategory("sub1").update(e => ({ ...e, name: "Renamed" }));
+graph.subcategory("sub1").value()?.name; // "Renamed"
+
+// Change a foreign key — reverse index is updated automatically
+graph.transaction("tx1").update(e => ({ ...e, subcategoryId: "sub2" }));
+graph.subcategory("sub1").transactionNodes().ids(); // no longer contains "tx1"
+graph.subcategory("sub2").transactionNodes().ids(); // now contains "tx1"
+
+// The id cannot be changed — it is always preserved
+graph.subcategory("sub1").update(e => ({ ...e, id: "hacked" }));
+graph.subcategory("sub1").exists(); // still true
+graph.subcategory("hacked").exists(); // false
+```
+
+Calling `.update()` on a non-existing node is a safe no-op.
 
 ## Delete
 

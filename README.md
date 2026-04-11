@@ -41,7 +41,7 @@ graph.transaction("tx1")
 * **Immutable & safe** — returned entities are frozen objects.
 * **Type-safe & autocompleted** — TypeScript knows every entity type and every relation.
 * **Bidirectional relations** — traverse forwards (1-to-1) or backwards (1-to-many) safely.
-* **Rich node-list API** — `.where()`, `.ids()`, `.entities()`, `.select()`, `.unique()`, `.unique()`, `.isEmpty()` and more work directly on related entity collections.
+* **Rich node-list API** — `.where()`, `.ids()`, `.entities()`, `.select()`, `.unique()`, `.findEntity()`, `.findNode()`, `.isEmpty()` and more work directly on related entity collections.
 * **Consistent defaults** — every node exposes `.value()` (safe, returns `undefined` when missing) and `.valueOrThrow()` (throws when missing). No split between optional and required at the type level.
 * **Performance-friendly** — indexed O(1) lookups; even rebuilding the graph per query beats nested loops at scale.
 * **Proxy-free alternative** — `createNonProxyGraph` produces an equivalent graph for environments without `Proxy` support.
@@ -108,7 +108,7 @@ const txIds = graph
 |---|---|
 | [Graph](docs/graph.md) | Full reference for `createGraph` — the standard API with clean `graph.entity("id")` / `node.relation()` syntax powered by `Proxy`. |
 | [Non-Proxy Graph](docs/non-proxy-graph.md) | Full reference for `createNonProxyGraph` — identical behaviour using a `.to()` calling convention, compatible with environments that do not support `Proxy`. |
-| [Graph Modification](docs/modification.md) | Insert, update (upsert), delete, and cascade-delete entities at runtime with automatic index maintenance. |
+| [Graph Modification](docs/modification.md) | Update (upsert), node-level field update, delete, and cascade-delete entities at runtime with automatic index maintenance. |
 | [Debugging](docs/debugging.md) | Use `graph.info()` to inspect entity counts, missing FK targets, and orphan entities. |
 
 ## Performance & Benchmarks

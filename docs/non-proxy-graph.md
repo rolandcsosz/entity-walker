@@ -29,7 +29,7 @@ The graph, node, and list APIs are identical to `createGraph`. The only differen
 | `node.relationNodes(where?)` | `node.to("relationNodes", where?)` |
 | `list.relationNodes(where?)` | `list.to("relationNodes", where?)` |
 
-All other methods — `.value()`, `.valueOrThrow()`, `.exists()`, `.path()`, `.info()`, `.entities()`, `.ids()`, `.select()`, `.first()`, `.findEntity()`, `.where()`, `.unique()`, `.isEmpty()`, `.isNotEmpty()`, `graph.schema()`, `graph.info()` — are identical.
+All other methods — `.value()`, `.valueOrThrow()`, `.exists()`, `.path()`, `.info()`, `.update(fn)`, `.delete()`, `.deleteCascade()`, `.entities()`, `.ids()`, `.select()`, `.first()`, `.findEntity()`, `.findNode()`, `.where()`, `.unique()`, `.isEmpty()`, `.isNotEmpty()`, `graph.schema()`, `graph.info()` — are identical.
 
 ---
 

@@ -86,6 +86,14 @@ node.path()          // string[]
 node.info()          // NodeDebugInfo
 ```
 
+**Mutation — modifies the entity in-place**
+
+```typescript
+node.update(fn)      // void — update fields via callback (id is preserved)
+node.delete()        // void — remove entity from graph
+node.deleteCascade() // void — remove entity and all referencing entities
+```
+
 These do not return a node or a list, so the chain ends here.
 
 ### `EntityNodeList` — function categories
@@ -119,6 +127,7 @@ list.ids()               // string[]
 list.select(fn)          // R[]                   projection over present entities
 list.first()             // Entity | undefined
 list.findEntity(pred)    // Entity | undefined
+list.findNode(pred)      // EntityNode | undefined — node for further traversal
 list.isEmpty()           // boolean
 list.isNotEmpty()        // boolean
 ```
@@ -132,6 +141,9 @@ graph
  ├─ .entity("id")          → EntityNode
  │    ├─ .entity()         → EntityNode          (forward, 1-to-1)
  │    ├─ .entityNodes()    → EntityNodeList      (reverse, 1-to-many)
+ │    ├─ .update(fn)       → void                 (mutate fields, id preserved)
+ │    ├─ .delete()         → void                 (remove from graph)
+ │    ├─ .deleteCascade()  → void                 (remove with referencing entities)
  │    └─ .value() etc.     → terminal
  │
  └─ .entityNodes()         → EntityNodeList
@@ -260,6 +272,9 @@ On any node you have:
 | `.exists()` | `boolean` | `true` if the entity exists in the graph. |
 | `.path()` | `string[]` | The traversal path that led to this node, e.g. `["transaction(tx1)", "subcategory(sub1)"]`. |
 | `.info()` | `NodeDebugInfo` | Full debug snapshot: `{ type, id, exists, path, value }`. |
+| `.update(fn)` | `void` | Update entity fields via a callback. The `id` is always preserved. Safe no-op if entity does not exist. |
+| `.delete()` | `void` | Remove the entity from the graph. No-op if it does not exist. |
+| `.deleteCascade()` | `void` | Remove the entity and all entities that reference it, recursively. |
 
 ```typescript
 graph.transaction("tx1").value();        // Transaction | undefined
@@ -367,6 +382,7 @@ Any method returning multiple entities returns an **`EntityNodeList`** — a rea
 | `.select(fn)` | Maps over present entities with a projection function. |
 | `.first()` | Returns the first present entity, or `undefined`. |
 | `.findEntity(predicate)` | Returns the first entity satisfying the predicate, or `undefined`. |
+| `.findNode(predicate)` | Returns the first node whose entity satisfies the predicate, or `undefined`. Unlike `findEntity`, returns the node so traversal can continue. |
 | `.where(predicate)` | Returns a new `EntityNodeList` containing only nodes matching the predicate. |
 | `.unique()` | Returns a new `EntityNodeList` deduped by `id`. |
 | `.isEmpty()` | `true` if no present entities remain. |
@@ -417,9 +433,13 @@ const descriptions = graph
   .expenseTypeNodes()
   .select(et => et.description);
 
-// first() / findEntity()
+// first() / findEntity() / findNode()
 const first   = graph.transactionNodes().first();
 const special = graph.transactionNodes().findEntity(t => t.subcategoryId === "sub2");
+
+// findNode() — returns a node so you can keep traversing
+const node = graph.subcategoryNodes().findNode(s => s.name === "Groceries");
+const catName = node?.mainCategory().value()?.name; // "Food"
 
 // where() — filter and keep as EntityNodeList for further traversal
 const filtered = graph
