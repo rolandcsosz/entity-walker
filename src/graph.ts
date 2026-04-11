@@ -103,14 +103,7 @@ export function buildGraphCore<EM extends EntityMap, E extends GraphEdges<EM>>(
         };
         const updateNodeMethod = (fn: (entity: any) => any) => {
             const entity = getValue();
-            if (entity === undefined) {
-                if (id === null) throw new Error(
-                    `[entity-walker] Cannot call update() on '${String(key)}': traversal led to a missing entity (null id).`
-                );
-                throw new Error(
-                    `[entity-walker] Entity '${String(key)}' with id '${id}' does not exist in the graph.`
-                );
-            }
+            if (entity === undefined) return;
             const result = fn(entity);
             const { id: _ignoreId, ...resultFields } = result;
             const updated = { ...resultFields, id: entity.id };

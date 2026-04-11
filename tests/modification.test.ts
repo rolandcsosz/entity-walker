@@ -186,9 +186,9 @@ function runModificationTests(label: string, make: () => GraphWrapper) {
             expect(path(rootNode("subcategory", "sub2"), "transactionNodes").ids()).toContain("tx1");
         });
 
-        it("throws on a null node", () => {
+        it("is a no-op on a non-existing node", () => {
             const { rootNode } = make();
-            expect(() => rootNode("subcategory", "ghost").update((e: any) => e)).toThrow(/does not exist/);
+            expect(() => rootNode("subcategory", "ghost").update((e: any) => e)).not.toThrow();
         });
 
         it("updated value is visible through forward edge traversal", () => {
