@@ -1,5 +1,4 @@
-import { EntityMap, GraphDebugInfo, GraphEdges, GraphSchema } from "./types";
-
+import { EntityMap, EntityNodeList, GraphDebugInfo, GraphEdges, GraphSchema, GraphDef, EntityNode, EntityBase, EntityNodeNoProxy, EntityNodeListNoProxy } from "./types";
 export const NODE_PROP = Symbol('entity-walker:internal');
 
 export interface CoreData<EM extends EntityMap> {
@@ -37,7 +36,7 @@ export function buildCore<EM extends EntityMap, E extends GraphEdges<EM>>(
             if (!edge.bidirectional) continue;
             if (!reverseIndex[targetType]) reverseIndex[targetType] = {};
             if (!reverseIndex[targetType][sourceType]) reverseIndex[targetType][sourceType] = {};
-            for (const sourceEntity of entities[sourceType]!) {
+            for (const sourceEntity of (entities[sourceType] ?? [])) {
                 const targetId = edge.resolve(sourceEntity);
                 if (!targetId) continue;
                 if (!reverseIndex[targetType][sourceType][targetId]) {
@@ -243,4 +242,112 @@ export function buildCore<EM extends EntityMap, E extends GraphEdges<EM>>(
     };
 
     return { toNodeList, graphSchema, graphInfo, entities, nodeCache, byId, reverseIndex };
+}
+
+export function emptyNodeList<G extends GraphDef<any, any>, E extends EntityBase>(): EntityNodeList<G, E> {
+    const list = [] as any;
+    const def = (name: string, val: any) => Object.defineProperty(list, name, { value: val, enumerable: false });
+    const self = () => proxyList;
+
+    def('entities', () => []);
+    def('select', () => []);
+    def('ids', () => []);
+    def('first', () => undefined);
+    def('findEntity', () => undefined);
+    def('findNode', () => undefined);
+    def('isEmpty', () => true);
+    def('isNotEmpty', () => false);
+    def('unique', self);
+    def('where', self);
+    def('whereNode', self);
+    def('intersect', self);
+    def('with', (fn: (self: any) => any) => fn(proxyList));
+    def('scoped', self);
+
+    const proxyList = new Proxy(list, {
+        get(target, prop: string | symbol) {
+            if (typeof prop === 'symbol') return target[prop as keyof typeof target];
+            if (prop in target) return target[prop as keyof typeof target];
+            if (typeof prop === 'string' && prop.endsWith("Nodes")) return self;
+            return undefined;
+        }
+    });
+
+    return proxyList;
+}
+
+export function emptyNode<G extends GraphDef<any, any>, E extends EntityBase>(): EntityNode<G, E> {
+    const nodeObj: any = {
+        value: () => undefined,
+        valueOrThrow: () => { throw new Error("Empty node has no value"); },
+        exists: () => false,
+        path: () => ["(empty)"],
+        info: () => ({ type: "unknown", id: null, exists: false, path: [], value: undefined }),
+        delete: () => { },
+        deleteCascade: () => { },
+        update: () => { }
+    };
+
+    const proxyNode = new Proxy(nodeObj, {
+        get(target, prop: string | symbol) {
+            if (typeof prop === 'symbol') return target[prop];
+            if (prop in target) return target[prop as keyof typeof target];
+
+            if (typeof prop === 'string' && prop.endsWith("Nodes")) return () => emptyNodeList();
+            return () => proxyNode;
+        }
+    });
+
+    return proxyNode;
+}
+
+export function emptyNodeListNoProxy<G extends GraphDef<any, any>, E extends EntityBase>(): EntityNodeListNoProxy<G, E> {
+    const list: any = [];
+    const def = (name: string, val: any) => Object.defineProperty(list, name, { value: val, enumerable: false });
+    const self = () => list;
+
+    def('entities', () => []);
+    def('select', () => []);
+    def('ids', () => []);
+    def('first', () => undefined);
+    def('findEntity', () => undefined);
+    def('findNode', () => undefined);
+    def('isEmpty', () => true);
+    def('isNotEmpty', () => false);
+    def('unique', self);
+    def('where', self);
+    def('whereNode', self);
+    def('intersect', self);
+    def('with', (fn: (self: any) => any) => fn(list));
+    def('scoped', self);
+
+    def('to', (rel: string) => {
+        if (!rel.endsWith('Nodes')) throw new Error(
+            `[entity-walker] EntityNodeListNoProxy.to() requires a 'Nodes' suffix (e.g. '${rel}Nodes')`
+        );
+        if (typeof (list as any)[rel] === 'function') return (list as any)[rel]();
+        return list;
+    });
+
+    return list as any;
+}
+
+export function emptyNodeNoProxy<G extends GraphDef<any, any>, E extends EntityBase>(): EntityNodeNoProxy<G, E> {
+    const nodeObj: any = {
+        value: () => undefined,
+        valueOrThrow: () => { throw new Error("Empty node has no value"); },
+        exists: () => false,
+        path: () => ["(empty)"],
+        info: () => ({ type: "unknown", id: null, exists: false, path: [], value: undefined }),
+        delete: () => { },
+        deleteCascade: () => { },
+        update: () => { }
+    };
+
+    nodeObj.to = (rel: string) => {
+        if (typeof rel === 'string' && rel.endsWith('Nodes')) return emptyNodeListNoProxy();
+        return nodeObj;
+    };
+
+    return nodeObj as any;
 }
