@@ -91,6 +91,7 @@ export type EntityNodeList<
     whereNode(where: (node: EntityNode<D, D["entityModel"][K]>) => boolean): EntityNodeList<D, K>;
     intersect(other: EntityNodeList<D, K> | D["entityModel"][K][] | (string | number)[]): EntityNodeList<D, K>;
     with<T>(fn: (self: EntityNodeList<D, K>) => T): T;
+    scoped(): EntityNodeList<D, K>;
 } & {
         [Rel in keyof D["edges"][K]as `${string & Rel}Nodes`]: () => EntityNodeList<D, Rel & keyof D["entityModel"]>;
     } & {
@@ -197,6 +198,7 @@ export type EntityNodeListNoProxy<
     whereNode(where: (node: EntityNodeNoProxy<D, K>) => boolean): EntityNodeListNoProxy<D, K>;
     intersect(other: EntityNodeListNoProxy<D, K> | D["entityModel"][K][] | (string | number)[]): EntityNodeListNoProxy<D, K>;
     with<T>(fn: (self: EntityNodeListNoProxy<D, K>) => T): T;
+    scoped(): EntityNodeListNoProxy<D, K>;
     to<R extends `${string & (keyof D["edges"][K] | ReverseKeys<D, K>)}Nodes`>(
         rel: R
     ): R extends `${infer Src}Nodes`

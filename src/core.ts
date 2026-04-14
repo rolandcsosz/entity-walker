@@ -50,52 +50,49 @@ export function buildCore<EM extends EntityMap, E extends GraphEdges<EM>>(
 
     const nodeCache = new Map<string, any>();
 
-    const resolveEntities = (nodes: any[]): any[] => {
-        const result: any[] = [];
-        for (const n of nodes) {
-            const e = n.value();
-            if (e !== undefined) result.push(e);
-        }
-        return result;
-    };
-
-    function toNodeList(nodes: any[], nodeKey: string): any {
+    function toNodeList(nodes: any[], nodeKey: string, scope?: Map<string, Set<string | number>>): any {
         const list = [...nodes] as any;
         const def = (name: string, val: any) => Object.defineProperty(list, name, { value: val, enumerable: false });
         const traverse = (node: any, method: string, args: any[]) => {
             const obj = (node[NODE_PROP] as any) ?? node;
             return obj[method]?.(...args);
         };
+        const inScope = (e: any) => !scope || (scope.has(nodeKey) && scope.get(nodeKey)!.has(e.id));
+        const inScopeForTraversal = (e: any) => !scope || !scope.has(nodeKey) || scope.get(nodeKey)!.has(e.id);
 
-        def('entities', () => resolveEntities(nodes));
+        def('entities', () => {
+            const result: any[] = [];
+            for (const n of nodes) { const e = n.value(); if (e !== undefined && inScope(e)) result.push(e); }
+            return result;
+        });
         def('select', (fn: (entity: any) => any) => {
             const result: any[] = [];
-            for (const n of nodes) { const e = n.value(); if (e !== undefined) result.push(fn(e)); }
+            for (const n of nodes) { const e = n.value(); if (e !== undefined && inScope(e)) result.push(fn(e)); }
             return result;
         });
         def('ids', () => {
             const result: (string | number)[] = [];
-            for (const n of nodes) { const e = n.value(); if (e !== undefined) result.push(e.id); }
+            for (const n of nodes) { const e = n.value(); if (e !== undefined && inScope(e)) result.push(e.id); }
             return result;
         });
         def('first', () => {
-            for (const n of nodes) { const e = n.value(); if (e !== undefined) return e; }
+            for (const n of nodes) { const e = n.value(); if (e !== undefined && inScope(e)) return e; }
             return undefined;
         });
         def('findEntity', (predicate: (entity: any) => boolean) => {
-            for (const n of nodes) { const e = n.value(); if (e !== undefined && predicate(e)) return e; }
+            for (const n of nodes) { const e = n.value(); if (e !== undefined && inScope(e) && predicate(e)) return e; }
             return undefined;
         });
         def('findNode', (predicate: (entity: any) => boolean) => {
-            for (const n of nodes) { const e = n.value(); if (e !== undefined && predicate(e)) return n; }
+            for (const n of nodes) { const e = n.value(); if (e !== undefined && inScope(e) && predicate(e)) return n; }
             return undefined;
         });
         def('isEmpty', () => {
-            for (const n of nodes) { if (n.value() !== undefined) return false; }
+            for (const n of nodes) { const e = n.value(); if (e !== undefined && inScope(e)) return false; }
             return true;
         });
         def('isNotEmpty', () => {
-            for (const n of nodes) { if (n.value() !== undefined) return true; }
+            for (const n of nodes) { const e = n.value(); if (e !== undefined && inScope(e)) return true; }
             return false;
         });
         def('unique', () => {
@@ -108,17 +105,17 @@ export function buildCore<EM extends EntityMap, E extends GraphEdges<EM>>(
                     uniqueNodes.push(getCreateNode()(nodeKey as keyof EM, e.id));
                 }
             }
-            return toNodeList(uniqueNodes, nodeKey);
+            return toNodeList(uniqueNodes, nodeKey, scope);
         });
         def('where', (where?: (entity: any) => boolean) => {
             if (!where) return list;
             const filtered = nodes.filter((n: any) => { const e = n.value(); return e !== undefined && where(e); });
-            return toNodeList(filtered, nodeKey);
+            return toNodeList(filtered, nodeKey, scope);
         });
         def('whereNode', (where?: (node: any) => boolean) => {
             if (!where) return list;
             const filtered = nodes.filter((n: any) => n.value() !== undefined && where(n));
-            return toNodeList(filtered, nodeKey);
+            return toNodeList(filtered, nodeKey, scope);
         });
         def('intersect', (other: any[]) => {
             const ids = new Set<string | number>();
@@ -133,9 +130,16 @@ export function buildCore<EM extends EntityMap, E extends GraphEdges<EM>>(
                 }
             }
             const filtered = nodes.filter((n: any) => { const e = n.value(); return e !== undefined && ids.has(e.id); });
-            return toNodeList(filtered, nodeKey);
+            return toNodeList(filtered, nodeKey, scope);
         });
         def('with', (fn: (self: any) => any) => fn(list));
+        def('scoped', () => {
+            const newScope = new Map<string, Set<string | number>>(scope);
+            const ids = new Set<string | number>();
+            for (const n of nodes) { const e = n.value(); if (e !== undefined) ids.add(e.id); }
+            newScope.set(nodeKey, ids);
+            return toNodeList(nodes, nodeKey, newScope);
+        });
 
         const reverseEntries = reverseIndex[nodeKey] || {};
         for (const sourceKey in reverseEntries) {
@@ -143,13 +147,15 @@ export function buildCore<EM extends EntityMap, E extends GraphEdges<EM>>(
             def(refName, (where?: (entity: any) => boolean) => {
                 const result: any[] = [];
                 for (const node of nodes) {
+                    const e = node.value();
+                    if (e === undefined || !inScopeForTraversal(e)) continue;
                     const refs = traverse(node, refName, []);
                     if (refs) for (const r of refs) result.push(r);
                 }
                 const filtered = where
                     ? result.filter(n => { const e = n.value(); return e !== undefined && where(e); })
                     : result;
-                return toNodeList(filtered, sourceKey);
+                return toNodeList(filtered, sourceKey, scope);
             });
         }
 
@@ -159,11 +165,15 @@ export function buildCore<EM extends EntityMap, E extends GraphEdges<EM>>(
             if (list[refName] !== undefined) continue;
             def(refName, (where?: (entity: any) => boolean) => {
                 const result: any[] = [];
-                for (const node of nodes) { result.push(traverse(node, rel, [])); }
+                for (const node of nodes) {
+                    const e = node.value();
+                    if (e === undefined || !inScopeForTraversal(e)) continue;
+                    result.push(traverse(node, rel, []));
+                }
                 const filtered = where
                     ? result.filter(n => { const e = n.value(); return e !== undefined && where(e); })
                     : result;
-                return toNodeList(filtered, rel);
+                return toNodeList(filtered, rel, scope);
             });
         }
 
