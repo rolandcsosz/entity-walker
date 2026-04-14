@@ -385,6 +385,80 @@ function runEntityGraphTests(label: string, { rootNode, nodeList, path, makeGrap
         expect(txIds).toEqual(["tx2"]);
     });
 
+    it("whereNode() filters by node predicate", () => {
+        const filtered = nodeList("subcategory").whereNode((n: any) => n.value()?.name === "sub1");
+        expect(filtered).toHaveLength(1);
+        expect(filtered[0].value()?.id).toBe("sub1");
+    });
+
+    it("whereNode() returns walkable EntityNodeList", () => {
+        const subs  = nodeList("subcategory").whereNode((n: any) => n.value()?.name === "sub1");
+        const txIds = path(subs, "transactionNodes").entities().map((t: any) => t.id);
+        expect(txIds).toEqual(["tx1", "tx3"]);
+    });
+
+    it("whereNode() returns empty list when nothing matches", () => {
+        const result = nodeList("subcategory").whereNode(() => false);
+        expect(result).toHaveLength(0);
+    });
+
+    it("whereNode() can filter based on node existence of related entity", () => {
+        const cats = nodeList("mainCategory").whereNode((n: any) => path(n, "expenseType").exists());
+        expect(cats).toHaveLength(1);
+        expect(cats[0].value()?.id).toBe("cat1");
+    });
+
+    it("intersect() with same-type node list", () => {
+        const all  = nodeList("subcategory");
+        const sub1 = nodeList("subcategory").where((s: any) => s.name === "sub1");
+        const result = all.intersect(sub1);
+        expect(result).toHaveLength(1);
+        expect(result[0].value()?.id).toBe("sub1");
+    });
+
+    it("intersect() with entity array", () => {
+        const all = nodeList("subcategory");
+        const result = all.intersect([{ id: "sub2", name: "sub2", mainCategoryId: "cat1" }]);
+        expect(result).toHaveLength(1);
+        expect(result[0].value()?.id).toBe("sub2");
+    });
+
+    it("intersect() with id array", () => {
+        const all = nodeList("subcategory");
+        const result = all.intersect(["sub1"]);
+        expect(result).toHaveLength(1);
+        expect(result[0].value()?.id).toBe("sub1");
+    });
+
+    it("intersect() returns empty when no overlap", () => {
+        const all = nodeList("subcategory");
+        const result = all.intersect(["nonexistent"]);
+        expect(result).toHaveLength(0);
+    });
+
+    it("intersect() result is walkable", () => {
+        const subs = nodeList("subcategory").intersect(["sub1"]);
+        const txIds = path(subs, "transactionNodes").ids();
+        expect(txIds).toEqual(["tx1", "tx3"]);
+    });
+
+    it("with() pipes list through function and returns result", () => {
+        const ids = nodeList("transaction").with((self: any) => self.ids());
+        expect(ids).toEqual(["tx1", "tx2", "tx3"]);
+    });
+
+    it("with() can traverse and intersect back", () => {
+        const result = nodeList("transaction").where((t: any) => t.id === "tx1" || t.id === "tx2").with((self: any) =>
+            path(path(self, "subcategoryNodes"), "transactionNodes").intersect(self)
+        );
+        expect(result.ids()).toEqual(["tx1", "tx2"]);
+    });
+
+    it("with() returns non-list values", () => {
+        const count = nodeList("subcategory").with((self: any) => self.entities().length);
+        expect(count).toBe(2);
+    });
+
     it("select() maps resolved entities", () => {
         const names = nodeList("subcategory").select((s: any) => s.name);
         expect(names).toEqual(["sub1", "sub2"]);

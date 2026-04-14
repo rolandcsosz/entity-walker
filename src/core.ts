@@ -115,6 +115,27 @@ export function buildCore<EM extends EntityMap, E extends GraphEdges<EM>>(
             const filtered = nodes.filter((n: any) => { const e = n.value(); return e !== undefined && where(e); });
             return toNodeList(filtered, nodeKey);
         });
+        def('whereNode', (where?: (node: any) => boolean) => {
+            if (!where) return list;
+            const filtered = nodes.filter((n: any) => n.value() !== undefined && where(n));
+            return toNodeList(filtered, nodeKey);
+        });
+        def('intersect', (other: any[]) => {
+            const ids = new Set<string | number>();
+            for (const item of other) {
+                if (typeof item === 'string' || typeof item === 'number') {
+                    ids.add(item);
+                } else if (typeof item?.value === 'function') {
+                    const e = item.value();
+                    if (e !== undefined) ids.add(e.id);
+                } else if (item?.id !== undefined) {
+                    ids.add(item.id);
+                }
+            }
+            const filtered = nodes.filter((n: any) => { const e = n.value(); return e !== undefined && ids.has(e.id); });
+            return toNodeList(filtered, nodeKey);
+        });
+        def('with', (fn: (self: any) => any) => fn(list));
 
         const reverseEntries = reverseIndex[nodeKey] || {};
         for (const sourceKey in reverseEntries) {
