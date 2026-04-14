@@ -1,4 +1,4 @@
-import { EntityMap, EntityNodeList, GraphDebugInfo, GraphEdges, GraphSchema, GraphDef, EntityNode, EntityBase, EntityNodeNoProxy, EntityNodeListNoProxy } from "./types";
+import { EntityMap, EntityNodeList, GraphDebugInfo, GraphEdges, GraphSchema, GraphDef, EntityNode, EntityBase, EntityNodeNoProxy, EntityNodeListNoProxy, ListDebugInfo } from "./types";
 export const NODE_PROP = Symbol('entity-walker:internal');
 
 export interface CoreData<EM extends EntityMap> {
@@ -49,15 +49,17 @@ export function buildCore<EM extends EntityMap, E extends GraphEdges<EM>>(
 
     const nodeCache = new Map<string, any>();
 
-    function toNodeList(nodes: any[], nodeKey: string, scope?: Map<string, Set<string | number>>): any {
+    function toNodeList(nodes: any[], nodeKey: string, scope?: Record<string, Set<string | number>> | null): any {
         const list = [...nodes] as any;
         const def = (name: string, val: any) => Object.defineProperty(list, name, { value: val, enumerable: false });
         const traverse = (node: any, method: string, args: any[]) => {
             const obj = (node[NODE_PROP] as any) ?? node;
             return obj[method]?.(...args);
         };
-        const inScope = (e: any) => !scope || (scope.has(nodeKey) && scope.get(nodeKey)!.has(e.id));
-        const inScopeForTraversal = (e: any) => !scope || !scope.has(nodeKey) || scope.get(nodeKey)!.has(e.id);
+        const listScope: Record<string, Set<string | number>> | null = scope
+            ? Object.fromEntries(Object.entries(scope).map(([k, s]) => [k, new Set(s)]))
+            : null;
+        const inScope = (e: any) => !listScope || !listScope.hasOwnProperty(nodeKey) || listScope[nodeKey].has(e.id);
 
         def('entities', () => {
             const result: any[] = [];
@@ -104,17 +106,17 @@ export function buildCore<EM extends EntityMap, E extends GraphEdges<EM>>(
                     uniqueNodes.push(getCreateNode()(nodeKey as keyof EM, e.id));
                 }
             }
-            return toNodeList(uniqueNodes, nodeKey, scope);
+            return toNodeList(uniqueNodes, nodeKey, listScope);
         });
         def('where', (where?: (entity: any) => boolean) => {
             if (!where) return list;
             const filtered = nodes.filter((n: any) => { const e = n.value(); return e !== undefined && where(e); });
-            return toNodeList(filtered, nodeKey, scope);
+            return toNodeList(filtered, nodeKey, listScope);
         });
         def('whereNode', (where?: (node: any) => boolean) => {
             if (!where) return list;
             const filtered = nodes.filter((n: any) => n.value() !== undefined && where(n));
-            return toNodeList(filtered, nodeKey, scope);
+            return toNodeList(filtered, nodeKey, listScope);
         });
         def('intersect', (other: any[]) => {
             const ids = new Set<string | number>();
@@ -129,16 +131,25 @@ export function buildCore<EM extends EntityMap, E extends GraphEdges<EM>>(
                 }
             }
             const filtered = nodes.filter((n: any) => { const e = n.value(); return e !== undefined && ids.has(e.id); });
-            return toNodeList(filtered, nodeKey, scope);
+            return toNodeList(filtered, nodeKey, listScope);
         });
         def('with', (fn: (self: any) => any) => fn(list));
+        def('resetScope', () => toNodeList(nodes, nodeKey, null));
         def('scoped', () => {
-            const newScope = new Map<string, Set<string | number>>(scope);
+            const newScope: Record<string, Set<string | number>> = {};
+            if (listScope) for (const k of Object.keys(listScope)) newScope[k] = new Set(listScope[k]);
             const ids = new Set<string | number>();
             for (const n of nodes) { const e = n.value(); if (e !== undefined) ids.add(e.id); }
-            newScope.set(nodeKey, ids);
+            newScope[nodeKey] = ids;
             return toNodeList(nodes, nodeKey, newScope);
         });
+        def('info', (): ListDebugInfo => ({
+            type: nodeKey,
+            length: nodes.length,
+            scope: listScope
+                ? Object.fromEntries(Object.entries(listScope).map(([k, s]) => [k, [...s].sort()]))
+                : null,
+        }));
 
         const reverseEntries = reverseIndex[nodeKey] || {};
         for (const sourceKey in reverseEntries) {
@@ -147,14 +158,14 @@ export function buildCore<EM extends EntityMap, E extends GraphEdges<EM>>(
                 const result: any[] = [];
                 for (const node of nodes) {
                     const e = node.value();
-                    if (e === undefined || !inScopeForTraversal(e)) continue;
+                    if (e === undefined || !inScope(e)) continue;
                     const refs = traverse(node, refName, []);
                     if (refs) for (const r of refs) result.push(r);
                 }
                 const filtered = where
                     ? result.filter(n => { const e = n.value(); return e !== undefined && where(e); })
                     : result;
-                return toNodeList(filtered, sourceKey, scope);
+                return toNodeList(filtered, sourceKey, listScope);
             });
         }
 
@@ -166,13 +177,13 @@ export function buildCore<EM extends EntityMap, E extends GraphEdges<EM>>(
                 const result: any[] = [];
                 for (const node of nodes) {
                     const e = node.value();
-                    if (e === undefined || !inScopeForTraversal(e)) continue;
+                    if (e === undefined || !inScope(e)) continue;
                     result.push(traverse(node, rel, []));
                 }
                 const filtered = where
                     ? result.filter(n => { const e = n.value(); return e !== undefined && where(e); })
                     : result;
-                return toNodeList(filtered, rel, scope);
+                return toNodeList(filtered, rel, listScope);
             });
         }
 
@@ -263,6 +274,8 @@ export function emptyNodeList<G extends GraphDef<any, any>, E extends EntityBase
     def('intersect', self);
     def('with', (fn: (self: any) => any) => fn(proxyList));
     def('scoped', self);
+    def('resetScope', self);
+    def('info', () => ({ type: 'unknown', length: 0, scope: null }));
 
     const proxyList = new Proxy(list, {
         get(target, prop: string | symbol) {
@@ -320,6 +333,8 @@ export function emptyNodeListNoProxy<G extends GraphDef<any, any>, E extends Ent
     def('intersect', self);
     def('with', (fn: (self: any) => any) => fn(list));
     def('scoped', self);
+    def('resetScope', self);
+    def('info', () => ({ type: 'unknown', length: 0, scope: null }));
 
     def('to', (rel: string) => {
         if (!rel.endsWith('Nodes')) throw new Error(

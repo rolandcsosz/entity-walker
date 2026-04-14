@@ -92,6 +92,8 @@ export type EntityNodeList<
     intersect(other: EntityNodeList<D, E> | E[] | (string | number)[]): EntityNodeList<D, E>;
     with<T>(fn: (self: EntityNodeList<D, E>) => T): T;
     scoped(): EntityNodeList<D, E>;
+    resetScope(): EntityNodeList<D, E>;
+    info(): ListDebugInfo;
 } & {
         [Rel in keyof D["edges"][KeyOf<D, E>]as `${string & Rel}Nodes`]: () => EntityNodeList<D, D["entityModel"][Rel & keyof D["entityModel"]]>;
     } & {
@@ -125,6 +127,12 @@ export type NodeDebugInfo = {
     exists: boolean;
     path: string[];
     value: any;
+};
+
+export type ListDebugInfo = {
+    type: string;
+    length: number;
+    scope: Record<string, (string | number)[]> | null;
 };
 
 export type EntityNode<
@@ -200,6 +208,8 @@ export type EntityNodeListNoProxy<
     intersect(other: EntityNodeListNoProxy<D, E> | E[] | (string | number)[]): EntityNodeListNoProxy<D, E>;
     with<T>(fn: (self: EntityNodeListNoProxy<D, E>) => T): T;
     scoped(): EntityNodeListNoProxy<D, E>;
+    resetScope(): EntityNodeListNoProxy<D, E>;
+    info(): ListDebugInfo;
     to<Target extends EntityBase>(): EntityNodeListNoProxy<D, Target>;
     to<Nodes extends `${string & (keyof D["edges"][KeyOf<D, E>] | ReverseKeys<D, KeyOf<D, E>>)}Nodes`>(
         rel: Nodes
@@ -221,7 +231,7 @@ export type EntityGraphNoProxy<D extends GraphDef<any, any>> = {
     info(): GraphDebugInfo;
     schema(): GraphSchema;
 } & {
-    [K in keyof D["entityModel"] as `update${Capitalize<string & K>}`]: (
+    [K in keyof D["entityModel"]as `update${Capitalize<string & K>}`]: (
         entity: D["entityModel"][K] | D["entityModel"][K][]
     ) => void;
 }

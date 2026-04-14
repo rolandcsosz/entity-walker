@@ -10,7 +10,7 @@
     ],
     "scripts": {
         "build": "tsc",
-        "test": "vitest ./tests/graph.test.ts ./tests/modification.test.ts ./tests/empty.test.ts",
+       "test": "vitest",
         "test:watch": "vitest --watch",
         "lint": "eslint . --ext .ts,.tsx",
         "benchmark": "vitest ./tests/benchmark.test.ts"
