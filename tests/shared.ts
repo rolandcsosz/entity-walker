@@ -41,8 +41,14 @@ export function proxyAdapter(ents: Entities<Schema>): GraphWrapper {
     return {
         graph,
         rootNode:   (type, id)               => graph[type](id),
-        nodeList:   (type, where?)           => graph[`${type}Nodes`](where),
-        path:  (nodeOrList, rel, where?) => nodeOrList[rel](where),
+        nodeList:   (type, where?)           => {
+            const res = graph[`${type}Nodes`]();
+            return where ? res.where(where) : res;
+        },
+        path:  (nodeOrList, rel, where?) => {
+            const res = nodeOrList[rel]();
+            return where && typeof res.where === 'function' ? res.where(where) : res;
+        },
         update: (type, e)                => graph[`update${cap(type)}`](e),
         makeGraph: (e) => proxyAdapter(e),
     };
@@ -53,8 +59,14 @@ export function nonProxyAdapter(ents: Entities<Schema>): GraphWrapper {
     return {
         graph,
         rootNode:   (type, id)               => graph.to(type, id),
-        nodeList:   (type, where?)           => graph.to(`${type}Nodes`, where),
-        path:  (nodeOrList, rel, where?) => nodeOrList.to(rel, where),
+        nodeList:   (type, where?)           => {
+            const res = graph.to(`${type}Nodes`);
+            return where ? res.where(where) : res;
+        },
+        path:  (nodeOrList, rel, where?) => {
+            const res = nodeOrList.to(rel);
+            return where && typeof res.where === 'function' ? res.where(where) : res;
+        },
         update: (type, e)                => graph[`update${cap(type)}`](e),
         makeGraph: (e) => nonProxyAdapter(e),
     };
@@ -86,8 +98,14 @@ export function proxyAdapterN(ents: Entities<SchemaNumeric>): GraphWrapper {
     return {
         graph,
         rootNode:   (type, id)               => graph[type](id),
-        nodeList:   (type, where?)            => graph[`${type}Nodes`](where),
-        path:       (nodeOrList, rel, where?) => nodeOrList[rel](where),
+        nodeList:   (type, where?)           => {
+            const res = graph[`${type}Nodes`]();
+            return where ? res.where(where) : res;
+        },
+        path:       (nodeOrList, rel, where?) => {
+            const res = nodeOrList[rel]();
+            return where && typeof res.where === 'function' ? res.where(where) : res;
+        },
         update:     (type, e)                 => graph[`update${cap(type)}`](e),
         makeGraph:  (e) => proxyAdapterN(e as any),
     };
@@ -98,8 +116,14 @@ export function nonProxyAdapterN(ents: Entities<SchemaNumeric>): GraphWrapper {
     return {
         graph,
         rootNode:   (type, id)               => graph.to(type, id),
-        nodeList:   (type, where?)            => graph.to(`${type}Nodes`, where),
-        path:       (nodeOrList, rel, where?) => nodeOrList.to(rel, where),
+        nodeList:   (type, where?)           => {
+            const res = graph.to(`${type}Nodes`);
+            return where ? res.where(where) : res;
+        },
+        path:       (nodeOrList, rel, where?) => {
+            const res = nodeOrList.to(rel);
+            return where && typeof res.where === 'function' ? res.where(where) : res;
+        },
         update:     (type, e)                 => graph[`update${cap(type)}`](e),
         makeGraph:  (e) => nonProxyAdapterN(e as any),
     };

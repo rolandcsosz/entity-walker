@@ -89,14 +89,10 @@ export type EntityNodeList<
     unique(): EntityNodeList<D, K>;
     where(where: Where<D["entityModel"][K]>): EntityNodeList<D, K>;
 } & {
-        [Rel in keyof D["edges"][K]as `${string & Rel}Nodes`]: (
-            where?: Where<D["entityModel"][Rel & keyof D["entityModel"]]>
-        ) => EntityNodeList<D, Rel & keyof D["entityModel"]>;
+        [Rel in keyof D["edges"][K]as `${string & Rel}Nodes`]: () => EntityNodeList<D, Rel & keyof D["entityModel"]>;
     } & {
         [SourceEntity in ReverseKeys<D, K> as `${string &
-        SourceEntity}Nodes`]: (
-            where?: Where<D["entityModel"][SourceEntity]>
-        ) => EntityNodeList<D, SourceEntity>;
+        SourceEntity}Nodes`]: () => EntityNodeList<D, SourceEntity>;
     };
 
 export type GraphEdgeSummary = {
@@ -145,17 +141,13 @@ export type EntityNode<
         >;
     } & {
         [SourceEntity in ReverseKeys<D, KeyOf<D, E>> as `${string &
-        SourceEntity}Nodes`]: (
-            where?: Where<D["entityModel"][SourceEntity]>
-        ) => EntityNodeList<D, SourceEntity>;
+        SourceEntity}Nodes`]: () => EntityNodeList<D, SourceEntity>;
     };
 
 export type EntityGraph<D extends GraphDef<any, any>> = {
     [K in keyof D["entityModel"]]: (id: D["entityModel"][K]["id"]) => EntityNode<D, D["entityModel"][K]>;
 } & {
-    [K in keyof D["entityModel"]as `${string & K}Nodes`]: (
-        where?: Where<D["entityModel"][K]>
-    ) => EntityNodeList<D, K>;
+    [K in keyof D["entityModel"]as `${string & K}Nodes`]: () => EntityNodeList<D, K>;
 } & {
     info(): GraphDebugInfo;
     schema(): GraphSchema;
@@ -178,10 +170,7 @@ export type EntityNodeNoProxy<
     update(fn: (entity: D["entityModel"][K]) => D["entityModel"][K]): void;
 } & ([AllIncomingSourceKeys<D, K>] extends [never] ? {} : { deleteCascade(): void }) & {
     to<R extends (string & keyof D["edges"][K]) | `${string & ReverseKeys<D, K>}Nodes`>(
-        rel: R,
-        where?: R extends `${infer Src}Nodes`
-            ? Src extends keyof D["entityModel"] ? Where<D["entityModel"][Src]> : never
-            : never
+        rel: R
     ): R extends `${infer Src}Nodes`
         ? EntityNodeListNoProxy<D, Src & keyof D["entityModel"]>
         : EntityNodeNoProxy<D, R & keyof D["entityModel"]>;
@@ -203,10 +192,7 @@ export type EntityNodeListNoProxy<
     unique(): EntityNodeListNoProxy<D, K>;
     where(where: Where<D["entityModel"][K]>): EntityNodeListNoProxy<D, K>;
     to<R extends `${string & (keyof D["edges"][K] | ReverseKeys<D, K>)}Nodes`>(
-        rel: R,
-        where?: R extends `${infer Src}Nodes`
-            ? Src extends keyof D["entityModel"] ? Where<D["entityModel"][Src]> : never
-            : never
+        rel: R
     ): R extends `${infer Src}Nodes`
         ? EntityNodeListNoProxy<D, Src & keyof D["entityModel"]>
         : never;
@@ -215,9 +201,7 @@ export type EntityNodeListNoProxy<
 export type EntityGraphNoProxy<D extends GraphDef<any, any>> = {
     to<R extends (keyof D["entityModel"] & string) | `${keyof D["entityModel"] & string}Nodes`>(
         type: R,
-        idOrWhere?: R extends `${string}Nodes`
-            ? Where<D["entityModel"][R extends `${infer K}Nodes` ? K & keyof D["entityModel"] : never]>
-            : string
+        id?: string
     ): R extends `${infer K}Nodes`
         ? EntityNodeListNoProxy<D, K & keyof D["entityModel"]>
         : EntityNodeNoProxy<D, R & keyof D["entityModel"]>;

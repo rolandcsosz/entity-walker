@@ -186,14 +186,7 @@ export function buildGraphCore<EM extends EntityMap, E extends GraphEdges<EM>>(
                         const sourceKey = prop.slice(0, -"Nodes".length);
                         if (sourceKey) {
                             if (getValue() === undefined) return toNodeList([], sourceKey);
-                            let pointingIds = reverseIndex[key as string]?.[sourceKey]?.[id] || [];
-                            const where = args[0] as ((entity: any) => boolean) | undefined;
-                            if (where) {
-                                pointingIds = pointingIds.filter(pid => {
-                                    const e = byId[sourceKey]?.[pid];
-                                    return e !== undefined && where(e);
-                                });
-                            }
+                            const pointingIds = reverseIndex[key as string]?.[sourceKey]?.[id] || [];
                             return toNodeList(pointingIds.map(pid => createNode(sourceKey as keyof EM, pid, nodePath)), sourceKey);
                         }
                     }
@@ -303,10 +296,9 @@ export const createGraph = <EM extends EntityMap, E extends GraphEdges<EM>>(conf
             }
             if (prop.endsWith("Nodes")) {
                 const entityKey = prop.slice(0, -"Nodes".length);
-                return (where?: (entity: any) => boolean) => {
+                return () => {
                     const all = entities[entityKey] || [];
-                    const filtered = where ? all.filter(where) : all;
-                    return toNodeList(filtered.map((item: any) => createNode(entityKey as keyof EM, item.id.toString())), entityKey);
+                    return toNodeList(all.map((item: any) => createNode(entityKey as keyof EM, item.id.toString())), entityKey);
                 };
             }
             return (id: string | number) => createNode(prop as keyof EM, id.toString());

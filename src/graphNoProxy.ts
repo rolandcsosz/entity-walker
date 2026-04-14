@@ -9,14 +9,14 @@ export const createNonProxyGraph = <EM extends EntityMap, E extends GraphEdges<E
 
     function addToList(list: any, _nodeKey: string): void {
         Object.defineProperty(list, 'to', {
-            value: (rel: string, where?: any) => {
+            value: (rel: string) => {
                 if (!rel.endsWith("Nodes")) throw new Error(
                     `[entity-walker] EntityNodeListNoProxy.to() requires a 'Nodes' suffix (e.g. '${rel}Nodes')`
                 );
                 if (typeof list[rel] !== 'function') throw new Error(
                     `[entity-walker] No relation '${rel}' on this node list.`
                 );
-                return list[rel](where);
+                return list[rel]();
             },
             enumerable: false,
         });
@@ -135,15 +135,9 @@ export const createNonProxyGraph = <EM extends EntityMap, E extends GraphEdges<E
         const reverseEntries = reverseIndex[key as string] ?? {};
         for (const sourceKey in reverseEntries) {
             const refName = `${sourceKey}Nodes`;
-            internal[refName] = (where?: (entity: any) => boolean) => {
+            internal[refName] = () => {
                 if (getValue() === undefined) return toNodeList([], sourceKey);
-                let pointingIds: string[] = reverseIndex[key as string]?.[sourceKey]?.[id!] || [];
-                if (where) {
-                    pointingIds = pointingIds.filter((pid: string) => {
-                        const e = byId[sourceKey]?.[pid];
-                        return e !== undefined && where(e);
-                    });
-                }
+                const pointingIds: string[] = reverseIndex[key as string]?.[sourceKey]?.[id!] || [];
                 return toNodeList(
                     pointingIds.map((pid: string) => createNode(sourceKey as keyof EM, pid, nodePath)),
                     sourceKey,
@@ -260,12 +254,12 @@ export const createNonProxyGraph = <EM extends EntityMap, E extends GraphEdges<E
                     }
                 }
             },
-            to: (rel: string, idOrWhere?: any) => {
+            to: (rel: string) => {
                 const fn = internal[rel];
                 if (!fn) throw new Error(
                     `[entity-walker] No relation '${rel}' on entity type '${String(key)}'. Available: ${Object.keys(internal).join(', ') || 'none'}`
                 );
-                return rel.endsWith("Nodes") ? fn(idOrWhere) : fn();
+                return fn();
             },
             [NODE_PROP]: internal,
         };
@@ -276,17 +270,16 @@ export const createNonProxyGraph = <EM extends EntityMap, E extends GraphEdges<E
 
     _createNode = createNode;
 
-    const to = (type: string, idOrWhere?: any): any => {
+    const to = (type: string, id?: any): any => {
         if (type.endsWith("Nodes")) {
             const entityKey = type.slice(0, -"Nodes".length);
             const all = entities[entityKey] || [];
-            const filtered = typeof idOrWhere === "function" ? all.filter(idOrWhere) : all;
             return toNodeList(
-                filtered.map((item: any) => createNode(entityKey as keyof EM, item.id.toString())),
+                all.map((item: any) => createNode(entityKey as keyof EM, item.id.toString())),
                 entityKey,
             );
         }
-        return createNode(type as keyof EM, idOrWhere as string);
+        return createNode(type as keyof EM, id as string);
     };
 
     const graph: any = { to, info: graphInfo, schema: graphSchema };
