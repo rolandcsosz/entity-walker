@@ -31,10 +31,17 @@
     - [Built-in helpers](#built-in-helpers)
     - [Traversal from a list](#traversal-from-a-list)
     - [Examples](#examples)
-  - [9. Root-Level List Access](#9-root-level-list-access)
-  - [10. Debugging](#10-debugging)
+  - [9. Scoped Traversal](#9-scoped-traversal)
+    - [How Scope Works](#how-scope-works)
+    - [Example: Strict Round-Trip](#example-strict-round-trip)
+    - [Example: Multiple Scopes (Progressive Narrowing)](#example-multiple-scopes-progressive-narrowing)
+    - [Resetting Scope](#resetting-scope)
+  - [10. Root-Level List Access](#10-root-level-list-access)
+  - [11. Debugging](#11-debugging)
     - [Node-level](#node-level)
+    - [List-level](#list-level)
     - [Graph-level](#graph-level)
+  - [12. Safe Initialization (`emptyNode`, `emptyNodeList`)](#12-safe-initialization-emptynode-emptynodelist)
 
 ---
 
@@ -55,7 +62,7 @@ Understanding two core types and which functions belong to each is the key to re
 
 ```typescript
 graph.transaction("tx1") // EntityNode<CustomGraph,Transaction>
-graph.transactionNodes(where?) // EntityNodeList<CustomGraph,Transaction>
+graph.transactionNodes() // EntityNodeList<CustomGraph,Transaction>
 ```
 
 ### `EntityNode` — function categories
@@ -105,9 +112,9 @@ These do not return a node or a list, so the chain ends here.
 Only `…Nodes()` methods exist on a list. There is no `[entity]()` (single-node) traversal from a list — you cannot get back to a single `EntityNode` through list traversal.
 
 ```typescript
-list.subcategoryNodes(where?)    // EntityNodeList<CustomGraph,Subcategory>
-list.transactionNodes(where?)    // EntityNodeList<CustomGraph,Transaction>
-list.mainCategoryNodes(where?)   // EntityNodeList<CustomGraph,MainCategory>
+list.subcategoryNodes()    // EntityNodeList<CustomGraph,Subcategory>
+list.transactionNodes()    // EntityNodeList<CustomGraph,Transaction>
+list.mainCategoryNodes()   // EntityNodeList<CustomGraph,MainCategory>
 ```
 
 Both forward and bidirectional-reverse edges appear as `…Nodes()` on a list, collecting results across all nodes in the list (equivalent to a `flatMap`).
@@ -115,8 +122,13 @@ Both forward and bidirectional-reverse edges appear as `…Nodes()` on a list, c
 **Chainable transformers — return a new `EntityNodeList`, traversal can continue**
 
 ```typescript
-list.where(predicate)   // EntityNodeList<CustomGraph,Entity>   (filter nodes by entity predicate)
-list.unique()           // EntityNodeList<CustomGraph,Entity>   (remove duplicates by id)
+list.where(predicate)     // EntityNodeList<CustomGraph,Entity>   (filter nodes by entity predicate)
+list.whereNode(predicate) // EntityNodeList<CustomGraph,Entity>   (filter by node property predicate)
+list.unique()             // EntityNodeList<CustomGraph,Entity>   (remove duplicates by id)
+list.intersect(other)     // EntityNodeList<CustomGraph,Entity>   (intersection with other lists/ids)
+list.scoped()             // EntityNodeList<CustomGraph,Entity>   (snapshot scope for current traversal)
+list.resetScope()         // EntityNodeList<CustomGraph,Entity>   (clear the traversal scope)
+list.with(fn)             // T                                    (encapsulate sub-traversal or return scalar)
 ```
 
 **Terminal — reads data, ends the traversal chain**
@@ -148,8 +160,10 @@ graph
  │
  └─ .entityNodes()         → EntityNodeList
       ├─ .entityNodes()    → EntityNodeList      (only …Nodes() traversal on lists)
-      ├─ .where()          → EntityNodeList      (chainable transformer)
-      ├─ .unique()         → EntityNodeList      (chainable transformer)
+      ├─ .where() / .whereNode() → EntityNodeList (chainable)
+      ├─ .scoped() / .unique()   → EntityNodeList (chainable)
+      ├─ .intersect()      → EntityNodeList      (chainable)
+      ├─ .with(fn)         → T                   (custom return or sub-chain)
       ├─ .ids() etc.       → terminal
       └─ .map() etc.       → plain Array (standard JS — terminal)
 ```
@@ -335,12 +349,13 @@ const txIds = graph
 // ["tx1", "tx3", "tx2"]
 ```
 
-Reverse methods optionally accept a **`where` predicate** to filter the results before returning the list:
+Use `.where()` to filter the results before returning the list:
 
 ```typescript
 const grocerySubs = graph
   .mainCategory("cat1")
-  .subcategoryNodes(sc => sc.name === "Groceries");
+  .subcategoryNodes()
+  .where(sc => sc.name === "Groceries");
 ```
 
 If the parent node does not exist, reverse methods always return an empty list — they never throw.
@@ -384,7 +399,12 @@ Any method returning multiple entities returns an **`EntityNodeList`** — a rea
 | `.findEntity(predicate)` | Returns the first entity satisfying the predicate, or `undefined`. |
 | `.findNode(predicate)` | Returns the first node whose entity satisfies the predicate, or `undefined`. Unlike `findEntity`, returns the node so traversal can continue. |
 | `.where(predicate)` | Returns a new `EntityNodeList` containing only nodes matching the predicate. |
+| `.whereNode(predicate)` | Returns a new `EntityNodeList` filtered by node properties. |
 | `.unique()` | Returns a new `EntityNodeList` deduped by `id`. |
+| `.intersect(other)` | Returns a new `EntityNodeList` representing the intersection with another list or set of IDs. |
+| `.scoped()` | "Locks" the current IDs into the traversal scope. Traversal away and back to this type will only return these IDs. |
+| `.resetScope()` | Clears all scope restrictions from the list. |
+| `.with(fn)` | Executes a callback with the current list, allowing for complex sub-filtering or scalar returns. |
 | `.isEmpty()` | `true` if no present entities remain. |
 | `.isNotEmpty()` | `true` if at least one present entity exists. |
 
@@ -407,11 +427,12 @@ graph.expenseTypeNodes()
   .ids();
 ```
 
-An optional `where` predicate can be passed to filter the resulting list:
+Use `.where()` to filter the resulting list:
 
 ```typescript
 graph.mainCategoryNodes()
-  .subcategoryNodes(sc => sc.name === "Groceries")
+  .subcategoryNodes()
+  .where(sc => sc.name === "Groceries")
   .ids();
 ```
 
@@ -463,23 +484,83 @@ if (graph.mainCategory("cat3").subcategoryNodes().isEmpty()) {
 
 ---
 
-## 9. Root-Level List Access
+## 9. Scoped Traversal
 
-Access all entities of a given type directly from the graph via `graph.[type]Nodes(where?)`. An optional predicate filters the results before building the list.
+The `.scoped()` method allows you to "remember" a set of entities during a complex traversal chain. Once a list is scoped, any future traversal that reaches that entity type will be restricted to the IDs that were present when `.scoped()` was called.
+
+### How Scope Works
+
+1. **Type Sensitivity**: Scoping an `EntityNodeList` of type `transaction` only restricts future `transaction` nodes. It does not affect `subcategory` or `mainCategory` nodes.
+2. **AND-Composition**: Each call to `.scoped()` for the same type adds a new restriction. The resulting scope is the **intersection (AND)** of all previous restrictions for that type. Scope can only get smaller and smaller.
+3. **Inheritance**: Scopes are carried forward automatically through all subsequent `.to()`, `.relation()`, and `.where()` calls.
+4. **Inspecting Scope**: You can check the currently active scope restrictions at any point by calling `.info()` on the list.
+
+### Example: Strict Round-Trip
+
+Without scrolling, jumping back and forth across relations might pick up "neighbors" you didn't start with. `.scoped()` prevents this.
+
+```typescript
+const start = graph.transactionNodes()
+  .where(t => t.id === "tx1")
+  .scoped(); // Only "tx1" allowed for transactions
+
+const backAndForth = start
+  .subcategoryNodes()
+  .mainCategoryNodes()
+  .subcategoryNodes()
+  .transactionNodes(); // Traverses through the graph...
+
+backAndForth.ids(); // ["tx1"]
+```
+
+### Example: Multiple Scopes (Progressive Narrowing)
+
+```typescript
+const narrowed = graph.transactionNodes()
+  .scoped()                          // ids: ["tx1", "tx2", "tx3"]
+  .where(t => t.id !== "tx1")
+  .scoped()                          // ids: ["tx2", "tx3"] (intersection of previous and current)
+  .where(t => t.id === "tx3")
+  .scoped();                         // ids: ["tx3"]
+
+const final = narrowed
+  .subcategoryNodes()
+  .transactionNodes(); 
+
+final.ids(); // ["tx3"]
+```
+
+### Resetting Scope
+
+If you need to break out of a scoped context while keeping your current list, use `.resetScope()`. This returns a new `EntityNodeList` with all restrictions removed.
+
+```typescript
+const scoped = graph.transactionNodes().where(t => t.id === "tx1").scoped();
+const free = scoped.resetScope();
+
+// Future traversals from 'free' are no longer restricted by 'tx1'
+```
+
+---
+
+## 10. Root-Level List Access
+
+Access all entities of a given type directly from the graph via `graph.[type]Nodes()`. Use `.where()` for filtering.
 
 ```typescript
 // All transactions
 const all = graph.transactionNodes();
 
 // Filtered subset
-const sub1Txs = graph.transactionNodes(t => t.subcategoryId === "sub1");
+const sub1Txs = graph.transactionNodes().where(t => t.subcategoryId === "sub1");
 
 // Any entity type
-const foodCategories = graph.mainCategoryNodes(c => c.name === "Food");
+const foodCategories = graph.mainCategoryNodes().where(c => c.name === "Food");
 
 // Combine with list traversal
 const ids = graph
-  .mainCategoryNodes(c => !!c.expenseTypeId)
+  .mainCategoryNodes()
+  .where(c => !!c.expenseTypeId)
   .subcategoryNodes()
   .transactionNodes()
   .ids();
@@ -510,6 +591,25 @@ node.info();
 // }
 ```
 
+### List-level
+
+Call `.info()` on any `EntityNodeList` to inspect its type, size, and current traversal scope.
+
+```typescript
+const list = graph.transactionNodes()
+  .where(t => t.id === "tx1" || t.id === "tx2")
+  .scoped();
+
+const info = list.info();
+// {
+//   type:   "transaction",
+//   length: 2,
+//   scope:  { transaction: ["tx1", "tx2"] }
+// }
+```
+
+The `scope` property allows you to check the actual state of the restricted traversal scope at any point in your chain, which is especially useful for verifying which AND-composed filters are currently affecting a traversal.
+
 ### Graph-level
 
 ```typescript
@@ -538,4 +638,36 @@ const info = graph.info();
 // }
 ```
 
-`missingEntities` is especially useful during development to catch data integrity problems — stale foreign keys, typos in ids, entities missing from the payload, etc.
+---
+
+## 12. Safe Initialization (`emptyNode`, `emptyNodeList`)
+
+Sometimes you need to initialize a variable with a "null" node or list that can still be part of a traversal chain without throwing errors or requiring complex null checks.
+
+### `emptyNode()`
+
+Returns an `EntityNode` that behaves like a missing node. Any relation called on it will return another empty node (or empty list), allowing safe traversal.
+
+```typescript
+import { emptyNode } from "entity-walker";
+
+let node = emptyNode<CustomGraph, Transaction>();
+
+// Safe to traverse, even though it's empty
+const catName = node.subcategory().mainCategory().value()?.name; // undefined
+node.exists(); // false
+```
+
+### `emptyNodeList()`
+
+Returns an `EntityNodeList` that behaves like an empty collection.
+
+```typescript
+import { emptyNodeList } from "entity-walker";
+
+let list = emptyNodeList<CustomGraph, Transaction>();
+
+list.isEmpty(); // true
+list.subcategoryNodes().isEmpty(); // true
+```
+

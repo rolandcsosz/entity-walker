@@ -24,12 +24,12 @@ The graph, node, and list APIs are identical to `createGraph`. The only differen
 | Proxy (`createGraph`) | Non-Proxy (`createNonProxyGraph`) |
 |---|---|
 | `graph.entity(id)` | `graph.to("entity", id)` |
-| `graph.entityNodes(where?)` | `graph.to("entityNodes", where?)` |
+| `graph.entityNodes()` | `graph.to("entityNodes")` |
 | `node.relation()` | `node.to("relation")` |
-| `node.relationNodes(where?)` | `node.to("relationNodes", where?)` |
-| `list.relationNodes(where?)` | `list.to("relationNodes", where?)` |
+| `node.relationNodes()` | `node.to("relationNodes")` |
+| `list.relationNodes()` | `list.to("relationNodes")` |
 
-All other methods — `.value()`, `.valueOrThrow()`, `.exists()`, `.path()`, `.info()`, `.update(fn)`, `.delete()`, `.deleteCascade()`, `.entities()`, `.ids()`, `.select()`, `.first()`, `.findEntity()`, `.findNode()`, `.where()`, `.unique()`, `.isEmpty()`, `.isNotEmpty()`, `graph.schema()`, `graph.info()` — are identical.
+All other methods — `.value()`, `.valueOrThrow()`, `.exists()`, `.path()`, `.info()`, `.update(fn)`, `.delete()`, `.deleteCascade()`, `.entities()`, `.ids()`, `.select()`, `.first()`, `.findEntity()`, `.findNode()`, `.where()`, `.whereNode()`, `.unique()`, `.intersect()`, `.scoped()`, `.resetScope()`, `.with(fn)`, `.isEmpty()`, `.isNotEmpty()`, `graph.schema()`, `graph.info()` — are identical.
 
 ---
 
@@ -68,18 +68,36 @@ graph.to("transaction", "tx1").exists();
 // Forward traversal (proxy: node.subcategory().mainCategory())
 graph.to("transaction", "tx1").to("subcategory").to("mainCategory").value();
 
-// Reverse traversal with optional filter (proxy: node.subcategoryNodes(where?))
+// Reverse traversal (proxy: node.subcategoryNodes())
 graph.to("mainCategory", "cat1").to("subcategoryNodes");
-graph.to("mainCategory", "cat1").to("subcategoryNodes", sc => sc.name === "Groceries");
 
-// Root-level list (proxy: graph.transactionNodes(where?))
+// Filtering with .where()
+graph.to("mainCategory", "cat1").to("subcategoryNodes").where(sc => sc.name === "Groceries");
+
+// Root-level list (proxy: graph.transactionNodes())
 graph.to("transactionNodes").ids();
-graph.to("transactionNodes", t => t.subcategoryId === "sub1").ids();
-
+graph.to("transactionNodes").where(t => t.subcategoryId === "sub1").ids();
 // Chained list traversal (proxy: list.subcategoryNodes().transactionNodes())
 graph
-  .to("mainCategoryNodes", c => !!c.expenseTypeId)
+  .to("mainCategoryNodes")
+  .where(c => !!c.expenseTypeId)
   .to("subcategoryNodes")
   .to("transactionNodes")
   .ids();
+```
+
+---
+
+## Safe Initialization
+
+Non-proxy versions of the empty factories are also available:
+
+```typescript
+import { emptyNodeNoProxy, emptyNodeListNoProxy } from "entity-walker";
+
+const node = emptyNodeNoProxy<CustomGraph, Transaction>();
+node.to("subcategory").to("mainCategory").exists(); // false
+
+const list = emptyNodeListNoProxy<CustomGraph, Transaction>();
+list.to("subcategoryNodes").isEmpty(); // true
 ```

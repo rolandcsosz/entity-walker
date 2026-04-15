@@ -36,15 +36,13 @@ graph.transaction("tx1")
 * Data integrity validation
 * In-memory graph exploration
 
-## Features
-
-* **Immutable & safe** — returned entities are frozen objects.
-* **Type-safe & autocompleted** — TypeScript knows every entity type and every relation.
-* **Bidirectional relations** — traverse forwards (1-to-1) or backwards (1-to-many) safely.
-* **Rich node-list API** — `.where()`, `.ids()`, `.entities()`, `.select()`, `.unique()`, `.findEntity()`, `.findNode()`, `.isEmpty()` and more work directly on related entity collections.
+* **Rich node-list API** — `.where()`, `.whereNode()`, `.ids()`, `.entities()`, `.select()`, `.unique()`, `.intersect()`, `.findEntity()`, `.findNode()`, `.isEmpty()` and more work directly on related entity collections.
+* **Scoped Traversal** — Use `.scoped()` to snapshot the current state of a traversal, ensuring filters from earlier steps persist across deep path jumps.
+* **Functional Encapsulation** — Use `.with()` to return values or encapsulated intersections seamlessly from within a traversal chain.
 * **Consistent defaults** — every node exposes `.value()` (safe, returns `undefined` when missing) and `.valueOrThrow()` (throws when missing). No split between optional and required at the type level.
 * **Performance-friendly** — indexed O(1) lookups; even rebuilding the graph per query beats nested loops at scale.
 * **Proxy-free alternative** — `createNonProxyGraph` produces an equivalent graph for environments without `Proxy` support.
+* **Safe Initialization** — Optional `emptyNode` and `emptyNodeList` factories for robust proxy-based initialization.
 * **Data integrity checks** — `graph.info()` detects missing FK targets and orphan entities at runtime.
 
 ## Installation
