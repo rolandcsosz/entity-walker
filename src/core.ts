@@ -6,6 +6,7 @@ export interface CoreData<EM extends EntityMap> {
     graphSchema(): GraphSchema;
     graphInfo(): GraphDebugInfo;
     ensureIndexes(): void;
+    markIndexesDirty(): void;
     entities: { [K in keyof EM]: EM[K][] };
     nodeCache: Map<string, any>;
     byId: Record<string, Record<string, any>>;
@@ -56,6 +57,11 @@ export function buildCore<EM extends EntityMap, E extends GraphEdges<EM>>(
         }
 
         indexesBuilt = true;
+    }
+
+    function markIndexesDirty() {
+        indexesBuilt = false;
+        nodeCache.clear();
     }
 
     const nodeCache = new Map<string, any>();
@@ -268,7 +274,7 @@ export function buildCore<EM extends EntityMap, E extends GraphEdges<EM>>(
         };
     };
 
-    return { toNodeList, graphSchema, graphInfo, ensureIndexes, entities, nodeCache, byId, reverseIndex };
+    return { toNodeList, graphSchema, graphInfo, ensureIndexes, markIndexesDirty, entities, nodeCache, byId, reverseIndex };
 }
 
 export function emptyNodeList<G extends GraphDef<any, any>, E extends EntityBase>(): EntityNodeList<G, E> {

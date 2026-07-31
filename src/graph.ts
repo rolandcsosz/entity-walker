@@ -211,16 +211,45 @@ export function buildGraphCore<EM extends EntityMap, E extends GraphEdges<EM>>(
 
     _createNode = createNode;
 
-    return { createNode, toNodeList, graphSchema, graphInfo, ensureIndexes, entities: core.entities, byId: core.byId, reverseIndex: core.reverseIndex, nodeCache: core.nodeCache };
+    return { createNode, toNodeList, graphSchema, graphInfo, ensureIndexes, markIndexesDirty: core.markIndexesDirty, entities: core.entities, byId: core.byId, reverseIndex: core.reverseIndex, nodeCache: core.nodeCache };
 }
 
 export const createGraph = <EM extends EntityMap, E extends GraphEdges<EM>>(config: {
     entities: { [K in keyof EM]: EM[K][] };
     edges: E;
 }): EntityGraph<GraphDef<EM, E>> => {
-    const { createNode, toNodeList, graphSchema, graphInfo, ensureIndexes, entities, byId, reverseIndex, nodeCache } = buildGraphCore<EM, E>(config.entities, config.edges);
+    const { createNode, toNodeList, graphSchema, graphInfo, ensureIndexes, markIndexesDirty, entities, byId, reverseIndex, nodeCache } = buildGraphCore<EM, E>(config.entities, config.edges);
 
-    function insert<K extends keyof EM>(type: K, entityOrEntities: EM[K] | EM[K][]): void {
+    function warnMissingReferences(sourceTypes?: string[]): void {
+        ensureIndexes();
+        const ents = entities as Record<string, any[]>;
+        const keys = sourceTypes ?? Object.keys(ents);
+        const warned = new Set<string>();
+
+        for (const sourceType of keys) {
+            const sourceEdges = (config.edges as any)[sourceType];
+            if (!sourceEdges) continue;
+            const sourceEntities = ents[sourceType] ?? [];
+
+            for (const sourceEntity of sourceEntities) {
+                for (const targetType in sourceEdges) {
+                    const targetId = sourceEdges[targetType].resolve(sourceEntity);
+                    if (targetId == null) continue;
+                    if (byId[targetType]?.[String(targetId)] !== undefined) continue;
+
+                    const warningKey = `${sourceType}:${String(sourceEntity.id)}:${targetType}:${String(targetId)}`;
+                    if (warned.has(warningKey)) continue;
+                    warned.add(warningKey);
+
+                    console.warn(
+                        `[entity-walker] Missing reference '${sourceType}.${targetType}': entity '${sourceType}' with id '${sourceEntity.id}' points to missing '${targetType}' id '${targetId}'.`
+                    );
+                }
+            }
+        }
+    }
+
+    function insert<K extends keyof EM>(type: K, entityOrEntities: EM[K] | EM[K][], opts?: { suppressReferenceWarnings?: boolean }): void {
         const items = Array.isArray(entityOrEntities) ? entityOrEntities : [entityOrEntities];
         const key = String(type);
         const ents = entities as Record<string, any[]>;
@@ -244,9 +273,11 @@ export const createGraph = <EM extends EntityMap, E extends GraphEdges<EM>>(conf
                 }
             }
         }
+
+        if (!opts?.suppressReferenceWarnings) warnMissingReferences([key]);
     }
 
-    function update<K extends keyof EM>(type: K, entityOrEntities: EM[K] | EM[K][]): void {
+    function update<K extends keyof EM>(type: K, entityOrEntities: EM[K] | EM[K][], opts?: { suppressReferenceWarnings?: boolean }): void {
         ensureIndexes();
         const items = Array.isArray(entityOrEntities) ? entityOrEntities : [entityOrEntities];
         const key = String(type);
@@ -255,7 +286,7 @@ export const createGraph = <EM extends EntityMap, E extends GraphEdges<EM>>(conf
         for (const entity of items) {
             const existing = byId[key]?.[entity.id.toString()];
             if (!existing) {
-                insert(type, entity);
+                insert(type, entity, { suppressReferenceWarnings: true });
                 continue;
             }
             // remove old bidirectional reverse index entries
@@ -291,6 +322,8 @@ export const createGraph = <EM extends EntityMap, E extends GraphEdges<EM>>(conf
                 }
             }
         }
+
+        if (!opts?.suppressReferenceWarnings) warnMissingReferences([key]);
     }
 
     return new Proxy({}, {
@@ -298,6 +331,60 @@ export const createGraph = <EM extends EntityMap, E extends GraphEdges<EM>>(conf
             if (typeof prop === 'symbol') return undefined;
             if (prop === "info") return graphInfo;
             if (prop === "schema") return graphSchema;
+            if (prop === "snapshot") return () => {
+                const snap: Record<string, any[]> = {};
+                for (const key in entities) snap[key] = (entities as Record<string, any[]>)[key].map(e => ({ ...e }));
+                return snap;
+            };
+            if (prop === "restore") return (snapshot: Record<string, any[]>) => {
+                const ents = entities as Record<string, any[]>;
+                for (const key in ents) {
+                    ents[key] = (snapshot[key] ?? []).map((e: any) => ({ ...e }));
+                }
+                markIndexesDirty();
+            };
+            if (prop === "sync") return (fresh: Record<string, any[]>, options?: { mode?: "merge" | "replace" }) => {
+                ensureIndexes();
+                const ents = entities as Record<string, any[]>;
+                const mode = options?.mode ?? "replace";
+
+                for (const key in fresh) {
+                    const freshList = fresh[key];
+                    if (!Array.isArray(freshList)) {
+                        throw new Error(`[entity-walker] sync('${key}') expects an array of entities.`);
+                    }
+                    for (let i = 0; i < freshList.length; i++) {
+                        const entity = freshList[i];
+                        if (!entity || typeof entity !== "object" || entity.id === undefined || entity.id === null) {
+                            throw new Error(`[entity-walker] sync('${key}') entity at index ${i} is missing a valid 'id'.`);
+                        }
+                    }
+                }
+
+                for (const key in fresh) {
+                    const freshList: any[] = fresh[key] ?? [];
+                    ents[key] = ents[key] ?? [];
+
+                    if (mode === "replace") {
+                        const freshIds = new Set(freshList.map((e: any) => String(e.id)));
+                        for (const existing of [...ents[key]]) {
+                            if (!freshIds.has(String(existing.id))) createNode(key as keyof EM, existing.id).delete();
+                        }
+                    }
+
+                    if (freshList.length > 0) {
+                        update(key as keyof EM, freshList, { suppressReferenceWarnings: true });
+                    }
+
+                    if (mode === "replace") {
+                        ents[key] = freshList
+                            .map((entity: any) => byId[key]?.[String(entity.id)])
+                            .filter((entity: any) => entity !== undefined);
+                    }
+                }
+
+                warnMissingReferences(Object.keys(fresh));
+            };
             if (prop.startsWith("update") && prop.length > 6) {
                 const rawKey = prop[6].toLowerCase() + prop.slice(7);
                 return (entityOrEntities: any) => update(rawKey as keyof EM, entityOrEntities);
