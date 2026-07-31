@@ -8,7 +8,7 @@ export function buildGraphCore<EM extends EntityMap, E extends GraphEdges<EM>>(
     let _createNode: (key: keyof EM, id: string | number | null, path?: string[]) => any;
 
     const core = buildCore<EM, E>(entities, edges, () => _createNode);
-    const { byId, reverseIndex, nodeCache, toNodeList, graphSchema, graphInfo } = core;
+    const { byId, reverseIndex, nodeCache, toNodeList, graphSchema, graphInfo, ensureIndexes } = core;
 
     function createNode(key: keyof EM, id: string | number | null, path: string[] = []): any {
         const cacheKey = id !== null ? `${String(key)}:${id}` : null;
@@ -20,7 +20,11 @@ export function buildGraphCore<EM extends EntityMap, E extends GraphEdges<EM>>(
         const nodePath = [...path, id !== null ? `${String(key)}(${id})` : `${String(key)}(null)`];
         const availableRelations = () => {
             const forward = Object.keys((edges as any)[key] ?? {});
-            const reverse = Object.keys(reverseIndex[key as string] ?? {}).map(k => `${k}Nodes`);
+            const reverse: string[] = [];
+            for (const sourceType in edges) {
+                const edge = (edges as any)[sourceType]?.[key as string];
+                if (edge?.bidirectional) reverse.push(`${sourceType}Nodes`);
+            }
             return [...forward, ...reverse];
         };
 
@@ -28,6 +32,7 @@ export function buildGraphCore<EM extends EntityMap, E extends GraphEdges<EM>>(
         let cachedValue: any;
         function getValue() {
             if (valueFetched) return cachedValue;
+            ensureIndexes();
             valueFetched = true;
             if (id === null) return (cachedValue = undefined);
             const entity = byId[key as string]?.[id];
@@ -50,6 +55,7 @@ export function buildGraphCore<EM extends EntityMap, E extends GraphEdges<EM>>(
         const existsMethod = () => getValue() !== undefined;
         const pathMethod = () => nodePath;
         const deleteMethod = () => {
+            ensureIndexes();
             if (id === null || !byId[key as string]?.[id]) return;
             const entity = byId[key as string][id];
             const ents = entities as Record<string, any[]>;
@@ -83,6 +89,7 @@ export function buildGraphCore<EM extends EntityMap, E extends GraphEdges<EM>>(
             nodeCache.delete(`${String(key)}:${id}`);
         };
         const deleteCascadeMethod = () => {
+            ensureIndexes();
             if (id === null || !byId[key as string]?.[id]) return;
             // find all entities pointing to this one via any edge and cascade-delete them first
             for (const sourceType in edges) {
@@ -204,14 +211,14 @@ export function buildGraphCore<EM extends EntityMap, E extends GraphEdges<EM>>(
 
     _createNode = createNode;
 
-    return { createNode, toNodeList, graphSchema, graphInfo, entities: core.entities, byId: core.byId, reverseIndex: core.reverseIndex, nodeCache: core.nodeCache };
+    return { createNode, toNodeList, graphSchema, graphInfo, ensureIndexes, entities: core.entities, byId: core.byId, reverseIndex: core.reverseIndex, nodeCache: core.nodeCache };
 }
 
 export const createGraph = <EM extends EntityMap, E extends GraphEdges<EM>>(config: {
     entities: { [K in keyof EM]: EM[K][] };
     edges: E;
 }): EntityGraph<GraphDef<EM, E>> => {
-    const { createNode, toNodeList, graphSchema, graphInfo, entities, byId, reverseIndex, nodeCache } = buildGraphCore<EM, E>(config.entities, config.edges);
+    const { createNode, toNodeList, graphSchema, graphInfo, ensureIndexes, entities, byId, reverseIndex, nodeCache } = buildGraphCore<EM, E>(config.entities, config.edges);
 
     function insert<K extends keyof EM>(type: K, entityOrEntities: EM[K] | EM[K][]): void {
         const items = Array.isArray(entityOrEntities) ? entityOrEntities : [entityOrEntities];
@@ -240,6 +247,7 @@ export const createGraph = <EM extends EntityMap, E extends GraphEdges<EM>>(conf
     }
 
     function update<K extends keyof EM>(type: K, entityOrEntities: EM[K] | EM[K][]): void {
+        ensureIndexes();
         const items = Array.isArray(entityOrEntities) ? entityOrEntities : [entityOrEntities];
         const key = String(type);
         const ents = entities as Record<string, any[]>;

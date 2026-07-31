@@ -5,6 +5,7 @@ export interface CoreData<EM extends EntityMap> {
     toNodeList(nodes: any[], nodeKey: string): any;
     graphSchema(): GraphSchema;
     graphInfo(): GraphDebugInfo;
+    ensureIndexes(): void;
     entities: { [K in keyof EM]: EM[K][] };
     nodeCache: Map<string, any>;
     byId: Record<string, Record<string, any>>;
@@ -19,32 +20,42 @@ export function buildCore<EM extends EntityMap, E extends GraphEdges<EM>>(
 ): CoreData<EM> {
     const byId: Record<string, Record<string, any>> = {};
     const reverseIndex: Record<string, Record<string, Record<string, string[]>>> = {};
+    let indexesBuilt = false;
 
-    for (const key in entities) {
-        byId[key] = {};
-        if (!reverseIndex[key]) reverseIndex[key] = {};
-        for (const item of entities[key]!) {
-            byId[key][item.id] = item;
-        }
-    }
+    function ensureIndexes() {
+        if (indexesBuilt) return;
 
-    for (const sourceType in edges) {
-        const entityEdges = (edges as any)[sourceType];
-        if (!entityEdges) continue;
-        for (const targetType in entityEdges) {
-            const edge = entityEdges[targetType];
-            if (!edge.bidirectional) continue;
-            if (!reverseIndex[targetType]) reverseIndex[targetType] = {};
-            if (!reverseIndex[targetType][sourceType]) reverseIndex[targetType][sourceType] = {};
-            for (const sourceEntity of (entities[sourceType] ?? [])) {
-                const targetId = edge.resolve(sourceEntity);
-                if (targetId == null) continue;
-                if (!reverseIndex[targetType][sourceType][targetId]) {
-                    reverseIndex[targetType][sourceType][targetId] = [];
-                }
-                reverseIndex[targetType][sourceType][targetId].push(String(sourceEntity.id));
+        for (const key in byId) delete byId[key];
+        for (const key in reverseIndex) delete reverseIndex[key];
+
+        for (const key in entities) {
+            byId[key] = {};
+            reverseIndex[key] = {};
+            for (const item of entities[key]!) {
+                byId[key][item.id] = item;
             }
         }
+
+        for (const sourceType in edges) {
+            const entityEdges = (edges as any)[sourceType];
+            if (!entityEdges) continue;
+            for (const targetType in entityEdges) {
+                const edge = entityEdges[targetType];
+                if (!edge.bidirectional) continue;
+                if (!reverseIndex[targetType]) reverseIndex[targetType] = {};
+                if (!reverseIndex[targetType][sourceType]) reverseIndex[targetType][sourceType] = {};
+                for (const sourceEntity of (entities[sourceType] ?? [])) {
+                    const targetId = edge.resolve(sourceEntity);
+                    if (targetId == null) continue;
+                    if (!reverseIndex[targetType][sourceType][targetId]) {
+                        reverseIndex[targetType][sourceType][targetId] = [];
+                    }
+                    reverseIndex[targetType][sourceType][targetId].push(String(sourceEntity.id));
+                }
+            }
+        }
+
+        indexesBuilt = true;
     }
 
     const nodeCache = new Map<string, any>();
@@ -151,8 +162,12 @@ export function buildCore<EM extends EntityMap, E extends GraphEdges<EM>>(
                 : null,
         }));
 
-        const reverseEntries = reverseIndex[nodeKey] || {};
-        for (const sourceKey in reverseEntries) {
+        const reverseSourceKeys: string[] = [];
+        for (const sourceKey in edges) {
+            const edge = (edges as any)[sourceKey]?.[nodeKey];
+            if (edge?.bidirectional) reverseSourceKeys.push(sourceKey);
+        }
+        for (const sourceKey of reverseSourceKeys) {
             const refName = `${sourceKey}Nodes`;
             def(refName, (where?: (entity: any) => boolean) => {
                 const result: any[] = [];
@@ -204,11 +219,12 @@ export function buildCore<EM extends EntityMap, E extends GraphEdges<EM>>(
     };
 
     const graphSchema = (): GraphSchema => ({
-        entities: Object.keys(byId),
+        entities: Object.keys(entities),
         edges: buildEdgeSummary(),
     });
 
     const graphInfo = (): GraphDebugInfo => {
+        ensureIndexes();
         const missingEntities: { type: string; id: string }[] = [];
         for (const sourceType in edges) {
             const entityEdges = (edges as any)[sourceType];
@@ -252,7 +268,7 @@ export function buildCore<EM extends EntityMap, E extends GraphEdges<EM>>(
         };
     };
 
-    return { toNodeList, graphSchema, graphInfo, entities, nodeCache, byId, reverseIndex };
+    return { toNodeList, graphSchema, graphInfo, ensureIndexes, entities, nodeCache, byId, reverseIndex };
 }
 
 export function emptyNodeList<G extends GraphDef<any, any>, E extends EntityBase>(): EntityNodeList<G, E> {

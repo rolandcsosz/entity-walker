@@ -23,7 +23,7 @@ export const createNonProxyGraph = <EM extends EntityMap, E extends GraphEdges<E
     }
 
     const core = buildCore<EM, E>(config.entities, config.edges, () => _createNode, addToList);
-    const { byId, reverseIndex, nodeCache, toNodeList, graphSchema, graphInfo, entities } = core;
+    const { byId, reverseIndex, nodeCache, toNodeList, graphSchema, graphInfo, ensureIndexes, entities } = core;
 
     function insert<K extends keyof EM>(type: K, entityOrEntities: EM[K] | EM[K][]): void {
         const items = Array.isArray(entityOrEntities) ? entityOrEntities : [entityOrEntities];
@@ -52,6 +52,7 @@ export const createNonProxyGraph = <EM extends EntityMap, E extends GraphEdges<E
     }
 
     function update<K extends keyof EM>(type: K, entityOrEntities: EM[K] | EM[K][]): void {
+        ensureIndexes();
         const items = Array.isArray(entityOrEntities) ? entityOrEntities : [entityOrEntities];
         const key = String(type);
         const ents = entities as Record<string, any[]>;
@@ -107,6 +108,7 @@ export const createNonProxyGraph = <EM extends EntityMap, E extends GraphEdges<E
         let cachedValue: any;
         function getValue() {
             if (valueFetched) return cachedValue;
+            ensureIndexes();
             valueFetched = true;
             if (id === null) return (cachedValue = undefined);
             const entity = byId[key as string]?.[id];
@@ -132,8 +134,12 @@ export const createNonProxyGraph = <EM extends EntityMap, E extends GraphEdges<E
         }
 
         // Reverse edge methods (e.g. transactionNodes())
-        const reverseEntries = reverseIndex[key as string] ?? {};
-        for (const sourceKey in reverseEntries) {
+        const reverseSourceKeys: string[] = [];
+        for (const sourceKey in config.edges) {
+            const edge = (config.edges as any)[sourceKey]?.[key as string];
+            if (edge?.bidirectional) reverseSourceKeys.push(sourceKey);
+        }
+        for (const sourceKey of reverseSourceKeys) {
             const refName = `${sourceKey}Nodes`;
             internal[refName] = () => {
                 if (getValue() === undefined) return toNodeList([], sourceKey);
@@ -169,6 +175,7 @@ export const createNonProxyGraph = <EM extends EntityMap, E extends GraphEdges<E
                 value: getValue(),
             }),
             delete: () => {
+                ensureIndexes();
                 if (id === null || !byId[key as string]?.[id]) return;
                 const entity = byId[key as string][id];
                 const ents = entities as Record<string, any[]>;
@@ -199,6 +206,7 @@ export const createNonProxyGraph = <EM extends EntityMap, E extends GraphEdges<E
                 nodeCache.delete(`${String(key)}:${id.toString()}`);
             },
             deleteCascade: () => {
+                ensureIndexes();
                 if (id === null || !byId[key as string]?.[id.toString()]) return;
                 for (const sourceType in config.edges) {
                     const sourceEdges = (config.edges as any)[sourceType];
