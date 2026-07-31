@@ -41,7 +41,7 @@ export const createNonProxyGraph = <EM extends EntityMap, E extends GraphEdges<E
                     const edge = entityEdges[targetType];
                     if (!edge.bidirectional) continue;
                     const targetId = edge.resolve(entity);
-                    if (!targetId) continue;
+                    if (targetId == null) continue;
                     if (!reverseIndex[targetType]) reverseIndex[targetType] = {};
                     if (!reverseIndex[targetType][key]) reverseIndex[targetType][key] = {};
                     if (!reverseIndex[targetType][key][targetId]) reverseIndex[targetType][key][targetId] = [];
@@ -67,7 +67,7 @@ export const createNonProxyGraph = <EM extends EntityMap, E extends GraphEdges<E
                     const edge = entityEdges[targetType];
                     if (!edge.bidirectional) continue;
                     const oldTargetId = edge.resolve(existing);
-                    if (!oldTargetId) continue;
+                    if (oldTargetId == null) continue;
                     const bucket = reverseIndex[targetType]?.[key]?.[oldTargetId];
                     if (bucket) {
                         const idx = bucket.indexOf(entity.id.toString());
@@ -84,7 +84,7 @@ export const createNonProxyGraph = <EM extends EntityMap, E extends GraphEdges<E
                     const edge = entityEdges[targetType];
                     if (!edge.bidirectional) continue;
                     const newTargetId = edge.resolve(entity);
-                    if (!newTargetId) continue;
+                    if (newTargetId == null) continue;
                     if (!reverseIndex[targetType]) reverseIndex[targetType] = {};
                     if (!reverseIndex[targetType][key]) reverseIndex[targetType][key] = {};
                     if (!reverseIndex[targetType][key][newTargetId]) reverseIndex[targetType][key][newTargetId] = [];
@@ -125,7 +125,7 @@ export const createNonProxyGraph = <EM extends EntityMap, E extends GraphEdges<E
                 const entity = getValue();
                 if (!entity) return createNode(rel as keyof EM, null, nodePath);
                 const nextId = entityEdges[rel].resolve(entity);
-                if (!nextId) return createNode(rel as keyof EM, null, nodePath);
+                if (nextId == null) return createNode(rel as keyof EM, null, nodePath);
                 if (!byId[rel as string]?.[nextId]) return createNode(rel as keyof EM, null, nodePath);
                 return createNode(rel as keyof EM, nextId, nodePath);
             };
@@ -178,7 +178,7 @@ export const createNonProxyGraph = <EM extends EntityMap, E extends GraphEdges<E
                         const edge = entityEdges[targetType];
                         if (!edge.bidirectional) continue;
                         const targetId = edge.resolve(entity);
-                        if (!targetId) continue;
+                        if (targetId == null) continue;
                         const bucket = reverseIndex[targetType]?.[key as string]?.[targetId];
                         if (bucket) {
                             const idx = bucket.indexOf(String(id));
@@ -228,7 +228,7 @@ export const createNonProxyGraph = <EM extends EntityMap, E extends GraphEdges<E
                         const edge = entityEdges[targetType];
                         if (!edge.bidirectional) continue;
                         const oldTargetId = edge.resolve(entity);
-                        if (!oldTargetId) continue;
+                        if (oldTargetId == null) continue;
                         const bucket = reverseIndex[targetType]?.[key as string]?.[oldTargetId];
                         if (bucket) {
                             const idx = bucket.indexOf(String(id));
@@ -246,7 +246,7 @@ export const createNonProxyGraph = <EM extends EntityMap, E extends GraphEdges<E
                         const edge = entityEdges[targetType];
                         if (!edge.bidirectional) continue;
                         const newTargetId = edge.resolve(updated);
-                        if (!newTargetId) continue;
+                        if (newTargetId == null) continue;
                         if (!reverseIndex[targetType]) reverseIndex[targetType] = {};
                         if (!reverseIndex[targetType][key as string]) reverseIndex[targetType][key as string] = {};
                         if (!reverseIndex[targetType][key as string][newTargetId]) reverseIndex[targetType][key as string][newTargetId] = [];

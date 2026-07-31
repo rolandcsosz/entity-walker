@@ -38,7 +38,7 @@ export function buildCore<EM extends EntityMap, E extends GraphEdges<EM>>(
             if (!reverseIndex[targetType][sourceType]) reverseIndex[targetType][sourceType] = {};
             for (const sourceEntity of (entities[sourceType] ?? [])) {
                 const targetId = edge.resolve(sourceEntity);
-                if (!targetId) continue;
+                if (targetId == null) continue;
                 if (!reverseIndex[targetType][sourceType][targetId]) {
                     reverseIndex[targetType][sourceType][targetId] = [];
                 }
@@ -217,7 +217,7 @@ export function buildCore<EM extends EntityMap, E extends GraphEdges<EM>>(
                 const edge = entityEdges[targetType];
                 for (const sourceEntity of entities[sourceType] ?? []) {
                     const targetId = edge.resolve(sourceEntity);
-                    if (targetId && !byId[targetType]?.[targetId]) {
+                    if (targetId != null && !byId[targetType]?.[targetId]) {
                         missingEntities.push({ type: targetType, id: targetId });
                     }
                 }
@@ -233,7 +233,7 @@ export function buildCore<EM extends EntityMap, E extends GraphEdges<EM>>(
                 if (!referencedIds[targetType]) referencedIds[targetType] = new Set();
                 for (const sourceEntity of entities[sourceType] ?? []) {
                     const targetId = edge.resolve(sourceEntity);
-                    if (targetId) referencedIds[targetType].add(targetId);
+                    if (targetId != null) referencedIds[targetType].add(targetId);
                 }
             }
         }
