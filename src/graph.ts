@@ -220,36 +220,23 @@ export const createGraph = <EM extends EntityMap, E extends GraphEdges<EM>>(conf
 }): EntityGraph<GraphDef<EM, E>> => {
     const { createNode, toNodeList, graphSchema, graphInfo, ensureIndexes, markIndexesDirty, entities, byId, reverseIndex, nodeCache } = buildGraphCore<EM, E>(config.entities, config.edges);
 
-    function warnMissingReferences(sourceTypes?: string[]): void {
-        ensureIndexes();
-        const ents = entities as Record<string, any[]>;
-        const keys = sourceTypes ?? Object.keys(ents);
-        const warned = new Set<string>();
+    let suppressSyncWarnings = false;
 
-        for (const sourceType of keys) {
-            const sourceEdges = (config.edges as any)[sourceType];
-            if (!sourceEdges) continue;
-            const sourceEntities = ents[sourceType] ?? [];
-
-            for (const sourceEntity of sourceEntities) {
-                for (const targetType in sourceEdges) {
-                    const targetId = sourceEdges[targetType].resolve(sourceEntity);
-                    if (targetId == null) continue;
-                    if (byId[targetType]?.[String(targetId)] !== undefined) continue;
-
-                    const warningKey = `${sourceType}:${String(sourceEntity.id)}:${targetType}:${String(targetId)}`;
-                    if (warned.has(warningKey)) continue;
-                    warned.add(warningKey);
-
-                    console.warn(
-                        `[entity-walker] Missing reference '${sourceType}.${targetType}': entity '${sourceType}' with id '${sourceEntity.id}' points to missing '${targetType}' id '${targetId}'.`
-                    );
+    function checkRelationTargets(type: keyof EM, entity: any) {
+        const key = String(type);
+        const entityEdges = (config.edges as any)[key];
+        if (entityEdges) {
+            for (const targetType in entityEdges) {
+                const edge = entityEdges[targetType];
+                const targetId = edge.resolve(entity);
+                if (targetId != null && !byId[targetType]?.[targetId.toString()]) {
+                    console.warn(`[entity-walker] Relation target missing: '${key}' with id '${entity.id}' is missing '${targetType}' id '${targetId}'.`);
                 }
             }
         }
     }
 
-    function insert<K extends keyof EM>(type: K, entityOrEntities: EM[K] | EM[K][], opts?: { suppressReferenceWarnings?: boolean }): void {
+    function insert<K extends keyof EM>(type: K, entityOrEntities: EM[K] | EM[K][]): void {
         const items = Array.isArray(entityOrEntities) ? entityOrEntities : [entityOrEntities];
         const key = String(type);
         const ents = entities as Record<string, any[]>;
@@ -259,6 +246,9 @@ export const createGraph = <EM extends EntityMap, E extends GraphEdges<EM>>(conf
             byId[key] = byId[key] ?? {};
             byId[key][entity.id.toString()] = entity;
             nodeCache.delete(`${key}:${entity.id.toString()}`);
+            if (!suppressSyncWarnings) {
+                checkRelationTargets(type, entity);
+            }
             const entityEdges = (config.edges as any)[key];
             if (entityEdges) {
                 for (const targetType in entityEdges) {
@@ -273,11 +263,9 @@ export const createGraph = <EM extends EntityMap, E extends GraphEdges<EM>>(conf
                 }
             }
         }
-
-        if (!opts?.suppressReferenceWarnings) warnMissingReferences([key]);
     }
 
-    function update<K extends keyof EM>(type: K, entityOrEntities: EM[K] | EM[K][], opts?: { suppressReferenceWarnings?: boolean }): void {
+    function update<K extends keyof EM>(type: K, entityOrEntities: EM[K] | EM[K][]): void {
         ensureIndexes();
         const items = Array.isArray(entityOrEntities) ? entityOrEntities : [entityOrEntities];
         const key = String(type);
@@ -286,8 +274,11 @@ export const createGraph = <EM extends EntityMap, E extends GraphEdges<EM>>(conf
         for (const entity of items) {
             const existing = byId[key]?.[entity.id.toString()];
             if (!existing) {
-                insert(type, entity, { suppressReferenceWarnings: true });
+                insert(type, entity);
                 continue;
+            }
+            if (!suppressSyncWarnings) {
+                checkRelationTargets(type, entity);
             }
             // remove old bidirectional reverse index entries
             if (entityEdges) {
@@ -322,8 +313,6 @@ export const createGraph = <EM extends EntityMap, E extends GraphEdges<EM>>(conf
                 }
             }
         }
-
-        if (!opts?.suppressReferenceWarnings) warnMissingReferences([key]);
     }
 
     return new Proxy({}, {
@@ -345,45 +334,80 @@ export const createGraph = <EM extends EntityMap, E extends GraphEdges<EM>>(conf
             };
             if (prop === "sync") return (fresh: Record<string, any[]>, options?: { mode?: "merge" | "replace" }) => {
                 ensureIndexes();
-                const ents = entities as Record<string, any[]>;
                 const mode = options?.mode ?? "replace";
+                const ents = entities as Record<string, any[]>;
 
                 for (const key in fresh) {
-                    const freshList = fresh[key];
-                    if (!Array.isArray(freshList)) {
-                        throw new Error(`[entity-walker] sync('${key}') expects an array of entities.`);
-                    }
-                    for (let i = 0; i < freshList.length; i++) {
-                        const entity = freshList[i];
-                        if (!entity || typeof entity !== "object" || entity.id === undefined || entity.id === null) {
-                            throw new Error(`[entity-walker] sync('${key}') entity at index ${i} is missing a valid 'id'.`);
+                    const freshList = fresh[key] ?? [];
+                    for (const e of freshList) {
+                        if (e === undefined || e === null || e.id === undefined || e.id === null) {
+                            throw new Error(`[entity-walker] Sync payload is missing a valid 'id'.`);
                         }
                     }
                 }
 
-                for (const key in fresh) {
-                    const freshList: any[] = fresh[key] ?? [];
-                    ents[key] = ents[key] ?? [];
-
-                    if (mode === "replace") {
+                suppressSyncWarnings = true;
+                try {
+                    for (const key in fresh) {
+                        const freshList: any[] = fresh[key] ?? [];
                         const freshIds = new Set(freshList.map((e: any) => String(e.id)));
-                        for (const existing of [...ents[key]]) {
-                            if (!freshIds.has(String(existing.id))) createNode(key as keyof EM, existing.id).delete();
+                        if (mode === "replace") {
+                            for (const existing of [...(ents[key] ?? [])]) {
+                                if (!freshIds.has(String(existing.id))) createNode(key as keyof EM, existing.id).delete();
+                            }
+                        }
+                        if (freshList.length > 0) update(key as keyof EM, freshList);
+                        if (mode === "replace") {
+                            const sorted = freshList.map(e => byId[key]?.[e.id.toString()]).filter(Boolean);
+                            ents[key].length = 0;
+                            ents[key].push(...sorted);
                         }
                     }
-
-                    if (freshList.length > 0) {
-                        update(key as keyof EM, freshList, { suppressReferenceWarnings: true });
-                    }
-
-                    if (mode === "replace") {
-                        ents[key] = freshList
-                            .map((entity: any) => byId[key]?.[String(entity.id)])
-                            .filter((entity: any) => entity !== undefined);
-                    }
+                } finally {
+                    suppressSyncWarnings = false;
                 }
 
-                warnMissingReferences(Object.keys(fresh));
+                for (const key in fresh) {
+                    const freshList = fresh[key] ?? [];
+                    for (const e of freshList) {
+                        checkRelationTargets(key as keyof EM, e);
+                    }
+                }
+            };
+            if (prop === "beginTransaction") return () => {
+                const snapshotMethod = () => {
+                    const snap: Record<string, any[]> = {};
+                    for (const key in entities) snap[key] = (entities as Record<string, any[]>)[key].map(e => ({ ...e }));
+                    return snap;
+                };
+                const txEntities = snapshotMethod();
+                const txGraph = createGraph({ entities: txEntities, edges: config.edges });
+                let committed = false;
+                let rolledBack = false;
+
+                const commit = () => {
+                    if (committed || rolledBack) return;
+                    committed = true;
+                    const ents = entities as Record<string, any[]>;
+                    const txSnap = txGraph.snapshot();
+                    for (const key in ents) {
+                        ents[key] = (txSnap[key] ?? []).map((e: any) => ({ ...e }));
+                    }
+                    markIndexesDirty();
+                };
+
+                const rollback = () => {
+                    rolledBack = true;
+                    txGraph.restore(snapshotMethod());
+                };
+
+                return new Proxy(txGraph, {
+                    get(target, p) {
+                        if (p === "commit") return commit;
+                        if (p === "rollback") return rollback;
+                        return (target as any)[p];
+                    }
+                }) as any;
             };
             if (prop.startsWith("update") && prop.length > 6) {
                 const rawKey = prop[6].toLowerCase() + prop.slice(7);

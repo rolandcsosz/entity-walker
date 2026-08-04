@@ -135,12 +135,6 @@ export type ListDebugInfo = {
     scope: Record<string, (string | number)[]> | null;
 };
 
-export type SyncMode = "merge" | "replace";
-
-export type SyncOptions = {
-    mode?: SyncMode;
-};
-
 export type EntityNode<
     D extends GraphDef<any, any>,
     E extends EntityBase
@@ -171,11 +165,17 @@ export type EntityGraph<D extends GraphDef<any, any>> = {
     schema(): GraphSchema;
     snapshot(): Entities<D["entityModel"]>;
     restore(snapshot: Entities<D["entityModel"]>): void;
-    sync(fresh: Partial<Entities<D["entityModel"]>>, options?: SyncOptions): void;
+    sync(fresh: Partial<Entities<D["entityModel"]>>, options?: { mode?: "merge" | "replace" }): void;
+    beginTransaction(): TransactionGraph<D>;
 } & {
     [K in keyof D["entityModel"]as `update${Capitalize<string & K>}`]: (
         entity: D["entityModel"][K] | D["entityModel"][K][]
     ) => void;
+};
+
+export type TransactionGraph<D extends GraphDef<any, any>> = EntityGraph<D> & {
+    commit(): void;
+    rollback(): void;
 };
 
 export type EntityNodeNoProxy<
@@ -241,9 +241,15 @@ export type EntityGraphNoProxy<D extends GraphDef<any, any>> = {
     schema(): GraphSchema;
     snapshot(): Entities<D["entityModel"]>;
     restore(snapshot: Entities<D["entityModel"]>): void;
-    sync(fresh: Partial<Entities<D["entityModel"]>>, options?: SyncOptions): void;
+    sync(fresh: Partial<Entities<D["entityModel"]>>, options?: { mode?: "merge" | "replace" }): void;
+    beginTransaction(): TransactionGraphNoProxy<D>;
 } & {
     [K in keyof D["entityModel"]as `update${Capitalize<string & K>}`]: (
         entity: D["entityModel"][K] | D["entityModel"][K][]
     ) => void;
-}
+};
+
+export type TransactionGraphNoProxy<D extends GraphDef<any, any>> = EntityGraphNoProxy<D> & {
+    commit(): void;
+    rollback(): void;
+};
