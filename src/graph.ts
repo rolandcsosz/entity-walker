@@ -1,5 +1,6 @@
 import { buildCore } from "./core";
-import { EntityGraph, EntityMap, GraphDef, GraphEdges, NodeDebugInfo } from "./types";
+import { EntityGraph, EntityMap, GraphDef, GraphEdges, NodeDebugInfo, ApiGraphOptions, ApiGraph, ApiEntityConfig, ValidApi } from "./types";
+import { createApiGraph } from "./apiGraph";
 
 export function buildGraphCore<EM extends EntityMap, E extends GraphEdges<EM>>(
     entities: { [K in keyof EM]: EM[K][] },
@@ -158,6 +159,7 @@ export function buildGraphCore<EM extends EntityMap, E extends GraphEdges<EM>>(
         const node = new Proxy({}, {
             get(_, prop: string | symbol) {
                 if (typeof prop === 'symbol') return undefined;
+                if (prop === "then" || prop === "toJSON") return undefined;
                 if (prop === "value") return getValue;
                 if (prop === "valueOrThrow") return valueOrThrowMethod;
                 if (prop === "exists") return existsMethod;
@@ -214,10 +216,48 @@ export function buildGraphCore<EM extends EntityMap, E extends GraphEdges<EM>>(
     return { createNode, toNodeList, graphSchema, graphInfo, ensureIndexes, markIndexesDirty: core.markIndexesDirty, entities: core.entities, byId: core.byId, reverseIndex: core.reverseIndex, nodeCache: core.nodeCache };
 }
 
-export const createGraph = <EM extends EntityMap, E extends GraphEdges<EM>>(config: {
+export function createGraph<
+    EM extends EntityMap,
+    E extends GraphEdges<EM>,
+    ApiOpt extends ValidApi<GraphDef<EM, E>> = ValidApi<GraphDef<EM, E>>
+>(config: {
     entities: { [K in keyof EM]: EM[K][] };
     edges: E;
-}): EntityGraph<GraphDef<EM, E>> => {
+    api: ApiOpt;
+}): ApiGraph<GraphDef<EM, E>, ApiOpt>;
+
+export function createGraph<
+    D extends GraphDef<any, any>,
+    ApiOpt extends ValidApi<D> = ValidApi<D>
+>(config: {
+    entities: { [K in keyof D["entityModel"]]: D["entityModel"][K][] };
+    edges: D["edges"];
+    api: ApiOpt;
+}): ApiGraph<D, ApiOpt>;
+
+export function createGraph<
+    EM extends EntityMap,
+    E extends GraphEdges<EM>
+>(config: {
+    entities: { [K in keyof EM]: EM[K][] };
+    edges: E;
+}): EntityGraph<GraphDef<EM, E>>;
+
+export function createGraph<
+    D extends GraphDef<any, any>
+>(config: {
+    entities: { [K in keyof D["entityModel"]]: D["entityModel"][K][] };
+    edges: D["edges"];
+}): EntityGraph<D>;
+
+export function createGraph<
+    EM extends EntityMap,
+    E extends GraphEdges<EM>
+>(config: {
+    entities: any;
+    edges: any;
+    api?: any;
+}): any {
     const { createNode, toNodeList, graphSchema, graphInfo, ensureIndexes, markIndexesDirty, entities, byId, reverseIndex, nodeCache } = buildGraphCore<EM, E>(config.entities, config.edges);
 
     let suppressSyncWarnings = false;
@@ -315,7 +355,7 @@ export const createGraph = <EM extends EntityMap, E extends GraphEdges<EM>>(conf
         }
     }
 
-    return new Proxy({}, {
+    const baseGraph = new Proxy({}, {
         get(_, prop: string | symbol) {
             if (typeof prop === 'symbol') return undefined;
             if (prop === "info") return graphInfo;
@@ -420,7 +460,12 @@ export const createGraph = <EM extends EntityMap, E extends GraphEdges<EM>>(conf
                     return toNodeList(all.map((item: any) => createNode(entityKey as keyof EM, item.id.toString())), entityKey);
                 };
             }
-            return (id: string | number) => createNode(prop as keyof EM, id.toString());
+            return (id: string | number) => createNode(prop as any, id.toString());
         },
     }) as any;
-};
+
+    if (config.api) {
+        return createApiGraph(baseGraph, config.api) as any;
+    }
+    return baseGraph;
+}

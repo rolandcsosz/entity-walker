@@ -1,6 +1,6 @@
 import { GraphDef, GraphEdges, ValidSchema } from "../src/types";
 
-export type Transaction = { id: string; subcategoryId: string };
+export type Transaction = { id: string; subcategoryId: string; amount?: number; archived?: boolean };
 export type Subcategory = { id: string; name: string, mainCategoryId: string };
 export type MainCategory = { id: string; name: string; expenseTypeId?: string; incomeTypeId?: string };
 export type ExpenseType = { id: string; description: string };

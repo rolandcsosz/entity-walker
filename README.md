@@ -100,11 +100,40 @@ const txIds = graph
   .ids(); // ["tx1"]
 ```
 
+## API-Bound Graph Example (`ValidApi` & `GraphDef`)
+
+Bind remote REST APIs or generated OpenAPI SDK clients to `entity-walker` for automatic optimistic updates, lazy loading (`.load()`), and transaction safety:
+
+```typescript
+import { createGraph, type ValidSchema, type GraphEdges, type GraphDef, type ValidApi } from "entity-walker";
+import { getTransactions, createTransaction, updateTransaction, deleteTransaction } from "./api/client";
+
+type AppGraphDef = GraphDef<Schema, typeof edges>;
+
+const api: ValidApi<AppGraphDef> = {
+  transaction: {
+    list: async () => (await getTransactions()).data,
+    create: async (data) => (await createTransaction({ body: data })).data,
+    update: async (data) => (await updateTransaction({ path: { id: data.id }, body: data })).data,
+    delete: async (id: string) => { await deleteTransaction({ path: { id } }); },
+  },
+};
+
+const apiGraph = createGraph<AppGraphDef>({ entities, edges, api });
+
+// Fetch transactions from backend and sync into graph
+await apiGraph.transactionNodes().load();
+
+// Update entity with optimistic local update + backend sync + automatic rollback on failure
+await apiGraph.transaction("tx1").update((tx) => ({ ...tx, amount: 42 }));
+```
+
 ## Detailed Guides
 
 | Guide | Description |
 |---|---|
 | [Graph](docs/graph.md) | Full reference for `createGraph` — the standard API with clean `graph.entity("id")` / `node.relation()` syntax powered by `Proxy`. |
+| [API-Bound Graph](docs/api-graph.md) | Bind backend REST APIs / OpenAPI clients via `ValidApi` & `GraphDef` for optimistic updates, lazy loading (`.load()`), and automatic rollback. |
 | [Non-Proxy Graph](docs/non-proxy-graph.md) | Full reference for `createNonProxyGraph` — identical behaviour using a `.to()` calling convention, compatible with environments that do not support `Proxy`. |
 | [Graph Modification](docs/modification.md) | Update (upsert), node-level field update, delete, and cascade-delete entities at runtime with automatic index maintenance. |
 | [Debugging](docs/debugging.md) | Use `graph.info()` to inspect entity counts, missing FK targets, and orphan entities. |

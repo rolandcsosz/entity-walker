@@ -10,10 +10,11 @@
     ],
     "scripts": {
         "build": "tsc",
-       "test": "vitest",
+        "test": "vitest",
         "test:watch": "vitest --watch",
         "lint": "eslint . --ext .ts,.tsx",
-        "benchmark": "vitest ./tests/benchmark.test.ts"
+        "benchmark": "vitest ./tests/benchmark.test.ts",
+        "generate:client": "openapi-ts -i ./tests/openapi.json -o tests/generated/client -c @hey-api/client-fetch"
     },
     "repository": {
         "type": "git",
@@ -30,6 +31,8 @@
     "author": "Roland Csősz",
     "license": "MIT",
     "devDependencies": {
+        "@hey-api/client-fetch": "^0.13.1",
+        "@hey-api/openapi-ts": "^0.95.0",
         "@types/node": "^20.5.0",
         "eslint": "^8.50.0",
         "typescript": "^5.3.0",

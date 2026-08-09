@@ -236,6 +236,9 @@ Define a convenience type alias so you can annotate function parameters and vari
 type CustomGraph = GraphDef<Schema, typeof edges>;
 ```
 
+> **API-Bound Graphs**: If your graph connects to a remote REST API / OpenAPI SDK, use `ValidApi<CustomGraph>` to type your API configuration.
+> See the [API-Bound Graph guide](./api-graph.md) for full details.
+
 ---
 
 ## 3. Build the Graph
