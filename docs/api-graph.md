@@ -2,7 +2,7 @@
 
 `entity-walker` provides seamless, type-safe integration with remote REST APIs and generated OpenAPI SDK clients via `ValidApi` and `GraphDef`.
 
-Binding an API configuration to `createGraph` enables optimistic updates, lazy loading (`.load()`), custom actions, and automatic transaction rollback on network or backend failure.
+Binding an API configuration to `createGraph` enables optimistic updates, lazy loading (`.load()`), custom actions, offline delta queueing, HTTP status error classification, and explicit `ApiError` passing without throwing exceptions.
 
 ---
 
@@ -30,6 +30,7 @@ export type AppGraphDef = GraphDef<Schema, typeof edges>;
 
 // 4. Define API Configuration with ValidApi<AppGraphDef>
 const api: ValidApi<AppGraphDef> = {
+  isTransientError: (err) => err.status === 503 || err.code === "OFFLINE",
   transaction: {
     list: async () => {
       return (await getTransactions()).data;
@@ -61,30 +62,50 @@ const graph = createGraph<AppGraphDef>({
 
 ## API Handlers Reference
 
-When defining handlers with `ValidApi<AppGraphDef>`, all parameters and return types are strictly typed according to your `GraphDef`:
+When defining handlers with `ValidApi<AppGraphDef>`, all parameters and return types are strictly typed according to your `GraphDef`. Operations use explicit error passing (returning `ApiError`) rather than throwing exceptions:
 
 | Handler | Signature | Description |
 |---|---|---|
-| `list` | `() => Promise<E[]> \| E[]` | Fetches all entities of a type. Called by `list.load()`. |
-| `read` | `(id: E["id"]) => Promise<E> \| E` | Fetches a single entity by ID. Called by `node.load()`. |
-| `create` | `(data: Omit<E, "id">) => Promise<E> \| E` | Creates a new entity. Called by `graph.createEntity(data)`. |
-| `update` | `(data: E) => Promise<E \| void \| undefined> \| E \| void \| undefined` | Updates an entity. Called by `node.update(fn)` and `graph.updateEntity(data)`. |
-| `delete` | `(id: E["id"]) => Promise<void> \| void` | Deletes an entity by ID. Called by `node.delete()`. Must return `void`. |
+| `list` | `() => Promise<E[] \| ApiError> \| E[] \| ApiError` | Fetches all entities of a type. Called by `list.load()`. |
+| `read` | `(id: E["id"]) => Promise<E \| ApiError> \| E \| ApiError` | Fetches a single entity by ID. Called by `node.load()`. |
+| `create` | `(data: Omit<E, "id">) => Promise<E \| ApiError> \| E \| ApiError` | Creates a new entity. Called by `graph.createEntity(data)`. |
+| `update` | `(data: E) => Promise<E \| void \| undefined \| ApiError> \| E \| void \| undefined \| ApiError` | Updates an entity. Called by `node.update(fn)` and `graph.updateEntity(data)`. |
+| `delete` | `(id: E["id"]) => Promise<void \| ApiError> \| void \| ApiError` | Deletes an entity by ID. Called by `node.delete()`. |
+
+---
+
+## Error Classification & HTTP Status Codes
+
+`ApiError` objects extract status codes (`status`), error codes (`code`), and automatically classify whether an error is transient (`isTransient`):
+
+- **Transient Errors (`isTransient: true`)**: HTTP `500`, `502`, `503`, `504`, `429`, `408`, `0` (network failure), or network error messages. Optimistic graph updates are **retained** and queued into `pendingDeltas`.
+- **Non-Transient Errors (`isTransient: false`)**: HTTP `400`, `401`, `403`, `404`, `409`, `422` (client/validation error). Optimistic graph updates are **rolled back** and the `ApiError` is returned.
+- **Custom Predicate (`isTransientError`)**: Pass a custom function in `ValidApi` options to customize transient classification.
+
+```typescript
+export type ApiError = {
+    message: string;
+    code?: string | number;
+    status?: number;
+    isTransient?: boolean;
+    raw?: any;
+};
+```
 
 ---
 
 ## Node & List Methods
 
-### Lazy Loading Single Nodes (`.load()`)
-If a node is missing from local graph state, calling `.load()` fetches it using the configured `read` handler:
+### Lazy Loading Single Nodes with Chaining (`.load()`)
+If a node is missing from local graph state, calling `.load()` fetches it using the configured `read` handler and returns the loaded `ApiEntityNode` for chaining:
 
 ```typescript
 const txNode = await graph.transaction("tx123").load();
 console.log(txNode.value()?.item);
 ```
 
-### Loading & Caching Lists (`.load()`)
-Calling `.load()` on a node list populates local graph state using the configured `list` handler and caches query results:
+### Loading & Caching Lists with Chaining (`.load()`)
+Calling `.load()` on a node list populates local graph state using the configured `list` handler, caches query results, and returns the loaded `ApiEntityNodeList`:
 
 ```typescript
 // Fetch transactions from backend and sync into graph
@@ -92,6 +113,28 @@ const txList = await graph.transactionNodes().load();
 
 // Force re-fetch from backend (bypasses cache)
 const freshList = await graph.transactionNodes().load({ force: true });
+```
+
+---
+
+## Offline Delta Queue & Explicit `ApiError` Passing
+
+```typescript
+// Explicit error passing without throwing exceptions
+const res = await graph.transaction("tx123").update((tx) => ({ ...tx, amount: 999 }));
+
+if (res && "message" in res) {
+  console.log("Error status:", res.status, "Transient:", res.isTransient);
+}
+
+// Check pending deltas
+console.log(graph.pendingChanges()); 
+
+// Flush queued deltas once backend connectivity is restored
+const { synced, failed } = await graph.flushPending();
+
+// Clear queue manually if needed
+graph.clearPending();
 ```
 
 ---
@@ -139,26 +182,11 @@ const api: ValidApi<AppGraphDef> = {
       return { count: items.length };
     },
   },
-});
+};
 
 // Execute node action
 await graph.transaction("tx123").api.archive();
 
 // Execute root action
 await graph.api.batchImport([...]);
-```
-
----
-
-## Error Handling & Transaction Safety
-
-All async mutations perform **optimistic local graph updates** within an internal transaction. If a remote API call fails or throws an exception, all local changes are **automatically rolled back**:
-
-```typescript
-try {
-  await graph.transaction("tx123").update((tx) => ({ ...tx, amount: 999 }));
-} catch (err) {
-  // If backend call fails, the graph node is ALREADY rolled back to pre-update state!
-  console.error("Failed to update transaction on server:", err);
-}
 ```

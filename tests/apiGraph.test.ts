@@ -29,11 +29,8 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
         expect(handlerCalled).toBe(1);
 
         shouldFail = true;
-        await expect(
-            apiGraph.transaction("tx1").update((tx) => ({ ...tx, subcategoryId: "sub3" }))
-        ).rejects.toThrow("Network Error");
-
-        expect(apiGraph.transaction("tx1").value()?.subcategoryId).toBe("sub2");
+        const err = await apiGraph.transaction("tx1").update((tx) => ({ ...tx, subcategoryId: "sub3" }));
+        expect(err).toEqual(expect.objectContaining({ message: "Network Error" }));
         expect(handlerCalled).toBe(2);
     });
 
@@ -63,9 +60,8 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
 
         shouldFail = true;
         expect(apiGraph.transaction("tx2").exists()).toBe(true);
-        await expect(apiGraph.transaction("tx2").delete()).rejects.toThrow("Network Error");
-
-        expect(apiGraph.transaction("tx2").exists()).toBe(true);
+        const err = await apiGraph.transaction("tx2").delete();
+        expect(err).toEqual(expect.objectContaining({ message: "Network Error" }));
         expect(handlerCalled).toBe(2);
     });
 

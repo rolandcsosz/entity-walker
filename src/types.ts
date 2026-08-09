@@ -254,16 +254,36 @@ export type TransactionGraphNoProxy<D extends GraphDef<any, any>> = EntityGraphN
     rollback(): void;
 };
 
+export type ApiError = {
+    message: string;
+    code?: string | number;
+    status?: number;
+    isTransient?: boolean;
+    raw?: any;
+};
+
+export type PendingDelta = {
+    id: string;
+    entityType: string;
+    op: "create" | "update" | "delete";
+    entityId?: string | number;
+    data?: any;
+    timestamp: number;
+    error?: ApiError;
+};
+
 export interface ApiEntityConfig<D extends GraphDef<any, any>, E extends EntityBase> {
-    create?: (data: Omit<E, "id">) => Promise<E> | E;
-    read?: (id: E["id"]) => Promise<E> | E;
-    update?: (data: E) => Promise<E | void | undefined> | E | void | undefined;
-    delete?: (id: E["id"]) => Promise<void> | void;
-    list?: () => Promise<E[]> | E[];
+    create?: (data: Omit<E, "id">) => Promise<E | ApiError> | E | ApiError;
+    read?: (id: E["id"]) => Promise<E | ApiError> | E | ApiError;
+    update?: (data: E) => Promise<E | void | undefined | ApiError> | E | void | undefined | ApiError;
+    delete?: (id: E["id"]) => Promise<void | ApiError> | void | ApiError;
+    list?: () => Promise<E[] | ApiError> | E[] | ApiError;
     actions?: Record<string, (node: ApiEntityNode<D, E, any>, ...args: any[]) => Promise<any>>;
 }
 
 export type ValidApi<D extends GraphDef<any, any>> = {
+    isTransientError?: (error: ApiError) => boolean;
+} & {
     [K in keyof D["entityModel"] | "actions"]?: K extends "actions"
     ? Record<string, (graph: any, ...args: any[]) => Promise<any>>
     : ApiEntityConfig<D, D["entityModel"][K & keyof D["entityModel"]]>;
@@ -278,7 +298,7 @@ export type ApiEntityNode<
 > = {
     value(): E | undefined;
     exists(): boolean;
-    load(): Promise<void>;
+    load(): Promise<ApiEntityNode<D, E, Config>>;
     delete(): Promise<Config extends { delete: (...args: any[]) => Promise<infer R> } ? R : void>;
     update(fn: (entity: E) => Partial<E> | E): Promise<Config extends { update: (...args: any[]) => Promise<infer R> } ? R : void>;
     api: Config extends { actions: infer Actions }
@@ -341,6 +361,9 @@ export type ApiGraph<D extends GraphDef<any, any>, Options extends ValidApi<D> =
     sync(fresh: Partial<Entities<D["entityModel"]>>, options?: { mode?: "merge" | "replace" }): void;
     snapshot(): Entities<D["entityModel"]>;
     restore(snapshot: Entities<D["entityModel"]>): void;
+    pendingChanges(): PendingDelta[];
+    flushPending(): Promise<{ synced: PendingDelta[]; failed: { delta: PendingDelta; error: ApiError }[] }>;
+    clearPending(): void;
     api: Options extends { actions: infer Actions }
     ? {
         [K in keyof Actions]: Actions[K] extends (graph: any, ...args: infer Args) => Promise<infer R>

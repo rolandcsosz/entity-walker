@@ -1,10 +1,123 @@
-import { GraphDef, ApiGraph, ApiGraphOptions, ApiEntityNode, ApiEntityNodeList } from "./types";
+import { GraphDef, ApiGraph, ApiGraphOptions, ApiError, PendingDelta } from "./types";
+
+function generateUUID(): string {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+        return crypto.randomUUID();
+    }
+    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+        const r = (Math.random() * 16) | 0;
+        const v = c === "x" ? r : (r & 0x3) | 0x8;
+        return v.toString(16);
+    });
+}
+
+function extractStatusCode(res: any): number | undefined {
+    if (!res) return undefined;
+    if (typeof res.status === "number") return res.status;
+    if (typeof res.statusCode === "number") return res.statusCode;
+    if (typeof res.code === "number") return res.code;
+    if (res.response && typeof res.response.status === "number") return res.response.status;
+    if (res.error && typeof res.error.status === "number") return res.error.status;
+    return undefined;
+}
+
+function extractErrorCode(res: any): string | number | undefined {
+    const status = extractStatusCode(res);
+    if (status !== undefined) return status;
+    if (res.code !== undefined) return res.code;
+    if (res.error && res.error.code !== undefined) return res.error.code;
+    return undefined;
+}
+
+function isTransientStatusCode(status: number | undefined): boolean | undefined {
+    if (status === undefined) return undefined;
+    if (status === 0 || status === 408 || status === 429 || status >= 500) {
+        return true;
+    }
+    if (status >= 400 && status < 500) {
+        return false;
+    }
+    return undefined;
+}
+
+function isNetworkErrorMessage(msg: string): boolean {
+    const lower = msg.toLowerCase();
+    return (
+        lower.includes("network") ||
+        lower.includes("offline") ||
+        lower.includes("fetch failed") ||
+        lower.includes("failed to fetch") ||
+        lower.includes("econnrefused") ||
+        lower.includes("etimedout") ||
+        lower.includes("connection error")
+    );
+}
+
+function toApiError(res: any, customIsTransient?: (err: ApiError) => boolean): ApiError | null {
+    if (!res) return null;
+
+    let message: string | undefined;
+    let code: string | number | undefined = extractErrorCode(res);
+    let status: number | undefined = extractStatusCode(res);
+    let explicitIsTransient: boolean | undefined = res.isTransient;
+
+    if (typeof res === "object") {
+        if ("message" in res && typeof res.message === "string") {
+            message = res.message;
+        } else if (res.error && typeof res.error === "object" && "message" in res.error) {
+            message = res.error.message;
+        } else if (res.error && typeof res.error === "string") {
+            message = res.error;
+        }
+    }
+    if (!message && res instanceof Error) {
+        message = res.message;
+        if ((res as any).code !== undefined) code = (res as any).code;
+        if ((res as any).status !== undefined) status = (res as any).status;
+        if ((res as any).isTransient !== undefined) explicitIsTransient = (res as any).isTransient;
+    }
+
+    if (!message) {
+        return null;
+    }
+
+    let isTransient: boolean;
+    if (typeof explicitIsTransient === "boolean") {
+        isTransient = explicitIsTransient;
+    } else if (status !== undefined) {
+        const byStatus = isTransientStatusCode(status);
+        isTransient = byStatus !== undefined ? byStatus : false;
+    } else if (isNetworkErrorMessage(message)) {
+        isTransient = true;
+    } else if (typeof code === "string" && (code.includes("CONN") || code.includes("TIMEDOUT") || code.includes("NET"))) {
+        isTransient = true;
+    } else {
+        isTransient = true;
+    }
+
+    const apiErr: ApiError = {
+        message,
+        code,
+        status,
+        isTransient,
+        raw: res,
+    };
+
+    if (customIsTransient) {
+        apiErr.isTransient = customIsTransient(apiErr);
+    }
+
+    return apiErr;
+}
 
 export function createApiGraph<D extends GraphDef<any, any>>(
     baseGraph: any,
     options: ApiGraphOptions<D["entityModel"]>,
-    queryCache: Map<string, { ids: (string | number)[]; fetchedAt: number }> = new Map()
+    queryCache: Map<string, { ids: (string | number)[]; fetchedAt: number }> = new Map(),
+    pendingDeltas: PendingDelta[] = []
 ): ApiGraph<D> {
+
+    const parseError = (res: any) => toApiError(res, options.isTransientError);
 
     function wrapNode(type: string, id: any, activeGraph = baseGraph): any {
         const getBaseNode = () => activeGraph[type](id);
@@ -18,12 +131,17 @@ export function createApiGraph<D extends GraphDef<any, any>>(
                     const txNode = wrapNode(type, id, txGraph);
                     return actionFn(txNode, ...args)
                         .then((res: any) => {
+                            const err = parseError(res);
+                            if (err) {
+                                txGraph.rollback();
+                                return err;
+                            }
                             txGraph.commit();
                             return res;
                         })
                         .catch((err: any) => {
                             txGraph.rollback();
-                            throw err;
+                            return parseError(err) ?? { message: String(err), raw: err };
                         });
                 };
             }
@@ -34,53 +152,107 @@ export function createApiGraph<D extends GraphDef<any, any>>(
             exists: () => getBaseNode().exists(),
             load: async () => {
                 if (!entityConfig?.read) {
-                    throw new Error(`[entity-walker] read handler is required to load node for '${type}'.`);
+                    return { message: `[entity-walker] read handler is required to load node for '${type}'.` };
                 }
-                const response = await entityConfig.read(id);
+                let response: any;
+                try {
+                    response = await entityConfig.read(id);
+                } catch (err) {
+                    return parseError(err) ?? { message: String(err), raw: err };
+                }
+                const error = parseError(response);
+                if (error) {
+                    return error;
+                }
                 activeGraph.sync({ [type]: [response] }, { mode: "merge" });
+                return wrapNode(type, id, activeGraph);
             },
             delete: async () => {
                 const txGraph = activeGraph.beginTransaction();
-                try {
-                    txGraph[type](id).delete();
-                    let result: any = undefined;
-                    if (entityConfig?.delete) {
+                txGraph[type](id).delete();
+
+                let error: ApiError | null = null;
+                let result: any = undefined;
+                if (entityConfig?.delete) {
+                    try {
                         result = await entityConfig.delete(id);
+                        error = parseError(result);
+                    } catch (err) {
+                        error = parseError(err) ?? { message: String(err), raw: err };
                     }
+                }
+
+                if (error) {
+                    if (error.isTransient === false) {
+                        txGraph.rollback();
+                        return error;
+                    } else {
+                        txGraph.commit();
+                        const delta: PendingDelta = {
+                            id: generateUUID(),
+                            entityType: type,
+                            op: "delete",
+                            entityId: id,
+                            timestamp: Date.now(),
+                            error,
+                        };
+                        pendingDeltas.push(delta);
+                        return error;
+                    }
+                } else {
                     txGraph.commit();
                     return result;
-                } catch (error) {
-                    txGraph.rollback();
-                    throw error;
                 }
             },
             update: async (fn: (entity: any) => any) => {
                 const txGraph = activeGraph.beginTransaction();
-                try {
-                    const txNode = txGraph[type](id);
-                    if (!txNode.exists()) {
-                        throw new Error(`[entity-walker] Node '${type}' with id '${id}' does not exist for update.`);
-                    }
-                    const current = txNode.value();
-                    const updated = fn(current);
-                    txNode.update(() => updated);
+                const txNode = txGraph[type](id);
+                if (!txNode.exists()) {
+                    return { message: `[entity-walker] Node '${type}' with id '${id}' does not exist for update.` };
+                }
+                const current = txNode.value();
+                const updated = fn(current);
+                txNode.update(() => updated);
 
-                    let result: any = undefined;
-                    if (entityConfig?.update) {
+                let error: ApiError | null = null;
+                let result: any = undefined;
+                if (entityConfig?.update) {
+                    try {
                         const response = await entityConfig.update(updated);
                         result = response;
-                        if (response && typeof response === "object" && "id" in response) {
+                        error = parseError(response);
+                        if (!error && response && typeof response === "object" && "id" in response) {
                             txGraph.sync({ [type]: [response] }, { mode: "merge" });
                         }
+                    } catch (err) {
+                        error = parseError(err) ?? { message: String(err), raw: err };
                     }
+                }
+
+                if (error) {
+                    if (error.isTransient === false) {
+                        txGraph.rollback();
+                        return error;
+                    } else {
+                        txGraph.commit();
+                        const delta: PendingDelta = {
+                            id: generateUUID(),
+                            entityType: type,
+                            op: "update",
+                            entityId: id,
+                            data: updated,
+                            timestamp: Date.now(),
+                            error,
+                        };
+                        pendingDeltas.push(delta);
+                        return error;
+                    }
+                } else {
                     txGraph.commit();
                     return result;
-                } catch (error) {
-                    txGraph.rollback();
-                    throw error;
                 }
             },
-            graph: () => createApiGraph(activeGraph, options, queryCache),
+            graph: () => createApiGraph(activeGraph, options, queryCache, pendingDeltas),
             api: apiActions,
         };
 
@@ -129,12 +301,22 @@ export function createApiGraph<D extends GraphDef<any, any>>(
 
             const entityConfig = options[type];
             if (!entityConfig?.list) {
-                throw new Error(`[entity-walker] list handler is required to load node list for '${type}'.`);
+                return { message: `[entity-walker] list handler is required to load node list for '${type}'.` };
             }
 
-            const response = await entityConfig.list();
+            let response: any;
+            try {
+                response = await entityConfig.list();
+            } catch (err) {
+                return parseError(err) ?? { message: String(err), raw: err };
+            }
+            const error = parseError(response);
+            if (error) {
+                return error;
+            }
+
             if (!Array.isArray(response)) {
-                throw new Error(`[entity-walker] Expected array response for list fetch on '${type}'.`);
+                return { message: `[entity-walker] Expected array response for list fetch on '${type}'.` };
             }
 
             activeGraph.sync({ [type]: response }, { mode: "merge" });
@@ -173,11 +355,73 @@ export function createApiGraph<D extends GraphDef<any, any>>(
         return listProxy;
     }
 
+    async function flushPending() {
+        const synced: PendingDelta[] = [];
+        const failed: { delta: PendingDelta; error: ApiError }[] = [];
+
+        const queue = [...pendingDeltas];
+        for (const delta of queue) {
+            const entityConfig = options[delta.entityType];
+            let error: ApiError | null = null;
+            try {
+                if (delta.op === "create") {
+                    if (entityConfig?.create) {
+                        const res = await entityConfig.create(delta.data);
+                        error = parseError(res);
+                        if (!error && res && typeof res === "object" && "id" in res) {
+                            const resObj = res as any;
+                            if (delta.entityId && resObj.id !== delta.entityId) {
+                                const oldNode = baseGraph[delta.entityType](delta.entityId);
+                                if (oldNode && oldNode.exists()) {
+                                    oldNode.delete();
+                                }
+                                baseGraph.sync({ [delta.entityType]: [res] }, { mode: "merge" });
+                            } else {
+                                baseGraph.sync({ [delta.entityType]: [res] }, { mode: "merge" });
+                            }
+                        }
+                    }
+                } else if (delta.op === "update") {
+                    if (entityConfig?.update) {
+                        const currentNodeVal = baseGraph[delta.entityType](delta.entityId!).value();
+                        const payload = currentNodeVal ?? delta.data;
+                        const res = await entityConfig.update(payload);
+                        error = parseError(res);
+                        if (!error && res && typeof res === "object" && "id" in res) {
+                            baseGraph.sync({ [delta.entityType]: [res] }, { mode: "merge" });
+                        }
+                    }
+                } else if (delta.op === "delete") {
+                    if (entityConfig?.delete) {
+                        const res = await entityConfig.delete(delta.entityId);
+                        error = parseError(res);
+                    }
+                }
+            } catch (err) {
+                error = parseError(err) ?? { message: String(err), raw: err };
+            }
+
+            if (error) {
+                delta.error = error;
+                failed.push({ delta, error });
+                break;
+            } else {
+                synced.push(delta);
+                const idx = pendingDeltas.indexOf(delta);
+                if (idx !== -1) {
+                    pendingDeltas.splice(idx, 1);
+                }
+            }
+        }
+
+        return { synced, failed };
+    }
+
     const rootActions: Record<string, any> = {};
     if (options.actions) {
         for (const [actionName, actionFn] of Object.entries(options.actions)) {
             rootActions[actionName] = (...args: any[]) => {
-                const apiGraphInstance = createApiGraph(baseGraph, options, queryCache);
+                const apiGraphInstance = createApiGraph(baseGraph, options, queryCache, pendingDeltas);
                 return actionFn(apiGraphInstance, ...args);
             };
         }
@@ -187,6 +431,9 @@ export function createApiGraph<D extends GraphDef<any, any>>(
         sync: (fresh: any, opt?: any) => baseGraph.sync(fresh, opt),
         snapshot: () => baseGraph.snapshot(),
         restore: (snap: any) => baseGraph.restore(snap),
+        pendingChanges: () => [...pendingDeltas],
+        flushPending: () => flushPending(),
+        clearPending: () => { pendingDeltas.length = 0; },
         api: rootActions,
     };
 
@@ -204,18 +451,48 @@ export function createApiGraph<D extends GraphDef<any, any>>(
                 return async (data: any) => {
                     const entityConfig = options[type];
                     if (!entityConfig?.create) {
-                        throw new Error(`[entity-walker] create handler is required to create node of type '${type}'.`);
+                        return { message: `[entity-walker] create handler is required to create node of type '${type}'.` };
                     }
-                    const response = await entityConfig.create(data);
+
+                    let response: any;
+                    let error: ApiError | null = null;
+                    try {
+                        response = await entityConfig.create(data);
+                        error = parseError(response);
+                    } catch (err) {
+                        error = parseError(err) ?? { message: String(err), raw: err };
+                    }
+
+                    if (error) {
+                        if (error.isTransient === false) {
+                            return error;
+                        }
+                        const tempId = data.id ?? generateUUID();
+                        const optimisticEntity = { ...data, id: tempId };
+                        baseGraph.sync({ [type]: [optimisticEntity] }, { mode: "merge" });
+
+                        const delta: PendingDelta = {
+                            id: generateUUID(),
+                            entityType: type,
+                            op: "create",
+                            entityId: tempId,
+                            data,
+                            timestamp: Date.now(),
+                            error,
+                        };
+                        pendingDeltas.push(delta);
+                        return wrapNode(type, tempId);
+                    }
+
                     baseGraph.sync({ [type]: [response] }, { mode: "merge" });
-                    return wrapNode(type, response.id);
+                    return wrapNode(type, (response as any).id);
                 };
             }
             if (propStr.startsWith("update") && propStr !== "update") {
                 const type = propStr[6].toLowerCase() + propStr.slice(7);
                 return async (data: any) => {
                     if (!data || typeof data !== "object" || !("id" in data)) {
-                        throw new Error(`[entity-walker] update requires an entity object with an 'id'.`);
+                        return { message: `[entity-walker] update requires an entity object with an 'id'.` };
                     }
                     return wrapNode(type, data.id).update(() => data);
                 };
