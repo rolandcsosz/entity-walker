@@ -429,8 +429,21 @@ export function createApiGraph<D extends GraphDef<any, any>>(
 
     const apiGraph = {
         sync: (fresh: any, opt?: any) => baseGraph.sync(fresh, opt),
-        snapshot: () => baseGraph.snapshot(),
-        restore: (snap: any) => baseGraph.restore(snap),
+        snapshot: () => ({
+            entities: baseGraph.snapshot(),
+            pendingDeltas: JSON.parse(JSON.stringify(pendingDeltas)),
+        }),
+        restore: (snap: any) => {
+            if (snap && typeof snap === "object" && "entities" in snap) {
+                baseGraph.restore(snap.entities);
+                if (Array.isArray(snap.pendingDeltas)) {
+                    pendingDeltas.length = 0;
+                    pendingDeltas.push(...JSON.parse(JSON.stringify(snap.pendingDeltas)));
+                }
+            } else {
+                baseGraph.restore(snap);
+            }
+        },
         pendingChanges: () => [...pendingDeltas],
         flushPending: () => flushPending(),
         clearPending: () => { pendingDeltas.length = 0; },

@@ -331,7 +331,15 @@ export type ApiEntityNodeList<
     load(options?: { force?: boolean }): Promise<ApiEntityNodeList<D, E, Config>>;
 };
 
-export type ApiGraph<D extends GraphDef<any, any>, Options extends ValidApi<D> = ValidApi<D>> = {
+export type ApiGraphSnapshot<D extends GraphDef<any, any>> = {
+    entities: Entities<D["entityModel"]>;
+    pendingDeltas: PendingDelta[];
+};
+
+export type ApiGraph<
+    D extends GraphDef<any, any>,
+    Options extends ValidApi<D> = ValidApi<D>
+> = {
     [K in keyof D["entityModel"]]: (
         id: D["entityModel"][K]["id"]
     ) => ApiEntityNode<
@@ -340,13 +348,22 @@ export type ApiGraph<D extends GraphDef<any, any>, Options extends ValidApi<D> =
         Options[K]
     >;
 } & {
-    [K in keyof D["entityModel"]as `${string & K}Nodes`]: () => ApiEntityNodeList<
+    [K in keyof D["entityModel"] as `${string & K}Nodes`]: () => ApiEntityNodeList<
         D,
         D["entityModel"][K],
         Options[K]
     >;
 } & {
-    [K in keyof D["entityModel"]as `create${Capitalize<string & K>}`]: (
+    createEntity<K extends keyof D["entityModel"] & string>(
+        type: K,
+        data: Omit<D["entityModel"][K], "id">
+    ): Promise<ApiEntityNode<
+        D,
+        D["entityModel"][K],
+        Options[K]
+    >>;
+} & {
+    [K in keyof D["entityModel"] as `create${Capitalize<string & K>}`]: (
         data: Omit<D["entityModel"][K], "id">
     ) => Promise<ApiEntityNode<
         D,
@@ -354,13 +371,13 @@ export type ApiGraph<D extends GraphDef<any, any>, Options extends ValidApi<D> =
         Options[K]
     >>;
 } & {
-    [K in keyof D["entityModel"]as `update${Capitalize<string & K>}`]: (
+    [K in keyof D["entityModel"] as `update${Capitalize<string & K>}`]: (
         data: D["entityModel"][K]
     ) => Promise<any>;
 } & {
     sync(fresh: Partial<Entities<D["entityModel"]>>, options?: { mode?: "merge" | "replace" }): void;
-    snapshot(): Entities<D["entityModel"]>;
-    restore(snapshot: Entities<D["entityModel"]>): void;
+    snapshot(): ApiGraphSnapshot<D>;
+    restore(snapshot: ApiGraphSnapshot<D> | Entities<D["entityModel"]>): void;
     pendingChanges(): PendingDelta[];
     flushPending(): Promise<{ synced: PendingDelta[]; failed: { delta: PendingDelta; error: ApiError }[] }>;
     clearPending(): void;

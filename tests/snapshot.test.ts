@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { createGraph, createNonProxyGraph } from "../src";
-import { edges, numericEdges, SchemaNumeric } from "./types";
+import { createGraph, createNonProxyGraph, ApiError } from "../src";
+import { edges, numericEdges, SchemaNumeric, Transaction } from "./types";
 import { baseEntities, baseEntitiesNumeric, GraphWrapper, makeNonProxy, makeProxy } from "./shared";
 import { Entities } from "../src/types";
 
@@ -100,7 +100,7 @@ function runSnapshotTests(label: string, make: () => any) {
             it("restore with a different snapshot replaces all data", () => {
                 const g = make();
 
-                const altEntities: Entities<typeof baseEntities> = {
+                const altEntities: typeof baseEntities = {
                     ...structuredClone(baseEntities),
                     transaction: [{ id: "tx99", subcategoryId: "sub1" }],
                 };
@@ -200,5 +200,41 @@ describe("EntityGraph (proxy) numeric IDs — snapshot/restore", () => {
         g.updateTransaction({ id: 1, subcategoryId: 99 });
         g.restore(snap);
         expect(g.transaction(1).value()?.subcategoryId).toBe(10);
+    });
+});
+
+describe("ApiGraph — snapshot/restore with offline queue", () => {
+    it("includes pending deltas in full graph snapshot and restores them via restore()", async () => {
+        const apiGraph = createGraph({
+            entities: structuredClone(baseEntities),
+            edges,
+            api: {
+                transaction: {
+                    delete: async () => {
+                        return { message: "Offline", isTransient: true } as ApiError;
+                    }
+                }
+            }
+        });
+
+        await apiGraph.transaction("tx1").delete();
+        expect(apiGraph.pendingChanges().length).toBe(1);
+
+        const snap = apiGraph.snapshot();
+        expect(snap.entities).toBeDefined();
+        expect(snap.pendingDeltas.length).toBe(1);
+        expect(snap.pendingDeltas[0].op).toBe("delete");
+
+        // Restore into a fresh apiGraph
+        const freshGraph = createGraph({
+            entities: { ...structuredClone(baseEntities), transaction: [] as Transaction[] },
+            edges,
+            api: {}
+        });
+        expect(freshGraph.pendingChanges().length).toBe(0);
+
+        freshGraph.restore(snap);
+        expect(freshGraph.pendingChanges().length).toBe(1);
+        expect(freshGraph.pendingChanges()[0].op).toBe("delete");
     });
 });

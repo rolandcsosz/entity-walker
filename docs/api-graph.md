@@ -190,3 +190,21 @@ await graph.transaction("tx123").api.archive();
 // Execute root action
 await graph.api.batchImport([...]);
 ```
+
+---
+
+## State Serialization & Snapshot (`snapshot()` & `restore()`)
+
+`graph.snapshot()` returns an `ApiGraphSnapshot` containing both in-memory entity data and all queued `pendingDeltas`. Passing this snapshot to `graph.restore()` restores both entity state and offline queue state:
+
+```typescript
+// Export complete state (entities + offline queue)
+const snapshot = graph.snapshot();
+// snapshot: { entities: { ... }, pendingDeltas: [ ... ] }
+
+// Persist to storage or transfer across sessions
+const jsonString = JSON.stringify(snapshot);
+
+// Restore full graph state + offline queue
+graph.restore(JSON.parse(jsonString));
+```
