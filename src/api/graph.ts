@@ -90,6 +90,19 @@ function toApiError(res: any, customIsTransient?: (err: ApiError) => boolean): A
     }
 
     if (!message) {
+        if (status !== undefined && (status >= 400 || status === 0)) {
+            message = `API Request failed with status ${status}`;
+        } else if (
+            typeof res === "object" &&
+            (res.error || res.code || res.isTransient !== undefined || explicitIsTransient !== undefined)
+        ) {
+            message = `API Error: ${code ?? status ?? "Unknown error"}`;
+        } else if (typeof res === "string") {
+            message = res;
+        }
+    }
+
+    if (!message) {
         return null;
     }
 
@@ -327,7 +340,10 @@ export function createApiGraph<D extends GraphDef<any, any>>(
         res: any,
         context?: { op?: string; entityType?: string; entityId?: string | number; data?: any },
     ) => {
-        const err = toApiError(res, opts?.isTransientError);
+        const entityConfig = context?.entityType ? opts?.[context.entityType] : undefined;
+        const customIsTransient = entityConfig?.isTransientError ?? opts?.isTransientError;
+
+        const err = toApiError(res, customIsTransient);
         if (err) {
             notifyListeners({ type: "error", error: err, ...context });
             if (err.isTransient) {

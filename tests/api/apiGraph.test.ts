@@ -711,4 +711,91 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
             expect(node.value()?.id).toBe("subcategory_opt_1");
         });
     });
+
+    describe("Transient Error Handling Options", () => {
+        it("allows inspect err.raw in global isTransientError handler", async () => {
+            let receivedRawResponse: any = null;
+            const apiGraph = createGraph({
+                entities: structuredClone(baseEntities),
+                edges,
+                api: {
+                    isTransientError: (err: ApiError) => {
+                        receivedRawResponse = err.raw;
+                        return err.raw?.customHeader === "RETRY_LATER";
+                    },
+                    transaction: {
+                        update: async (data) => {
+                            return {
+                                status: 400,
+                                message: "Bad Request",
+                                customHeader: "RETRY_LATER",
+                            };
+                        },
+                    },
+                },
+            });
+
+            const err = await apiGraph.transaction("tx1").update((tx) => ({ ...tx, amount: 999 }));
+            expect(receivedRawResponse).toEqual(expect.objectContaining({ customHeader: "RETRY_LATER" }));
+            expect((err as ApiError).isTransient).toBe(true);
+        });
+
+        it("decides transience from err.raw custom status property", async () => {
+            const apiGraph = createGraph({
+                entities: structuredClone(baseEntities),
+                edges,
+                api: {
+                    isTransientError: (err: ApiError) => err.raw?.customStatus === "TEMPORARY_FAILURE",
+                    transaction: {
+                        update: async () => ({
+                            customStatus: "TEMPORARY_FAILURE",
+                            message: "Server Busy",
+                        }),
+                    },
+                },
+            });
+
+            const err = await apiGraph.transaction("tx1").update((tx) => ({ ...tx, amount: 999 }));
+            expect((err as ApiError).isTransient).toBe(true);
+            expect(apiGraph.pendingChanges().length).toBe(1);
+        });
+
+        it("allows entity-level isTransientError to override global options", async () => {
+            const apiGraph = createGraph({
+                entities: structuredClone(baseEntities),
+                edges,
+                api: {
+                    isTransientError: () => false, // global says non-transient
+                    transaction: {
+                        isTransientError: (err: ApiError) => err.raw?.entityLevelTransient === true, // entity says transient!
+                        update: async () => ({
+                            message: "Failed",
+                            entityLevelTransient: true,
+                        }),
+                    },
+                },
+            });
+
+            const err = await apiGraph.transaction("tx1").update((tx) => ({ ...tx, amount: 999 }));
+            expect((err as ApiError).isTransient).toBe(true);
+            expect(apiGraph.pendingChanges().length).toBe(1);
+        });
+
+        it("converts status-only error responses into ApiError with default message", async () => {
+            const apiGraph = createGraph({
+                entities: structuredClone(baseEntities),
+                edges,
+                api: {
+                    transaction: {
+                        update: async () => ({ status: 503 }) as ApiError, // No explicit .message property
+                    },
+                },
+            });
+
+            const err = await apiGraph.transaction("tx1").update((tx) => ({ ...tx, amount: 999 }));
+            expect(err.status).toBe(503);
+            expect(err.message).toContain("503");
+            expect(err.isTransient).toBe(true);
+        });
+    });
 });

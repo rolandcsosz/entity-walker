@@ -80,7 +80,27 @@ When defining handlers with `ValidApi<AppGraphDef>`, all parameters and return t
 
 - **Transient Errors (`isTransient: true`)**: HTTP `500`, `502`, `503`, `504`, `429`, `408`, `0` (network failure), or network error messages. Optimistic graph updates are **retained** and queued into `pendingDeltas`.
 - **Non-Transient Errors (`isTransient: false`)**: HTTP `400`, `401`, `403`, `404`, `409`, `422` (client/validation error). Optimistic graph updates are **rolled back** and the `ApiError` is returned.
-- **Custom Predicate (`isTransientError`)**: Pass a custom function in `ValidApi` options to customize transient classification.
+
+### Custom Transient Classification (`isTransientError`)
+
+Pass a custom callback globally in `ValidApi` options or per-entity in `ApiEntityConfig` to decide whether an error is transient:
+
+- **`isTransientError?: (error: ApiError) => boolean`**: Receives the `ApiError` object. Inspect normalized fields (`err.status`, `err.code`, `err.message`) or the raw response (`err.raw`). Return `true` for transient errors, `false` for non-transient errors.
+
+```typescript
+const api: ValidApi<AppGraphDef> = {
+  // Global classification
+  isTransientError: (err) => {
+    return err.raw?.headers?.["x-retry-after"] !== undefined || err.status === 503;
+  },
+  
+  // Entity-level override (takes precedence over global classification)
+  transaction: {
+    isTransientError: (err) => err.raw?.entitySpecificRetry === true,
+    update: async (data) => updateTransaction(data),
+  },
+};
+```
 
 ```typescript
 export type ApiError = {

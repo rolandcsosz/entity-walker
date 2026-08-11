@@ -54,6 +54,8 @@ export type AutoFlushOptions = {
     onOnline?: boolean;
 };
 
+export type IsTransientFn = (error: ApiError) => boolean;
+
 export interface ApiEntityConfig<D extends GraphDef<any, any>, E extends EntityBase> {
     create?: (data: Omit<E, "id"> & { id?: E["id"] }) => Promise<E | ApiError> | E | ApiError;
     read?: (id: E["id"]) => Promise<E | ApiError> | E | ApiError;
@@ -61,12 +63,13 @@ export interface ApiEntityConfig<D extends GraphDef<any, any>, E extends EntityB
     delete?: (id: E["id"]) => Promise<void | ApiError> | void | ApiError;
     list?: () => Promise<E[] | ApiError> | E[] | ApiError;
     actions?: Record<string, (node: ApiEntityNode<D, E, any>, ...args: any[]) => Promise<any>>;
+    isTransientError?: IsTransientFn;
 }
 
 export type NewIdFormatter = (entity: string, index: number, data?: any) => string | number;
 
 export type ValidApi<D extends GraphDef<any, any>> = {
-    isTransientError?: (error: ApiError) => boolean;
+    isTransientError?: IsTransientFn;
     idFormat?: NewIdFormatter;
 } & {
     [K in keyof D["entityModel"] | "actions"]?: K extends "actions"
