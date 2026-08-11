@@ -1,6 +1,6 @@
 import { createGraph as createCoreGraph } from "../core/graph";
 import { GraphDef, EntityMap, GraphEdges } from "../core/types";
-import { ApiGraph, ApiError, PendingDelta, ValidApi } from "./types";
+import { ApiGraph, ApiError, PendingDelta, ValidApi, ApiTransactionGraph } from "./types";
 
 function generateUUID(): string {
     if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -132,6 +132,7 @@ export function createApiGraph<D extends GraphDef<any, any>, Options extends Val
     options?: Options,
     queryCache?: Map<string, { ids: (string | number)[]; fetchedAt: number }>,
     pendingDeltas?: PendingDelta[],
+    transactionContext?: { txCoreGraph: any; txId: string; stagedDeltas: PendingDelta[] },
 ): ApiGraph<D, Options>;
 
 export function createApiGraph<D extends GraphDef<any, any>>(
@@ -139,6 +140,7 @@ export function createApiGraph<D extends GraphDef<any, any>>(
     options?: any,
     queryCache: Map<string, { ids: (string | number)[]; fetchedAt: number }> = new Map(),
     pendingDeltas: PendingDelta[] = [],
+    transactionContext?: { txCoreGraph: any; txId: string; stagedDeltas: PendingDelta[] },
 ): ApiGraph<D> {
     let baseGraph: any;
     let opts: any;
@@ -146,6 +148,7 @@ export function createApiGraph<D extends GraphDef<any, any>>(
     if (
         baseGraphOrConfig &&
         typeof baseGraphOrConfig === "object" &&
+        typeof baseGraphOrConfig.sync !== "function" &&
         "entities" in baseGraphOrConfig &&
         "edges" in baseGraphOrConfig
     ) {
@@ -156,6 +159,7 @@ export function createApiGraph<D extends GraphDef<any, any>>(
         opts = options!;
     }
 
+    const isTx = !!transactionContext;
     const parseError = (res: any) => toApiError(res, opts?.isTransientError);
 
     function wrapNode(type: string, id: any, activeGraph = baseGraph): any {
@@ -207,6 +211,19 @@ export function createApiGraph<D extends GraphDef<any, any>>(
                 return wrapNode(type, id, activeGraph);
             },
             delete: async () => {
+                if (isTx) {
+                    activeGraph[type](id).delete();
+                    transactionContext!.stagedDeltas.push({
+                        id: generateUUID(),
+                        transactionId: transactionContext!.txId,
+                        entityType: type,
+                        op: "delete",
+                        entityId: id,
+                        timestamp: Date.now(),
+                    });
+                    return undefined;
+                }
+
                 const txGraph = activeGraph.beginTransaction();
                 txGraph[type](id).delete();
 
@@ -244,6 +261,26 @@ export function createApiGraph<D extends GraphDef<any, any>>(
                 }
             },
             update: async (fn: (entity: any) => any) => {
+                if (isTx) {
+                    const txNode = activeGraph[type](id);
+                    if (!txNode.exists()) {
+                        return { message: `[entity-walker] Node '${type}' with id '${id}' does not exist for update.` };
+                    }
+                    const current = txNode.value();
+                    const updated = fn(current);
+                    txNode.update(() => updated);
+                    transactionContext!.stagedDeltas.push({
+                        id: generateUUID(),
+                        transactionId: transactionContext!.txId,
+                        entityType: type,
+                        op: "update",
+                        entityId: id,
+                        data: updated,
+                        timestamp: Date.now(),
+                    });
+                    return undefined;
+                }
+
                 const txGraph = activeGraph.beginTransaction();
                 const txNode = txGraph[type](id);
                 if (!txNode.exists()) {
@@ -291,7 +328,7 @@ export function createApiGraph<D extends GraphDef<any, any>>(
                     return result;
                 }
             },
-            graph: () => createApiGraph(activeGraph, opts, queryCache, pendingDeltas),
+            graph: () => createApiGraph(activeGraph, opts, queryCache, pendingDeltas, transactionContext),
             api: apiActions,
         };
 
@@ -460,7 +497,7 @@ export function createApiGraph<D extends GraphDef<any, any>>(
     if (opts?.actions) {
         for (const [actionName, actionFn] of Object.entries(opts.actions)) {
             rootActions[actionName] = (...args: any[]) => {
-                const apiGraphInstance = createApiGraph(baseGraph, opts, queryCache, pendingDeltas);
+                const apiGraphInstance = createApiGraph(baseGraph, opts, queryCache, pendingDeltas, transactionContext);
                 return (actionFn as any)(apiGraphInstance, ...args);
             };
         }
@@ -488,6 +525,108 @@ export function createApiGraph<D extends GraphDef<any, any>>(
         clearPending: () => {
             pendingDeltas.length = 0;
         },
+        beginTransaction: (): ApiTransactionGraph<D> => {
+            const txCoreGraph = baseGraph.beginTransaction();
+            const txId = generateUUID();
+            const stagedDeltas: PendingDelta[] = [];
+
+            const txApiGraph = createApiGraph(txCoreGraph, opts, queryCache, pendingDeltas, {
+                txCoreGraph,
+                txId,
+                stagedDeltas,
+            });
+
+            let committed = false;
+            let rolledBack = false;
+
+            const commit = async (): Promise<{ success: boolean; error?: ApiError }> => {
+                if (committed || rolledBack) {
+                    return { success: !rolledBack };
+                }
+
+                if (transactionContext) {
+                    committed = true;
+                    transactionContext.stagedDeltas.push(...stagedDeltas);
+                    txCoreGraph.commit();
+                    stagedDeltas.length = 0;
+                    return { success: true };
+                }
+
+                if (stagedDeltas.length === 0) {
+                    committed = true;
+                    txCoreGraph.commit();
+                    return { success: true };
+                }
+
+                for (let i = 0; i < stagedDeltas.length; i++) {
+                    const delta = stagedDeltas[i];
+                    const entityConfig = opts?.[delta.entityType];
+                    let error: ApiError | null = null;
+
+                    try {
+                        if (delta.op === "create") {
+                            if (entityConfig?.create) {
+                                const res = await entityConfig.create(delta.data);
+                                error = parseError(res);
+                                if (!error && res && typeof res === "object" && "id" in res) {
+                                    txCoreGraph.sync({ [delta.entityType]: [res] }, { mode: "merge" });
+                                }
+                            }
+                        } else if (delta.op === "update") {
+                            if (entityConfig?.update) {
+                                const res = await entityConfig.update(delta.data);
+                                error = parseError(res);
+                                if (!error && res && typeof res === "object" && "id" in res) {
+                                    txCoreGraph.sync({ [delta.entityType]: [res] }, { mode: "merge" });
+                                }
+                            }
+                        } else if (delta.op === "delete") {
+                            if (entityConfig?.delete) {
+                                const res = await entityConfig.delete(delta.entityId);
+                                error = parseError(res);
+                            }
+                        }
+                    } catch (err) {
+                        error = parseError(err) ?? { message: String(err), raw: err };
+                    }
+
+                    if (error) {
+                        if (error.isTransient === false) {
+                            rolledBack = true;
+                            txCoreGraph.rollback();
+                            stagedDeltas.length = 0;
+                            return { success: false, error };
+                        } else {
+                            committed = true;
+                            txCoreGraph.commit();
+                            const remaining = stagedDeltas.slice(i).map((d) => ({ ...d, error }));
+                            pendingDeltas.push(...remaining);
+                            stagedDeltas.length = 0;
+                            return { success: false, error };
+                        }
+                    }
+                }
+
+                committed = true;
+                txCoreGraph.commit();
+                stagedDeltas.length = 0;
+                return { success: true };
+            };
+
+            const rollback = () => {
+                rolledBack = true;
+                txCoreGraph.rollback();
+                stagedDeltas.length = 0;
+            };
+
+            return new Proxy(txApiGraph, {
+                get(target, p) {
+                    if (p === "commit") return commit;
+                    if (p === "rollback") return rollback;
+                    return (target as any)[p];
+                },
+            }) as any;
+        },
         api: rootActions,
     };
 
@@ -503,6 +642,22 @@ export function createApiGraph<D extends GraphDef<any, any>>(
             if (propStr.startsWith("create") && propStr !== "create") {
                 const type = propStr[6].toLowerCase() + propStr.slice(7);
                 return async (data: any) => {
+                    if (isTx) {
+                        const tempId = data.id ?? generateUUID();
+                        const optimisticEntity = { ...data, id: tempId };
+                        baseGraph.sync({ [type]: [optimisticEntity] }, { mode: "merge" });
+                        transactionContext!.stagedDeltas.push({
+                            id: generateUUID(),
+                            transactionId: transactionContext!.txId,
+                            entityType: type,
+                            op: "create",
+                            entityId: tempId,
+                            data,
+                            timestamp: Date.now(),
+                        });
+                        return wrapNode(type, tempId);
+                    }
+
                     const entityConfig = opts?.[type];
                     if (!entityConfig?.create) {
                         return {

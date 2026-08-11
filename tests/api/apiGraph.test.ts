@@ -327,7 +327,6 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
         expect(snap.pendingDeltas.length).toBe(1);
         expect(snap.pendingDeltas[0].op).toBe("delete");
 
-        // Restore into a fresh apiGraph
         const freshGraph = createGraph({
             entities: { ...structuredClone(baseEntities), transaction: [] as Transaction[] },
             edges,
@@ -338,5 +337,153 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
         freshGraph.restore(snap);
         expect(freshGraph.pendingChanges().length).toBe(1);
         expect(freshGraph.pendingChanges()[0].op).toBe("delete");
+    });
+
+    describe("Multi-Entity API Transactions (tx.commit() and tx.rollback())", () => {
+        it("stages multiple entity mutations in a transaction and pushes them on commit()", async () => {
+            const updatedTransactions: any[] = [];
+            const updatedSubcategories: any[] = [];
+
+            const apiGraph = createGraph({
+                entities: structuredClone(baseEntities),
+                edges,
+                api: {
+                    transaction: {
+                        update: async (data) => {
+                            updatedTransactions.push(data);
+                        },
+                    },
+                    subcategory: {
+                        update: async (data) => {
+                            updatedSubcategories.push(data);
+                        },
+                    },
+                },
+            });
+
+            const tx = apiGraph.beginTransaction();
+            await tx.transaction("tx1").update((t) => ({ ...t, subcategoryId: "sub2" }));
+            await tx.subcategory("sub1").update((s) => ({ ...s, name: "Renamed Sub" }));
+
+            expect(apiGraph.transaction("tx1").value()?.subcategoryId).toBe("sub1");
+            expect(tx.transaction("tx1").value()?.subcategoryId).toBe("sub2");
+            expect(updatedTransactions.length).toBe(0);
+
+            const res = await tx.commit();
+            expect(res.success).toBe(true);
+            expect(updatedTransactions.length).toBe(1);
+            expect(updatedSubcategories.length).toBe(1);
+            expect(apiGraph.transaction("tx1").value()?.subcategoryId).toBe("sub2");
+            expect(apiGraph.subcategory("sub1").value()?.name).toBe("Renamed Sub");
+        });
+
+        it("discards uncommitted changes on rollback() without sending network requests", async () => {
+            let apiCalled = false;
+            const apiGraph = createGraph({
+                entities: structuredClone(baseEntities),
+                edges,
+                api: {
+                    transaction: {
+                        update: async () => {
+                            apiCalled = true;
+                        },
+                    },
+                },
+            });
+
+            const tx = apiGraph.beginTransaction();
+            await tx.transaction("tx1").update((t) => ({ ...t, subcategoryId: "sub2" }));
+            tx.rollback();
+
+            expect(apiCalled).toBe(false);
+            expect(apiGraph.transaction("tx1").value()?.subcategoryId).toBe("sub1");
+        });
+
+        it("rolls back local changes when commit() encounters a permanent server error", async () => {
+            const apiGraph = createGraph({
+                entities: structuredClone(baseEntities),
+                edges,
+                api: {
+                    transaction: {
+                        update: async () => {
+                            return { message: "Validation error", status: 400, isTransient: false } as ApiError;
+                        },
+                    },
+                },
+            });
+
+            const tx = apiGraph.beginTransaction();
+            await tx.transaction("tx1").update((t) => ({ ...t, subcategoryId: "sub2" }));
+
+            const res = await tx.commit();
+            expect(res.success).toBe(false);
+            expect(res.error?.status).toBe(400);
+
+            expect(apiGraph.transaction("tx1").value()?.subcategoryId).toBe("sub1");
+        });
+
+        it("supports nested transactions — inner commit merges into outer transaction without HTTP calls", async () => {
+            const updatedTransactions: any[] = [];
+            const apiGraph = createGraph({
+                entities: structuredClone(baseEntities),
+                edges,
+                api: {
+                    transaction: {
+                        update: async (data) => {
+                            updatedTransactions.push(data);
+                        },
+                    },
+                },
+            });
+
+            const txOuter = apiGraph.beginTransaction();
+            const txInner = txOuter.beginTransaction();
+
+            await txInner.transaction("tx1").update((t) => ({ ...t, subcategoryId: "sub_inner" }));
+            expect(txInner.transaction("tx1").value()?.subcategoryId).toBe("sub_inner");
+
+            const innerRes = await txInner.commit();
+            expect(innerRes.success).toBe(true);
+            expect(updatedTransactions.length).toBe(0);
+            expect(txOuter.transaction("tx1").value()?.subcategoryId).toBe("sub_inner");
+            expect(apiGraph.transaction("tx1").value()?.subcategoryId).toBe("sub1");
+
+            const outerRes = await txOuter.commit();
+            expect(outerRes.success).toBe(true);
+            expect(updatedTransactions.length).toBe(1);
+            expect(apiGraph.transaction("tx1").value()?.subcategoryId).toBe("sub_inner");
+        });
+
+        it("handles concurrent transactions independently", async () => {
+            const callLog: string[] = [];
+            const apiGraph = createGraph({
+                entities: structuredClone(baseEntities),
+                edges,
+                api: {
+                    transaction: {
+                        update: async (data) => {
+                            callLog.push(data.subcategoryId);
+                        },
+                    },
+                },
+            });
+
+            const txA = apiGraph.beginTransaction();
+            const txB = apiGraph.beginTransaction();
+
+            await txA.transaction("tx1").update((t) => ({ ...t, subcategoryId: "subA" }));
+            await txB.transaction("tx1").update((t) => ({ ...t, subcategoryId: "subB" }));
+
+            expect(txA.transaction("tx1").value()?.subcategoryId).toBe("subA");
+            expect(txB.transaction("tx1").value()?.subcategoryId).toBe("subB");
+            expect(apiGraph.transaction("tx1").value()?.subcategoryId).toBe("sub1");
+
+            await txA.commit();
+            expect(apiGraph.transaction("tx1").value()?.subcategoryId).toBe("subA");
+
+            await txB.commit();
+            expect(apiGraph.transaction("tx1").value()?.subcategoryId).toBe("subB");
+            expect(callLog).toEqual(["subA", "subB"]);
+        });
     });
 });

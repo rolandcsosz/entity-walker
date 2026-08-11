@@ -10,6 +10,7 @@ export type ApiError = {
 
 export type PendingDelta = {
     id: string;
+    transactionId?: string;
     entityType: string;
     op: "create" | "update" | "delete";
     entityId?: string | number;
@@ -87,6 +88,14 @@ export type ApiGraphSnapshot<D extends GraphDef<any, any>> = {
     pendingDeltas: PendingDelta[];
 };
 
+export type ApiTransactionGraph<D extends GraphDef<any, any>, Options extends ValidApi<D> = ValidApi<D>> = ApiGraph<
+    D,
+    Options
+> & {
+    commit(): Promise<{ success: boolean; error?: ApiError }>;
+    rollback(): void;
+};
+
 export type ApiGraph<D extends GraphDef<any, any>, Options extends ValidApi<D> = ValidApi<D>> = {
     [K in keyof D["entityModel"]]: (id: D["entityModel"][K]["id"]) => ApiEntityNode<D, D["entityModel"][K], Options[K]>;
 } & {
@@ -109,6 +118,7 @@ export type ApiGraph<D extends GraphDef<any, any>, Options extends ValidApi<D> =
     pendingChanges(): PendingDelta[];
     flushPending(): Promise<{ synced: PendingDelta[]; failed: { delta: PendingDelta; error: ApiError }[] }>;
     clearPending(): void;
+    beginTransaction(): ApiTransactionGraph<D, Options>;
     api: Options extends { actions: infer Actions }
         ? {
               [K in keyof Actions]: Actions[K] extends (graph: any, ...args: infer Args) => Promise<infer R>
