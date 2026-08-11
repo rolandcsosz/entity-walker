@@ -9,6 +9,7 @@ import {
     ApiGraphEvent,
     ApiGraphSubscriber,
     AutoFlushOptions,
+    NewIdFormatter,
 } from "./types";
 
 function generateUUID(): string {
@@ -145,6 +146,8 @@ export function createApiGraph<D extends GraphDef<any, any>, Options extends Val
     listeners?: Set<ApiGraphSubscriber>,
     idMap?: Map<string | number, string | number>,
     edges?: any,
+    idCounters?: Map<string, number>,
+    formatterRef?: { fn?: NewIdFormatter },
 ): ApiGraph<D, Options>;
 
 export function createApiGraph<D extends GraphDef<any, any>>(
@@ -156,6 +159,8 @@ export function createApiGraph<D extends GraphDef<any, any>>(
     listeners: Set<ApiGraphSubscriber> = new Set(),
     idMap: Map<string | number, string | number> = new Map(),
     graphEdges?: any,
+    idCounters: Map<string, number> = new Map(),
+    formatterRef: { fn?: NewIdFormatter } = { fn: undefined },
 ): ApiGraph<D> {
     let baseGraph: any;
     let opts: any;
@@ -175,6 +180,19 @@ export function createApiGraph<D extends GraphDef<any, any>>(
         baseGraph = baseGraphOrConfig;
         opts = options!;
         edges = graphEdges ?? baseGraph?.edges;
+    }
+
+    if (opts?.idFormat && !formatterRef.fn) {
+        formatterRef.fn = opts.idFormat;
+    }
+
+    function generateNewEntityId(type: string, data?: any): string | number {
+        const nextIndex = (idCounters.get(type) || 0) + 1;
+        idCounters.set(type, nextIndex);
+        if (formatterRef.fn) {
+            return formatterRef.fn(type, nextIndex, data);
+        }
+        return generateUUID();
     }
 
     const isTx = !!transactionContext;
@@ -553,6 +571,8 @@ export function createApiGraph<D extends GraphDef<any, any>>(
                     listeners,
                     idMap,
                     edges,
+                    idCounters,
+                    formatterRef,
                 ),
             api: apiActions,
         };
@@ -753,6 +773,8 @@ export function createApiGraph<D extends GraphDef<any, any>>(
                     listeners,
                     idMap,
                     edges,
+                    idCounters,
+                    formatterRef,
                 );
                 return (actionFn as any)(apiGraphInstance, ...args);
             };
@@ -840,6 +862,9 @@ export function createApiGraph<D extends GraphDef<any, any>>(
         },
         resolveId: (id: string | number) => resolveId(id),
         getOriginalId: (id: string | number) => getOriginalId(id),
+        setIdFormat: (formatter: NewIdFormatter) => {
+            formatterRef.fn = formatter;
+        },
         beginTransaction: (): ApiTransactionGraph<D> => {
             const txCoreGraph = baseGraph.beginTransaction();
             const txId = generateUUID();
@@ -858,6 +883,8 @@ export function createApiGraph<D extends GraphDef<any, any>>(
                 listeners,
                 idMap,
                 edges,
+                idCounters,
+                formatterRef,
             );
 
             let committed = false;
@@ -1007,11 +1034,17 @@ export function createApiGraph<D extends GraphDef<any, any>>(
                 return (target as any)[p];
             }
             const propStr = String(p);
+            if (propStr === "createEntity") {
+                return (type: string, data: any) => {
+                    const fnName = `create${type[0].toUpperCase()}${type.slice(1)}`;
+                    return (apiGraph as any)[fnName](data);
+                };
+            }
             if (propStr.startsWith("create") && propStr !== "create") {
                 const type = propStr[6].toLowerCase() + propStr.slice(7);
                 return async (data: any) => {
                     if (isTx) {
-                        const tempId = data.id ?? generateUUID();
+                        const tempId = data.id ?? generateNewEntityId(type, data);
                         const optimisticEntity = { ...data, id: tempId };
                         baseGraph.sync({ [type]: [optimisticEntity] }, { mode: "merge" });
                         transactionContext!.stagedDeltas.push({
@@ -1049,7 +1082,7 @@ export function createApiGraph<D extends GraphDef<any, any>>(
                         if (error.isTransient === false) {
                             return error;
                         }
-                        const tempId = data.id ?? generateUUID();
+                        const tempId = data.id ?? generateNewEntityId(type, data);
                         const optimisticEntity = { ...data, id: tempId };
                         baseGraph.sync({ [type]: [optimisticEntity] }, { mode: "merge" });
 

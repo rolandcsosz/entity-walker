@@ -641,4 +641,74 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
             expect(apiGraph.transaction("tx1").value()?.subcategoryId).toBe("real_sub_100");
         });
     });
+
+    describe("Custom New Entity ID Formatting", () => {
+        it("uses default UUID when no custom format is set", async () => {
+            const apiGraph = createGraph({
+                entities: structuredClone(baseEntities),
+                edges,
+                api: {
+                    subcategory: {
+                        create: async () => ({ message: "Offline", isTransient: true }) as ApiError,
+                    },
+                },
+            });
+
+            const node = await apiGraph.createSubcategory({
+                name: "Offline Sub",
+                mainCategoryId: "mc1",
+            });
+
+            const generatedId = node.value()?.id;
+            expect(typeof generatedId).toBe("string");
+            expect(generatedId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
+        });
+
+        it("uses custom formatter configured via apiGraph.setIdFormat()", async () => {
+            const apiGraph = createGraph({
+                entities: structuredClone(baseEntities),
+                edges,
+                api: {
+                    subcategory: {
+                        create: async () => ({ message: "Offline", isTransient: true }) as ApiError,
+                    },
+                },
+            });
+
+            apiGraph.setIdFormat((entity, index) => `${entity}_custom_${index}`);
+
+            const node1 = await apiGraph.createSubcategory({
+                name: "Offline Sub 1",
+                mainCategoryId: "mc1",
+            });
+
+            const node2 = await apiGraph.createSubcategory({
+                name: "Offline Sub 2",
+                mainCategoryId: "mc1",
+            });
+
+            expect(node1.value()?.id).toBe("subcategory_custom_1");
+            expect(node2.value()?.id).toBe("subcategory_custom_2");
+        });
+
+        it("uses custom formatter configured via idFormat option", async () => {
+            const apiGraph = createGraph({
+                entities: structuredClone(baseEntities),
+                edges,
+                api: {
+                    idFormat: (entity, index) => `${entity}_opt_${index}`,
+                    subcategory: {
+                        create: async () => ({ message: "Offline", isTransient: true }) as ApiError,
+                    },
+                },
+            });
+
+            const node = await apiGraph.createSubcategory({
+                name: "Offline Sub",
+                mainCategoryId: "mc1",
+            });
+
+            expect(node.value()?.id).toBe("subcategory_opt_1");
+        });
+    });
 });

@@ -63,8 +63,11 @@ export interface ApiEntityConfig<D extends GraphDef<any, any>, E extends EntityB
     actions?: Record<string, (node: ApiEntityNode<D, E, any>, ...args: any[]) => Promise<any>>;
 }
 
+export type NewIdFormatter = (entity: string, index: number, data?: any) => string | number;
+
 export type ValidApi<D extends GraphDef<any, any>> = {
     isTransientError?: (error: ApiError) => boolean;
+    idFormat?: NewIdFormatter;
 } & {
     [K in keyof D["entityModel"] | "actions"]?: K extends "actions"
         ? Record<string, (graph: any, ...args: any[]) => Promise<any>>
@@ -159,6 +162,7 @@ export type ApiGraph<D extends GraphDef<any, any>, Options extends ValidApi<D> =
     startAutoFlush(options?: AutoFlushOptions): () => void;
     resolveId(id: string | number): string | number;
     getOriginalId(id: string | number): string | number;
+    setIdFormat(formatter: NewIdFormatter): void;
     api: Options extends { actions: infer Actions }
         ? {
               [K in keyof Actions]: Actions[K] extends (graph: any, ...args: infer Args) => Promise<infer R>
