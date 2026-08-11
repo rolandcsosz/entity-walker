@@ -19,6 +19,41 @@ export type PendingDelta = {
     error?: ApiError;
 };
 
+export type ApiGraphEventDetails<D extends GraphDef<any, any>> = {
+    [K in keyof D["entityModel"] & string]: {
+        op?:
+            | "create"
+            | "update"
+            | "delete"
+            | "read"
+            | "list"
+            | "sync"
+            | "commit"
+            | "rollback"
+            | "restore"
+            | "flush"
+            | string;
+        entityType?: K;
+        entityId?: D["entityModel"][K]["id"];
+        data?: D["entityModel"][K];
+    };
+}[keyof D["entityModel"] & string];
+
+export type ApiGraphEvent<D extends GraphDef<any, any> = GraphDef<any, any>> =
+    | ({ type: "change"; entities?: Partial<Entities<D["entityModel"]>> } & Partial<ApiGraphEventDetails<D>>)
+    | ({ type: "error"; error: ApiError } & Partial<ApiGraphEventDetails<D>>)
+    | ({ type: "rollback"; error?: ApiError } & Partial<ApiGraphEventDetails<D>>)
+    | ({ type: "offline"; error: ApiError } & Partial<ApiGraphEventDetails<D>>)
+    | { type: "online" }
+    | { type: "flush"; synced: PendingDelta[]; failed: { delta: PendingDelta; error: ApiError }[] };
+
+export type ApiGraphSubscriber<D extends GraphDef<any, any> = GraphDef<any, any>> = (event: ApiGraphEvent<D>) => void;
+
+export type AutoFlushOptions = {
+    intervalMs?: number;
+    onOnline?: boolean;
+};
+
 export interface ApiEntityConfig<D extends GraphDef<any, any>, E extends EntityBase> {
     create?: (data: Omit<E, "id">) => Promise<E | ApiError> | E | ApiError;
     read?: (id: E["id"]) => Promise<E | ApiError> | E | ApiError;
@@ -119,6 +154,8 @@ export type ApiGraph<D extends GraphDef<any, any>, Options extends ValidApi<D> =
     flushPending(): Promise<{ synced: PendingDelta[]; failed: { delta: PendingDelta; error: ApiError }[] }>;
     clearPending(): void;
     beginTransaction(): ApiTransactionGraph<D, Options>;
+    subscribe(subscriber: ApiGraphSubscriber<D>): () => void;
+    startAutoFlush(options?: AutoFlushOptions): () => void;
     api: Options extends { actions: infer Actions }
         ? {
               [K in keyof Actions]: Actions[K] extends (graph: any, ...args: infer Args) => Promise<infer R>

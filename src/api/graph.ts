@@ -1,6 +1,15 @@
 import { createGraph as createCoreGraph } from "../core/graph";
 import { GraphDef, EntityMap, GraphEdges } from "../core/types";
-import { ApiGraph, ApiError, PendingDelta, ValidApi, ApiTransactionGraph } from "./types";
+import {
+    ApiGraph,
+    ApiError,
+    PendingDelta,
+    ValidApi,
+    ApiTransactionGraph,
+    ApiGraphEvent,
+    ApiGraphSubscriber,
+    AutoFlushOptions,
+} from "./types";
 
 function generateUUID(): string {
     if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -133,6 +142,7 @@ export function createApiGraph<D extends GraphDef<any, any>, Options extends Val
     queryCache?: Map<string, { ids: (string | number)[]; fetchedAt: number }>,
     pendingDeltas?: PendingDelta[],
     transactionContext?: { txCoreGraph: any; txId: string; stagedDeltas: PendingDelta[] },
+    listeners?: Set<ApiGraphSubscriber>,
 ): ApiGraph<D, Options>;
 
 export function createApiGraph<D extends GraphDef<any, any>>(
@@ -141,6 +151,7 @@ export function createApiGraph<D extends GraphDef<any, any>>(
     queryCache: Map<string, { ids: (string | number)[]; fetchedAt: number }> = new Map(),
     pendingDeltas: PendingDelta[] = [],
     transactionContext?: { txCoreGraph: any; txId: string; stagedDeltas: PendingDelta[] },
+    listeners: Set<ApiGraphSubscriber> = new Set(),
 ): ApiGraph<D> {
     let baseGraph: any;
     let opts: any;
@@ -160,7 +171,30 @@ export function createApiGraph<D extends GraphDef<any, any>>(
     }
 
     const isTx = !!transactionContext;
-    const parseError = (res: any) => toApiError(res, opts?.isTransientError);
+
+    function notifyListeners(event: ApiGraphEvent) {
+        listeners.forEach((sub) => {
+            try {
+                sub(event);
+            } catch {
+                // Ignore subscriber errors
+            }
+        });
+    }
+
+    const parseError = (
+        res: any,
+        context?: { op?: string; entityType?: string; entityId?: string | number; data?: any },
+    ) => {
+        const err = toApiError(res, opts?.isTransientError);
+        if (err) {
+            notifyListeners({ type: "error", error: err, ...context });
+            if (err.isTransient) {
+                notifyListeners({ type: "offline", error: err, ...context });
+            }
+        }
+        return err;
+    };
 
     function wrapNode(type: string, id: any, activeGraph = baseGraph): any {
         const getBaseNode = () => activeGraph[type](id);
@@ -174,17 +208,36 @@ export function createApiGraph<D extends GraphDef<any, any>>(
                     const txNode = wrapNode(type, id, txGraph);
                     return (actionFn as any)(txNode, ...args)
                         .then((res: any) => {
-                            const err = parseError(res);
+                            const err = parseError(res, { op: actionName, entityType: type, entityId: id });
                             if (err) {
                                 txGraph.rollback();
+                                notifyListeners({
+                                    type: "rollback",
+                                    error: err,
+                                    op: actionName,
+                                    entityType: type,
+                                    entityId: id,
+                                });
                                 return err;
                             }
                             txGraph.commit();
+                            notifyListeners({ type: "change", op: actionName, entityType: type, entityId: id });
                             return res;
                         })
                         .catch((err: any) => {
                             txGraph.rollback();
-                            return parseError(err) ?? { message: String(err), raw: err };
+                            const parsedErr = parseError(err, { op: actionName, entityType: type, entityId: id }) ?? {
+                                message: String(err),
+                                raw: err,
+                            };
+                            notifyListeners({
+                                type: "rollback",
+                                error: parsedErr,
+                                op: actionName,
+                                entityType: type,
+                                entityId: id,
+                            });
+                            return parsedErr;
                         });
                 };
             }
@@ -201,13 +254,26 @@ export function createApiGraph<D extends GraphDef<any, any>>(
                 try {
                     response = await entityConfig.read(id);
                 } catch (err) {
-                    return parseError(err) ?? { message: String(err), raw: err };
+                    return (
+                        parseError(err, { op: "read", entityType: type, entityId: id }) ?? {
+                            message: String(err),
+                            raw: err,
+                        }
+                    );
                 }
-                const error = parseError(response);
+                const error = parseError(response, { op: "read", entityType: type, entityId: id });
                 if (error) {
                     return error;
                 }
                 activeGraph.sync({ [type]: [response] }, { mode: "merge" });
+                notifyListeners({
+                    type: "change",
+                    op: "read",
+                    entityType: type,
+                    entityId: id,
+                    data: response,
+                    entities: { [type]: [response] },
+                });
                 return wrapNode(type, id, activeGraph);
             },
             delete: async () => {
@@ -232,15 +298,19 @@ export function createApiGraph<D extends GraphDef<any, any>>(
                 if (entityConfig?.delete) {
                     try {
                         result = await entityConfig.delete(id);
-                        error = parseError(result);
+                        error = parseError(result, { op: "delete", entityType: type, entityId: id });
                     } catch (err) {
-                        error = parseError(err) ?? { message: String(err), raw: err };
+                        error = parseError(err, { op: "delete", entityType: type, entityId: id }) ?? {
+                            message: String(err),
+                            raw: err,
+                        };
                     }
                 }
 
                 if (error) {
                     if (error.isTransient === false) {
                         txGraph.rollback();
+                        notifyListeners({ type: "rollback", error, op: "delete", entityType: type, entityId: id });
                         return error;
                     } else {
                         txGraph.commit();
@@ -253,10 +323,12 @@ export function createApiGraph<D extends GraphDef<any, any>>(
                             error,
                         };
                         pendingDeltas.push(delta);
+                        notifyListeners({ type: "change", op: "delete", entityType: type, entityId: id });
                         return error;
                     }
                 } else {
                     txGraph.commit();
+                    notifyListeners({ type: "change", op: "delete", entityType: type, entityId: id });
                     return result;
                 }
             },
@@ -296,18 +368,29 @@ export function createApiGraph<D extends GraphDef<any, any>>(
                     try {
                         const response = await entityConfig.update(updated);
                         result = response;
-                        error = parseError(response);
+                        error = parseError(response, { op: "update", entityType: type, entityId: id, data: updated });
                         if (!error && response && typeof response === "object" && "id" in response) {
                             txGraph.sync({ [type]: [response] }, { mode: "merge" });
                         }
                     } catch (err) {
-                        error = parseError(err) ?? { message: String(err), raw: err };
+                        error = parseError(err, { op: "update", entityType: type, entityId: id, data: updated }) ?? {
+                            message: String(err),
+                            raw: err,
+                        };
                     }
                 }
 
                 if (error) {
                     if (error.isTransient === false) {
                         txGraph.rollback();
+                        notifyListeners({
+                            type: "rollback",
+                            error,
+                            op: "update",
+                            entityType: type,
+                            entityId: id,
+                            data: updated,
+                        });
                         return error;
                     } else {
                         txGraph.commit();
@@ -321,14 +404,22 @@ export function createApiGraph<D extends GraphDef<any, any>>(
                             error,
                         };
                         pendingDeltas.push(delta);
+                        notifyListeners({
+                            type: "change",
+                            op: "update",
+                            entityType: type,
+                            entityId: id,
+                            data: updated,
+                        });
                         return error;
                     }
                 } else {
                     txGraph.commit();
+                    notifyListeners({ type: "change", op: "update", entityType: type, entityId: id, data: updated });
                     return result;
                 }
             },
-            graph: () => createApiGraph(activeGraph, opts, queryCache, pendingDeltas, transactionContext),
+            graph: () => createApiGraph(activeGraph, opts, queryCache, pendingDeltas, transactionContext, listeners),
             api: apiActions,
         };
 
@@ -384,9 +475,9 @@ export function createApiGraph<D extends GraphDef<any, any>>(
             try {
                 response = await entityConfig.list();
             } catch (err) {
-                return parseError(err) ?? { message: String(err), raw: err };
+                return parseError(err, { op: "list", entityType: type }) ?? { message: String(err), raw: err };
             }
-            const error = parseError(response);
+            const error = parseError(response, { op: "list", entityType: type });
             if (error) {
                 return error;
             }
@@ -396,6 +487,7 @@ export function createApiGraph<D extends GraphDef<any, any>>(
             }
 
             activeGraph.sync({ [type]: response }, { mode: "merge" });
+            notifyListeners({ type: "change", op: "list", entityType: type, entities: { [type]: response } });
 
             const ids = response.map((e: any) => e.id);
             queryCache.set(cacheKey, { ids, fetchedAt: Date.now() });
@@ -443,7 +535,12 @@ export function createApiGraph<D extends GraphDef<any, any>>(
                 if (delta.op === "create") {
                     if (entityConfig?.create) {
                         const res = await entityConfig.create(delta.data);
-                        error = parseError(res);
+                        error = parseError(res, {
+                            op: "create",
+                            entityType: delta.entityType,
+                            entityId: delta.entityId,
+                            data: delta.data,
+                        });
                         if (!error && res && typeof res === "object" && "id" in res) {
                             const resObj = res as any;
                             if (delta.entityId && resObj.id !== delta.entityId) {
@@ -462,7 +559,12 @@ export function createApiGraph<D extends GraphDef<any, any>>(
                         const currentNodeVal = baseGraph[delta.entityType](delta.entityId!).value();
                         const payload = currentNodeVal ?? delta.data;
                         const res = await entityConfig.update(payload);
-                        error = parseError(res);
+                        error = parseError(res, {
+                            op: "update",
+                            entityType: delta.entityType,
+                            entityId: delta.entityId,
+                            data: payload,
+                        });
                         if (!error && res && typeof res === "object" && "id" in res) {
                             baseGraph.sync({ [delta.entityType]: [res] }, { mode: "merge" });
                         }
@@ -470,11 +572,23 @@ export function createApiGraph<D extends GraphDef<any, any>>(
                 } else if (delta.op === "delete") {
                     if (entityConfig?.delete) {
                         const res = await entityConfig.delete(delta.entityId);
-                        error = parseError(res);
+                        error = parseError(res, {
+                            op: "delete",
+                            entityType: delta.entityType,
+                            entityId: delta.entityId,
+                        });
                     }
                 }
             } catch (err) {
-                error = parseError(err) ?? { message: String(err), raw: err };
+                error = parseError(err, {
+                    op: delta.op,
+                    entityType: delta.entityType,
+                    entityId: delta.entityId,
+                    data: delta.data,
+                }) ?? {
+                    message: String(err),
+                    raw: err,
+                };
             }
 
             if (error) {
@@ -490,6 +604,8 @@ export function createApiGraph<D extends GraphDef<any, any>>(
             }
         }
 
+        notifyListeners({ type: "flush", synced, failed });
+        notifyListeners({ type: "change", op: "flush" });
         return { synced, failed };
     }
 
@@ -497,14 +613,24 @@ export function createApiGraph<D extends GraphDef<any, any>>(
     if (opts?.actions) {
         for (const [actionName, actionFn] of Object.entries(opts.actions)) {
             rootActions[actionName] = (...args: any[]) => {
-                const apiGraphInstance = createApiGraph(baseGraph, opts, queryCache, pendingDeltas, transactionContext);
+                const apiGraphInstance = createApiGraph(
+                    baseGraph,
+                    opts,
+                    queryCache,
+                    pendingDeltas,
+                    transactionContext,
+                    listeners,
+                );
                 return (actionFn as any)(apiGraphInstance, ...args);
             };
         }
     }
 
     const apiGraph = {
-        sync: (fresh: any, opt?: any) => baseGraph.sync(fresh, opt),
+        sync: (fresh: any, opt?: any) => {
+            baseGraph.sync(fresh, opt);
+            notifyListeners({ type: "change", op: "sync", entities: fresh });
+        },
         snapshot: () => ({
             entities: baseGraph.snapshot(),
             pendingDeltas: JSON.parse(JSON.stringify(pendingDeltas)),
@@ -519,22 +645,76 @@ export function createApiGraph<D extends GraphDef<any, any>>(
             } else {
                 baseGraph.restore(snap);
             }
+            notifyListeners({ type: "change", op: "restore" });
         },
         pendingChanges: () => [...pendingDeltas],
         flushPending: () => flushPending(),
         clearPending: () => {
             pendingDeltas.length = 0;
+            notifyListeners({ type: "change", op: "clearPending" });
+        },
+        subscribe: (subscriber: ApiGraphSubscriber): (() => void) => {
+            listeners.add(subscriber);
+            return () => {
+                listeners.delete(subscriber);
+            };
+        },
+        startAutoFlush: (options?: AutoFlushOptions): (() => void) => {
+            const intervalMs = options?.intervalMs;
+            const onOnline = options?.onOnline ?? true;
+
+            let timer: any = null;
+            let onlineHandler: any = null;
+
+            const runFlush = async () => {
+                if (pendingDeltas.length > 0) {
+                    const res = await flushPending();
+                    if (res.synced.length > 0 && res.failed.length === 0) {
+                        notifyListeners({ type: "online" });
+                    }
+                }
+            };
+
+            if (intervalMs && intervalMs > 0) {
+                timer = setInterval(runFlush, intervalMs);
+            }
+
+            if (onOnline && typeof window !== "undefined" && typeof window.addEventListener === "function") {
+                onlineHandler = () => {
+                    notifyListeners({ type: "online" });
+                    runFlush();
+                };
+                window.addEventListener("online", onlineHandler);
+            }
+
+            return () => {
+                if (timer) clearInterval(timer);
+                if (
+                    onlineHandler &&
+                    typeof window !== "undefined" &&
+                    typeof window.removeEventListener === "function"
+                ) {
+                    window.removeEventListener("online", onlineHandler);
+                }
+            };
         },
         beginTransaction: (): ApiTransactionGraph<D> => {
             const txCoreGraph = baseGraph.beginTransaction();
             const txId = generateUUID();
             const stagedDeltas: PendingDelta[] = [];
 
-            const txApiGraph = createApiGraph(txCoreGraph, opts, queryCache, pendingDeltas, {
+            const txApiGraph = createApiGraph(
                 txCoreGraph,
-                txId,
-                stagedDeltas,
-            });
+                opts,
+                queryCache,
+                pendingDeltas,
+                {
+                    txCoreGraph,
+                    txId,
+                    stagedDeltas,
+                },
+                listeners,
+            );
 
             let committed = false;
             let rolledBack = false;
@@ -555,6 +735,7 @@ export function createApiGraph<D extends GraphDef<any, any>>(
                 if (stagedDeltas.length === 0) {
                     committed = true;
                     txCoreGraph.commit();
+                    notifyListeners({ type: "change", op: "commit" });
                     return { success: true };
                 }
 
@@ -567,7 +748,12 @@ export function createApiGraph<D extends GraphDef<any, any>>(
                         if (delta.op === "create") {
                             if (entityConfig?.create) {
                                 const res = await entityConfig.create(delta.data);
-                                error = parseError(res);
+                                error = parseError(res, {
+                                    op: "create",
+                                    entityType: delta.entityType,
+                                    entityId: delta.entityId,
+                                    data: delta.data,
+                                });
                                 if (!error && res && typeof res === "object" && "id" in res) {
                                     txCoreGraph.sync({ [delta.entityType]: [res] }, { mode: "merge" });
                                 }
@@ -575,7 +761,12 @@ export function createApiGraph<D extends GraphDef<any, any>>(
                         } else if (delta.op === "update") {
                             if (entityConfig?.update) {
                                 const res = await entityConfig.update(delta.data);
-                                error = parseError(res);
+                                error = parseError(res, {
+                                    op: "update",
+                                    entityType: delta.entityType,
+                                    entityId: delta.entityId,
+                                    data: delta.data,
+                                });
                                 if (!error && res && typeof res === "object" && "id" in res) {
                                     txCoreGraph.sync({ [delta.entityType]: [res] }, { mode: "merge" });
                                 }
@@ -583,11 +774,23 @@ export function createApiGraph<D extends GraphDef<any, any>>(
                         } else if (delta.op === "delete") {
                             if (entityConfig?.delete) {
                                 const res = await entityConfig.delete(delta.entityId);
-                                error = parseError(res);
+                                error = parseError(res, {
+                                    op: "delete",
+                                    entityType: delta.entityType,
+                                    entityId: delta.entityId,
+                                });
                             }
                         }
                     } catch (err) {
-                        error = parseError(err) ?? { message: String(err), raw: err };
+                        error = parseError(err, {
+                            op: delta.op,
+                            entityType: delta.entityType,
+                            entityId: delta.entityId,
+                            data: delta.data,
+                        }) ?? {
+                            message: String(err),
+                            raw: err,
+                        };
                     }
 
                     if (error) {
@@ -595,6 +798,7 @@ export function createApiGraph<D extends GraphDef<any, any>>(
                             rolledBack = true;
                             txCoreGraph.rollback();
                             stagedDeltas.length = 0;
+                            notifyListeners({ type: "rollback", error, op: "commit" });
                             return { success: false, error };
                         } else {
                             committed = true;
@@ -602,6 +806,7 @@ export function createApiGraph<D extends GraphDef<any, any>>(
                             const remaining = stagedDeltas.slice(i).map((d) => ({ ...d, error }));
                             pendingDeltas.push(...remaining);
                             stagedDeltas.length = 0;
+                            notifyListeners({ type: "change", op: "commit" });
                             return { success: false, error };
                         }
                     }
@@ -610,6 +815,7 @@ export function createApiGraph<D extends GraphDef<any, any>>(
                 committed = true;
                 txCoreGraph.commit();
                 stagedDeltas.length = 0;
+                notifyListeners({ type: "change", op: "commit" });
                 return { success: true };
             };
 
@@ -617,6 +823,7 @@ export function createApiGraph<D extends GraphDef<any, any>>(
                 rolledBack = true;
                 txCoreGraph.rollback();
                 stagedDeltas.length = 0;
+                notifyListeners({ type: "rollback", op: "rollback" });
             };
 
             return new Proxy(txApiGraph, {
@@ -669,9 +876,12 @@ export function createApiGraph<D extends GraphDef<any, any>>(
                     let error: ApiError | null = null;
                     try {
                         response = await entityConfig.create(data);
-                        error = parseError(response);
+                        error = parseError(response, { op: "create", entityType: type, data });
                     } catch (err) {
-                        error = parseError(err) ?? { message: String(err), raw: err };
+                        error = parseError(err, { op: "create", entityType: type, data }) ?? {
+                            message: String(err),
+                            raw: err,
+                        };
                     }
 
                     if (error) {
@@ -692,10 +902,18 @@ export function createApiGraph<D extends GraphDef<any, any>>(
                             error,
                         };
                         pendingDeltas.push(delta);
+                        notifyListeners({ type: "change", op: "create", entityType: type, entityId: tempId, data });
                         return wrapNode(type, tempId);
                     }
 
                     baseGraph.sync({ [type]: [response] }, { mode: "merge" });
+                    notifyListeners({
+                        type: "change",
+                        op: "create",
+                        entityType: type,
+                        entityId: (response as any)?.id,
+                        data: response,
+                    });
                     return wrapNode(type, (response as any).id);
                 };
             }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { createGraph, GraphDef, ValidApi, ApiError } from "../../src";
+import { createGraph, GraphDef, ValidApi, ApiError, ApiGraphEvent } from "../../src";
 import { edges, Transaction, Subcategory, MainCategory, ExpenseType, IncomeType, Schema } from "../types";
 import { baseEntities } from "../shared";
 
@@ -267,7 +267,7 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
                 update: async (data) => {
                     return data as Transaction;
                 },
-                delete: async (id: string) => {},
+                delete: async (id: string) => { },
             },
         };
 
@@ -484,6 +484,78 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
             await txB.commit();
             expect(apiGraph.transaction("tx1").value()?.subcategoryId).toBe("subB");
             expect(callLog).toEqual(["subA", "subB"]);
+        });
+    });
+
+    describe("Event Subscriptions & Auto-Flush", () => {
+        it("emits events with rich metadata payloads to subscribers", async () => {
+            const emittedEvents: ApiGraphEvent[] = [];
+            const apiGraph = createGraph({
+                entities: structuredClone(baseEntities),
+                edges,
+                api: {
+                    transaction: {
+                        update: async (data) => {
+                            if (data.subcategoryId === "fail") {
+                                return { message: "Permanent Error", status: 400, isTransient: false } as ApiError;
+                            }
+                            return data;
+                        },
+                    },
+                },
+            });
+
+            const unsubscribe = apiGraph.subscribe((evt) => {
+                emittedEvents.push(evt);
+            });
+
+            await apiGraph.transaction("tx1").update((t) => ({ ...t, subcategoryId: "sub2" }));
+            const changeEvt = emittedEvents.find((e) => e.type === "change");
+            expect(changeEvt).toBeDefined();
+
+            await apiGraph.transaction("tx1").update((t) => ({ ...t, subcategoryId: "fail" }));
+            const errorEvt = emittedEvents.find((e) => e.type === "error") as any;
+            expect(errorEvt).toBeDefined();
+            expect(errorEvt.error.status).toBe(400);
+            expect(errorEvt.op).toBe("update");
+            expect(errorEvt.entityType).toBe("transaction");
+            expect(errorEvt.entityId).toBe("tx1");
+
+            const rollbackEvt = emittedEvents.find((e) => e.type === "rollback") as any;
+            expect(rollbackEvt).toBeDefined();
+            expect(rollbackEvt.error.message).toBe("Permanent Error");
+
+            unsubscribe();
+        });
+
+        it("automatically flushes pending deltas on a timer interval", async () => {
+            let flushCount = 0;
+            const apiGraph = createGraph({
+                entities: structuredClone(baseEntities),
+                edges,
+                api: {
+                    transaction: {
+                        delete: async () => {
+                            flushCount++;
+                            if (flushCount === 1) {
+                                return { message: "Offline", isTransient: true } as ApiError;
+                            }
+                            return undefined;
+                        },
+                    },
+                },
+            });
+
+            await apiGraph.transaction("tx1").delete();
+            expect(apiGraph.pendingChanges().length).toBe(1);
+
+            const stop = apiGraph.startAutoFlush({ intervalMs: 30, onOnline: false });
+
+            await new Promise((resolve) => setTimeout(resolve, 80));
+
+            stop();
+            expect(apiGraph.pendingChanges().length).toBe(0);
+            expect(flushCount).toBeGreaterThanOrEqual(2);
         });
     });
 });
