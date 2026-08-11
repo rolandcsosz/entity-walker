@@ -1,9 +1,9 @@
 import fs from "fs";
 import { performance } from "perf_hooks";
-import { createGraph as createProxyGraph } from "../src/graph";
-import { createNonProxyGraph } from "../src/graphNoProxy";
-import { Entities } from "../src/types";
-import { edges, ExpenseType, IncomeType, MainCategory, Schema, Subcategory, Transaction } from "./types";
+import { createGraph as createProxyGraph } from "../../src/core/graph";
+import { createNonProxyGraph } from "../../src/core/graphNoProxy";
+import { Entities } from "../../src/core/types";
+import { edges, ExpenseType, IncomeType, MainCategory, Schema, Subcategory, Transaction } from "../types";
 
 function generateDataset({
     expenseTypes,

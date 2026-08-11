@@ -1,6 +1,5 @@
-import { buildCore } from "./core";
-import { EntityGraph, EntityMap, GraphDef, GraphEdges, NodeDebugInfo, ApiGraphOptions, ApiGraph, ApiEntityConfig, ValidApi } from "./types";
-import { createApiGraph } from "./apiGraph";
+import { buildCore } from "./helpers";
+import { EntityGraph, EntityMap, GraphDef, GraphEdges, NodeDebugInfo } from "./types";
 
 export function buildGraphCore<EM extends EntityMap, E extends GraphEdges<EM>>(
     entities: { [K in keyof EM]: EM[K][] },
@@ -218,25 +217,6 @@ export function buildGraphCore<EM extends EntityMap, E extends GraphEdges<EM>>(
 
 export function createGraph<
     EM extends EntityMap,
-    E extends GraphEdges<EM>,
-    ApiOpt extends ValidApi<GraphDef<EM, E>> = ValidApi<GraphDef<EM, E>>
->(config: {
-    entities: { [K in keyof EM]: EM[K][] };
-    edges: E;
-    api: ApiOpt;
-}): ApiGraph<GraphDef<EM, E>, ApiOpt>;
-
-export function createGraph<
-    D extends GraphDef<any, any>,
-    ApiOpt extends ValidApi<D> = ValidApi<D>
->(config: {
-    entities: { [K in keyof D["entityModel"]]: D["entityModel"][K][] };
-    edges: D["edges"];
-    api: ApiOpt;
-}): ApiGraph<D, ApiOpt>;
-
-export function createGraph<
-    EM extends EntityMap,
     E extends GraphEdges<EM>
 >(config: {
     entities: { [K in keyof EM]: EM[K][] };
@@ -256,7 +236,6 @@ export function createGraph<
 >(config: {
     entities: any;
     edges: any;
-    api?: any;
 }): any {
     const { createNode, toNodeList, graphSchema, graphInfo, ensureIndexes, markIndexesDirty, entities, byId, reverseIndex, nodeCache } = buildGraphCore<EM, E>(config.entities, config.edges);
 
@@ -464,8 +443,5 @@ export function createGraph<
         },
     }) as any;
 
-    if (config.api) {
-        return createApiGraph(baseGraph, config.api) as any;
-    }
     return baseGraph;
 }

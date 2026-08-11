@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { createGraph, type ValidSchema, type GraphEdges, type GraphDef, type ValidApi, type Entities } from "../src";
+import { createGraph, type ValidSchema, type GraphEdges, type GraphDef, type ValidApi, type Entities } from "../../src";
 import { client } from "./generated/client/client.gen";
 import {
     getTransactions,

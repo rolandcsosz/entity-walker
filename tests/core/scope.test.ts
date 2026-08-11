@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { proxyAdapter, nonProxyAdapter, baseEntities } from "./shared";
+import { proxyAdapter, nonProxyAdapter, baseEntities } from "../shared";
 
 function runScopeTests(label: string, wrapper: any) {
     const { nodeList, path } = wrapper;

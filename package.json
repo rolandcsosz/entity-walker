@@ -9,12 +9,16 @@
         "docs"
     ],
     "scripts": {
-        "build": "tsc",
+        "build": "npm run build:core && npm run build:api",
+        "build:core": "tsc -p tsconfig.core.json",
+        "build:api": "tsc -p tsconfig.api.json && cp package.api.json dist/api/package.json",
         "test": "vitest",
+        "test:core": "vitest tests/core",
+        "test:api": "vitest tests/api",
         "test:watch": "vitest --watch",
         "lint": "eslint . --ext .ts,.tsx",
-        "benchmark": "vitest ./tests/benchmark.test.ts",
-        "generate:client": "openapi-ts -i ./tests/openapi.json -o tests/generated/client -c @hey-api/client-fetch"
+        "benchmark": "vitest ./tests/benchmarks/benchmark.ts",
+        "generate:client": "openapi-ts -i ./tests/api/openapi.json -o tests/api/generated/client -c @hey-api/client-fetch"
     },
     "repository": {
         "type": "git",

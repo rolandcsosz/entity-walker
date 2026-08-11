@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createGraph, createNonProxyGraph, Entities, GraphEdges, ValidSchema } from "../src";
+import { createGraph, createNonProxyGraph, Entities, GraphEdges, ValidSchema } from "../../src";
 
 type Transaction = { id: string; subcategoryId: string };
 type Subcategory = { id: string; name: string };

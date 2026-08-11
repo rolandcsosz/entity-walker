@@ -1,0 +1,24 @@
+{
+    "name": "entity-walker-api",
+    "version": "1.0.0",
+    "description": "Async remote API integration, optimistic updates, and offline delta queue for entity-walker.",
+    "main": "index.js",
+    "types": "index.d.ts",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/rolandcsosz/entity-walker.git"
+    },
+    "keywords": [
+        "entity",
+        "graph",
+        "api",
+        "rest",
+        "offline-queue",
+        "entity-walker"
+    ],
+    "author": "Roland Csősz",
+    "license": "MIT",
+    "peerDependencies": {
+        "entity-walker": "^2.2.0"
+    }
+}

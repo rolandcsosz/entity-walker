@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { createGraph, createNonProxyGraph } from "../src";
-import { edges } from "./types";
-import { baseEntities } from "./shared";
+import { createGraph, createNonProxyGraph } from "../../src";
+import { edges } from "../types";
+import { baseEntities } from "../shared";
 
 describe("Transaction Support - Proxy Graph", () => {
     it("isolates modifications from the parent graph", () => {

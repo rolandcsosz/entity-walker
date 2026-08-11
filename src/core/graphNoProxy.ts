@@ -1,4 +1,4 @@
-import { buildCore, NODE_PROP } from "./core";
+import { buildCore, NODE_PROP } from "./helpers";
 import { EntityGraphNoProxy, EntityMap, GraphDef, GraphEdges, NodeDebugInfo } from "./types";
 
 export const createNonProxyGraph = <EM extends EntityMap, E extends GraphEdges<EM>>(config: {

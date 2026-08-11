@@ -1,4 +1,6 @@
-import { GraphDef, ApiGraph, ApiGraphOptions, ApiError, PendingDelta } from "./types";
+import { createGraph as createCoreGraph } from "../core/graph";
+import { GraphDef, EntityMap, GraphEdges } from "../core/types";
+import { ApiGraph, ApiGraphOptions, ApiError, PendingDelta, ValidApi } from "./types";
 
 function generateUUID(): string {
     if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -110,26 +112,65 @@ function toApiError(res: any, customIsTransient?: (err: ApiError) => boolean): A
     return apiErr;
 }
 
-export function createApiGraph<D extends GraphDef<any, any>>(
+export function createApiGraph<
+    EM extends EntityMap,
+    E extends GraphEdges<EM>,
+    ApiOpt extends ValidApi<GraphDef<EM, E>> = ValidApi<GraphDef<EM, E>>
+>(config: {
+    entities: { [K in keyof EM]: EM[K][] };
+    edges: E;
+    api: ApiOpt;
+}): ApiGraph<GraphDef<EM, E>, ApiOpt>;
+
+export function createApiGraph<
+    D extends GraphDef<any, any>,
+    ApiOpt extends ValidApi<D> = ValidApi<D>
+>(config: {
+    entities: { [K in keyof D["entityModel"]]: D["entityModel"][K][] };
+    edges: D["edges"];
+    api: ApiOpt;
+}): ApiGraph<D, ApiOpt>;
+
+export function createApiGraph<
+    D extends GraphDef<any, any>,
+    Options extends ValidApi<D> = ValidApi<D>
+>(
     baseGraph: any,
-    options: ApiGraphOptions<D["entityModel"]>,
+    options?: Options,
+    queryCache?: Map<string, { ids: (string | number)[]; fetchedAt: number }>,
+    pendingDeltas?: PendingDelta[]
+): ApiGraph<D, Options>;
+
+export function createApiGraph<D extends GraphDef<any, any>>(
+    baseGraphOrConfig: any,
+    options?: any,
     queryCache: Map<string, { ids: (string | number)[]; fetchedAt: number }> = new Map(),
     pendingDeltas: PendingDelta[] = []
 ): ApiGraph<D> {
+    let baseGraph: any;
+    let opts: any;
 
-    const parseError = (res: any) => toApiError(res, options.isTransientError);
+    if (baseGraphOrConfig && typeof baseGraphOrConfig === "object" && "entities" in baseGraphOrConfig && "edges" in baseGraphOrConfig) {
+        baseGraph = createCoreGraph({ entities: baseGraphOrConfig.entities, edges: baseGraphOrConfig.edges });
+        opts = baseGraphOrConfig.api ?? options;
+    } else {
+        baseGraph = baseGraphOrConfig;
+        opts = options!;
+    }
+
+    const parseError = (res: any) => toApiError(res, opts?.isTransientError);
 
     function wrapNode(type: string, id: any, activeGraph = baseGraph): any {
         const getBaseNode = () => activeGraph[type](id);
 
         const apiActions: Record<string, any> = {};
-        const entityConfig = options[type];
+        const entityConfig = opts?.[type];
         if (entityConfig?.actions) {
             for (const [actionName, actionFn] of Object.entries(entityConfig.actions)) {
                 apiActions[actionName] = (...args: any[]) => {
                     const txGraph = activeGraph.beginTransaction();
                     const txNode = wrapNode(type, id, txGraph);
-                    return actionFn(txNode, ...args)
+                    return (actionFn as any)(txNode, ...args)
                         .then((res: any) => {
                             const err = parseError(res);
                             if (err) {
@@ -252,7 +293,7 @@ export function createApiGraph<D extends GraphDef<any, any>>(
                     return result;
                 }
             },
-            graph: () => createApiGraph(activeGraph, options, queryCache, pendingDeltas),
+            graph: () => createApiGraph(activeGraph, opts, queryCache, pendingDeltas),
             api: apiActions,
         };
 
@@ -290,16 +331,16 @@ export function createApiGraph<D extends GraphDef<any, any>>(
             return wrapNode(type, info.id, activeGraph);
         });
 
-        const loadFn = async (opts?: { force?: boolean }) => {
+        const loadFn = async (options?: { force?: boolean }) => {
             const cacheKey = type;
-            if (!opts?.force && queryCache.has(cacheKey)) {
+            if (!options?.force && queryCache.has(cacheKey)) {
                 const cached = queryCache.get(cacheKey)!;
                 const allNodes = activeGraph[`${type}Nodes`]();
                 const matchingNodes = allNodes.intersect(cached.ids);
                 return wrapList(type, matchingNodes, activeGraph);
             }
 
-            const entityConfig = options[type];
+            const entityConfig = opts?.[type];
             if (!entityConfig?.list) {
                 return { message: `[entity-walker] list handler is required to load node list for '${type}'.` };
             }
@@ -361,7 +402,7 @@ export function createApiGraph<D extends GraphDef<any, any>>(
 
         const queue = [...pendingDeltas];
         for (const delta of queue) {
-            const entityConfig = options[delta.entityType];
+            const entityConfig = opts?.[delta.entityType];
             let error: ApiError | null = null;
             try {
                 if (delta.op === "create") {
@@ -418,11 +459,11 @@ export function createApiGraph<D extends GraphDef<any, any>>(
     }
 
     const rootActions: Record<string, any> = {};
-    if (options.actions) {
-        for (const [actionName, actionFn] of Object.entries(options.actions)) {
+    if (opts?.actions) {
+        for (const [actionName, actionFn] of Object.entries(opts.actions)) {
             rootActions[actionName] = (...args: any[]) => {
-                const apiGraphInstance = createApiGraph(baseGraph, options, queryCache, pendingDeltas);
-                return actionFn(apiGraphInstance, ...args);
+                const apiGraphInstance = createApiGraph(baseGraph, opts, queryCache, pendingDeltas);
+                return (actionFn as any)(apiGraphInstance, ...args);
             };
         }
     }
@@ -462,7 +503,7 @@ export function createApiGraph<D extends GraphDef<any, any>>(
             if (propStr.startsWith("create") && propStr !== "create") {
                 const type = propStr[6].toLowerCase() + propStr.slice(7);
                 return async (data: any) => {
-                    const entityConfig = options[type];
+                    const entityConfig = opts?.[type];
                     if (!entityConfig?.create) {
                         return { message: `[entity-walker] create handler is required to create node of type '${type}'.` };
                     }

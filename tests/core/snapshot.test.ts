@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { createGraph, createNonProxyGraph, ApiError } from "../src";
-import { edges, numericEdges, SchemaNumeric, Transaction } from "./types";
-import { baseEntities, baseEntitiesNumeric, GraphWrapper, makeNonProxy, makeProxy } from "./shared";
-import { Entities } from "../src/types";
+import { createGraph, createNonProxyGraph, ApiError } from "../../src";
+import { edges, numericEdges, SchemaNumeric, Transaction } from "../types";
+import { baseEntities, baseEntitiesNumeric, GraphWrapper, makeNonProxy, makeProxy } from "../shared";
+import { Entities } from "../../src/core/types";
 
 function proxyGraph() {
     return createGraph({ entities: structuredClone(baseEntities), edges }) as any;

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { GraphWrapper, makeNonProxy, makeProxy } from "./shared";
+import { GraphWrapper, makeNonProxy, makeProxy } from "../shared";
 
 function runModificationTests(label: string, make: () => GraphWrapper) {
 

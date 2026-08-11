@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
-import { createGraph, createNonProxyGraph } from "../src";
-import { edges } from "./types";
-import { baseEntities } from "./shared";
+import { createGraph, createNonProxyGraph } from "../../src";
+import { edges } from "../types";
+import { baseEntities } from "../shared";
 
 function proxyGraph() {
     return createGraph({ entities: structuredClone(baseEntities), edges }) as any;

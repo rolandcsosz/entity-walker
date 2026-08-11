@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { createGraph, ApiError } from "../src";
-import { edges, Transaction } from "./types";
-import { baseEntities } from "./shared";
+import { createGraph, ApiError } from "../../src";
+import { edges, Transaction } from "../types";
+import { baseEntities } from "../shared";
 
 describe("Offline Delta Queue & ApiError Handling", () => {
     it("allows chaining node.load() to return the loaded node", async () => {

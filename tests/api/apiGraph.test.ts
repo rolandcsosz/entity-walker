@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { createGraph, GraphDef, ValidApi } from "../src";
-import { edges, Transaction, Subcategory, MainCategory, ExpenseType, IncomeType, Schema } from "./types";
-import { baseEntities } from "./shared";
+import { createGraph, GraphDef, ValidApi } from "../../src";
+import { edges, Transaction, Subcategory, MainCategory, ExpenseType, IncomeType, Schema } from "../types";
+import { baseEntities } from "../shared";
 
 describe("API-Bound Graph Wrapper (Handlers)", () => {
     it("handles optimistic update and automatic transaction rollback on failure", async () => {

@@ -1,8 +1,8 @@
 
 import { describe, it, expect } from "vitest";
-import { Schema } from "./types";
-import { Entities } from "../src";
-import { baseEntities, baseEntitiesNumeric, GraphWrapper, nonProxyAdapter, nonProxyAdapterN, proxyAdapter, proxyAdapterN } from "./shared";
+import { Schema } from "../types";
+import { Entities } from "../../src";
+import { baseEntities, baseEntitiesNumeric, GraphWrapper, nonProxyAdapter, nonProxyAdapterN, proxyAdapter, proxyAdapterN } from "../shared";
 
 function runEntityGraphTests(label: string, { rootNode, nodeList, path, makeGraph }: GraphWrapper) {
     describe(label, () => {

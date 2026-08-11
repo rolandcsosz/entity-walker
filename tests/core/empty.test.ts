@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { CustomGraph, edges, Schema, Transaction } from "./types";
-import { createGraph } from "../src/graph";
-import { emptyNode, emptyNodeList, emptyNodeNoProxy, emptyNodeListNoProxy } from "../src/core";
+import { CustomGraph, edges, Schema, Transaction } from "../types";
+import { createGraph } from "../../src/core/graph";
+import { emptyNode, emptyNodeList, emptyNodeNoProxy, emptyNodeListNoProxy } from "../../src/core/helpers";
 
 const graph = createGraph({ entities: {}, edges });
 
