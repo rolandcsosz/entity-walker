@@ -267,7 +267,7 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
                 update: async (data) => {
                     return data as Transaction;
                 },
-                delete: async (id: string) => { },
+                delete: async (id: string) => {},
             },
         };
 
@@ -556,6 +556,89 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
             stop();
             expect(apiGraph.pendingChanges().length).toBe(0);
             expect(flushCount).toBeGreaterThanOrEqual(2);
+        });
+    });
+
+    describe("Temporary-to-Server ID Remapping", () => {
+        it("remaps temp ID to server ID and resolves original ID lookups", async () => {
+            const apiGraph = createGraph({
+                entities: structuredClone(baseEntities),
+                edges,
+                api: {
+                    subcategory: {
+                        create: async () => {
+                            return {
+                                id: "real_sub_99",
+                                name: "Groceries",
+                                mainCategoryId: "mc1",
+                                expenseTypeId: "exp1",
+                            } as Subcategory;
+                        },
+                    },
+                },
+            });
+
+            const node = await apiGraph.createSubcategory({
+                id: "temp_sub_1",
+                name: "Temp Groceries",
+                mainCategoryId: "mc1",
+            });
+
+            expect(node.value()?.id).toBe("real_sub_99");
+
+            expect(apiGraph.resolveId("temp_sub_1")).toBe("real_sub_99");
+            expect(apiGraph.getOriginalId("real_sub_99")).toBe("temp_sub_1");
+
+            expect(apiGraph.subcategory("temp_sub_1").value()?.name).toBe("Groceries");
+            expect(apiGraph.subcategory("real_sub_99").value()?.name).toBe("Groceries");
+        });
+
+        it("remaps foreign keys across graph entities and queued deltas during flushPending()", async () => {
+            let isOffline = true;
+            const apiGraph = createGraph({
+                entities: structuredClone(baseEntities),
+                edges,
+                api: {
+                    subcategory: {
+                        create: async (data) => {
+                            if (isOffline) {
+                                return { message: "Offline", isTransient: true } as ApiError;
+                            }
+                            return {
+                                id: "real_sub_100",
+                                name: data.name,
+                                mainCategoryId: "mc1",
+                            } as Subcategory;
+                        },
+                    },
+                    transaction: {
+                        update: async (data) => {
+                            if (isOffline) {
+                                return { message: "Offline", isTransient: true } as ApiError;
+                            }
+                            return data;
+                        },
+                    },
+                },
+            });
+
+            await apiGraph.createSubcategory({
+                id: "temp_sub_offline",
+                name: "Offline Sub",
+                mainCategoryId: "mc1",
+            });
+
+            await apiGraph.transaction("tx1").update((tx) => ({ ...tx, subcategoryId: "temp_sub_offline" }));
+
+            expect(apiGraph.transaction("tx1").value()?.subcategoryId).toBe("temp_sub_offline");
+            expect(apiGraph.pendingChanges().length).toBe(2);
+
+            isOffline = false;
+            const res = await apiGraph.flushPending();
+
+            expect(res.synced.length).toBe(2);
+            expect(apiGraph.resolveId("temp_sub_offline")).toBe("real_sub_100");
+            expect(apiGraph.transaction("tx1").value()?.subcategoryId).toBe("real_sub_100");
         });
     });
 });

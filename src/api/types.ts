@@ -55,7 +55,7 @@ export type AutoFlushOptions = {
 };
 
 export interface ApiEntityConfig<D extends GraphDef<any, any>, E extends EntityBase> {
-    create?: (data: Omit<E, "id">) => Promise<E | ApiError> | E | ApiError;
+    create?: (data: Omit<E, "id"> & { id?: E["id"] }) => Promise<E | ApiError> | E | ApiError;
     read?: (id: E["id"]) => Promise<E | ApiError> | E | ApiError;
     update?: (data: E) => Promise<E | void | undefined | ApiError> | E | void | undefined | ApiError;
     delete?: (id: E["id"]) => Promise<void | ApiError> | void | ApiError;
@@ -121,6 +121,7 @@ export type ApiEntityNodeList<
 export type ApiGraphSnapshot<D extends GraphDef<any, any>> = {
     entities: Entities<D["entityModel"]>;
     pendingDeltas: PendingDelta[];
+    idMappings?: Record<string | number, string | number>;
 };
 
 export type ApiTransactionGraph<D extends GraphDef<any, any>, Options extends ValidApi<D> = ValidApi<D>> = ApiGraph<
@@ -138,11 +139,11 @@ export type ApiGraph<D extends GraphDef<any, any>, Options extends ValidApi<D> =
 } & {
     createEntity<K extends keyof D["entityModel"] & string>(
         type: K,
-        data: Omit<D["entityModel"][K], "id">,
+        data: Omit<D["entityModel"][K], "id"> & { id?: D["entityModel"][K]["id"] },
     ): Promise<ApiEntityNode<D, D["entityModel"][K], Options[K]>>;
 } & {
     [K in keyof D["entityModel"] as `create${Capitalize<string & K>}`]: (
-        data: Omit<D["entityModel"][K], "id">,
+        data: Omit<D["entityModel"][K], "id"> & { id?: D["entityModel"][K]["id"] },
     ) => Promise<ApiEntityNode<D, D["entityModel"][K], Options[K]>>;
 } & {
     [K in keyof D["entityModel"] as `update${Capitalize<string & K>}`]: (data: D["entityModel"][K]) => Promise<any>;
@@ -156,6 +157,8 @@ export type ApiGraph<D extends GraphDef<any, any>, Options extends ValidApi<D> =
     beginTransaction(): ApiTransactionGraph<D, Options>;
     subscribe(subscriber: ApiGraphSubscriber<D>): () => void;
     startAutoFlush(options?: AutoFlushOptions): () => void;
+    resolveId(id: string | number): string | number;
+    getOriginalId(id: string | number): string | number;
     api: Options extends { actions: infer Actions }
         ? {
               [K in keyof Actions]: Actions[K] extends (graph: any, ...args: infer Args) => Promise<infer R>

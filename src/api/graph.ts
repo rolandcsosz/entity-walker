@@ -143,6 +143,8 @@ export function createApiGraph<D extends GraphDef<any, any>, Options extends Val
     pendingDeltas?: PendingDelta[],
     transactionContext?: { txCoreGraph: any; txId: string; stagedDeltas: PendingDelta[] },
     listeners?: Set<ApiGraphSubscriber>,
+    idMap?: Map<string | number, string | number>,
+    edges?: any,
 ): ApiGraph<D, Options>;
 
 export function createApiGraph<D extends GraphDef<any, any>>(
@@ -152,9 +154,12 @@ export function createApiGraph<D extends GraphDef<any, any>>(
     pendingDeltas: PendingDelta[] = [],
     transactionContext?: { txCoreGraph: any; txId: string; stagedDeltas: PendingDelta[] },
     listeners: Set<ApiGraphSubscriber> = new Set(),
+    idMap: Map<string | number, string | number> = new Map(),
+    graphEdges?: any,
 ): ApiGraph<D> {
     let baseGraph: any;
     let opts: any;
+    let edges: any;
 
     if (
         baseGraphOrConfig &&
@@ -165,12 +170,130 @@ export function createApiGraph<D extends GraphDef<any, any>>(
     ) {
         baseGraph = createCoreGraph({ entities: baseGraphOrConfig.entities, edges: baseGraphOrConfig.edges });
         opts = baseGraphOrConfig.api ?? options;
+        edges = baseGraphOrConfig.edges;
     } else {
         baseGraph = baseGraphOrConfig;
         opts = options!;
+        edges = graphEdges ?? baseGraph?.edges;
     }
 
     const isTx = !!transactionContext;
+
+    function resolveId(id: string | number): string | number {
+        let current = id;
+        while (idMap.has(current)) {
+            current = idMap.get(current)!;
+        }
+        return current;
+    }
+
+    function getOriginalId(currentId: string | number): string | number {
+        for (const [tempId, serverId] of idMap.entries()) {
+            if (serverId === currentId) {
+                return tempId;
+            }
+        }
+        return currentId;
+    }
+
+    function idMappings(): Record<string | number, string | number> {
+        const result: Record<string | number, string | number> = {};
+        idMap.forEach((v, k) => {
+            result[k] = v;
+        });
+        return result;
+    }
+
+    function remapEntityId(
+        activeGraph: any,
+        entityType: string,
+        oldId: string | number,
+        newId: string | number,
+        deltas: PendingDelta[] = [],
+    ) {
+        if (!oldId || !newId || oldId === newId) return;
+
+        idMap.set(oldId, newId);
+
+        const edgeMap = edges ?? activeGraph?.edges;
+        const rawSnap = typeof activeGraph.snapshot === "function" ? activeGraph.snapshot() : null;
+        const allEntities =
+            rawSnap && typeof rawSnap === "object" && "entities" in rawSnap ? rawSnap.entities : rawSnap;
+
+        if (edgeMap && typeof edgeMap === "object" && allEntities) {
+            for (const [srcType, fkMapping] of Object.entries(edgeMap)) {
+                if (!fkMapping || typeof fkMapping !== "object") continue;
+                for (const [edgeProp, targetConfig] of Object.entries(fkMapping as Record<string, any>)) {
+                    const targetType =
+                        typeof targetConfig === "string"
+                            ? targetConfig
+                            : ((targetConfig as any)?.target ?? (targetConfig as any)?.type ?? edgeProp);
+
+                    if (targetType === entityType) {
+                        const entityList = allEntities[srcType];
+                        if (Array.isArray(entityList)) {
+                            for (const entity of entityList) {
+                                if (!entity) continue;
+                                const possibleFkFields = [
+                                    (targetConfig as any)?.foreignKey,
+                                    (targetConfig as any)?.fk,
+                                    edgeProp,
+                                    `${edgeProp}Id`,
+                                    `${targetType}Id`,
+                                ].filter(Boolean);
+
+                                const fkField = possibleFkFields.find((f) => f in entity) ?? possibleFkFields[0];
+
+                                if (fkField && String(entity[fkField]) === String(oldId)) {
+                                    const updated = { ...entity, [fkField]: newId };
+                                    activeGraph.sync({ [srcType]: [updated] }, { mode: "merge" });
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        const oldNode = activeGraph[entityType]?.(oldId);
+        if (oldNode && oldNode.exists()) {
+            oldNode.delete();
+        }
+
+        for (const delta of deltas) {
+            if (delta.entityType === entityType && String(delta.entityId) === String(oldId)) {
+                delta.entityId = newId;
+            }
+            if (delta.data && typeof delta.data === "object") {
+                if (edgeMap && edgeMap[delta.entityType]) {
+                    for (const [edgeProp, targetConfig] of Object.entries(
+                        edgeMap[delta.entityType] as Record<string, any>,
+                    )) {
+                        const targetType =
+                            typeof targetConfig === "string"
+                                ? targetConfig
+                                : ((targetConfig as any)?.target ?? (targetConfig as any)?.type ?? edgeProp);
+
+                        if (targetType === entityType) {
+                            const possibleFkFields = [
+                                (targetConfig as any)?.foreignKey,
+                                (targetConfig as any)?.fk,
+                                edgeProp,
+                                `${edgeProp}Id`,
+                                `${targetType}Id`,
+                            ].filter(Boolean);
+
+                            const fkField = possibleFkFields.find((f) => f in delta.data) ?? possibleFkFields[0];
+
+                            if (fkField && String(delta.data[fkField]) === String(oldId)) {
+                                delta.data[fkField] = newId;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     function notifyListeners(event: ApiGraphEvent) {
         listeners.forEach((sub) => {
@@ -196,7 +319,8 @@ export function createApiGraph<D extends GraphDef<any, any>>(
         return err;
     };
 
-    function wrapNode(type: string, id: any, activeGraph = baseGraph): any {
+    function wrapNode(type: string, rawId: any, activeGraph = baseGraph): any {
+        const id = resolveId(rawId);
         const getBaseNode = () => activeGraph[type](id);
 
         const apiActions: Record<string, any> = {};
@@ -419,7 +543,17 @@ export function createApiGraph<D extends GraphDef<any, any>>(
                     return result;
                 }
             },
-            graph: () => createApiGraph(activeGraph, opts, queryCache, pendingDeltas, transactionContext, listeners),
+            graph: () =>
+                createApiGraph(
+                    activeGraph,
+                    opts,
+                    queryCache,
+                    pendingDeltas,
+                    transactionContext,
+                    listeners,
+                    idMap,
+                    edges,
+                ),
             api: apiActions,
         };
 
@@ -544,10 +678,7 @@ export function createApiGraph<D extends GraphDef<any, any>>(
                         if (!error && res && typeof res === "object" && "id" in res) {
                             const resObj = res as any;
                             if (delta.entityId && resObj.id !== delta.entityId) {
-                                const oldNode = baseGraph[delta.entityType](delta.entityId);
-                                if (oldNode && oldNode.exists()) {
-                                    oldNode.delete();
-                                }
+                                remapEntityId(baseGraph, delta.entityType, delta.entityId, resObj.id, pendingDeltas);
                                 baseGraph.sync({ [delta.entityType]: [res] }, { mode: "merge" });
                             } else {
                                 baseGraph.sync({ [delta.entityType]: [res] }, { mode: "merge" });
@@ -620,6 +751,8 @@ export function createApiGraph<D extends GraphDef<any, any>>(
                     pendingDeltas,
                     transactionContext,
                     listeners,
+                    idMap,
+                    edges,
                 );
                 return (actionFn as any)(apiGraphInstance, ...args);
             };
@@ -634,6 +767,7 @@ export function createApiGraph<D extends GraphDef<any, any>>(
         snapshot: () => ({
             entities: baseGraph.snapshot(),
             pendingDeltas: JSON.parse(JSON.stringify(pendingDeltas)),
+            idMappings: idMappings(),
         }),
         restore: (snap: any) => {
             if (snap && typeof snap === "object" && "entities" in snap) {
@@ -641,6 +775,12 @@ export function createApiGraph<D extends GraphDef<any, any>>(
                 if (Array.isArray(snap.pendingDeltas)) {
                     pendingDeltas.length = 0;
                     pendingDeltas.push(...JSON.parse(JSON.stringify(snap.pendingDeltas)));
+                }
+                if (snap.idMappings && typeof snap.idMappings === "object") {
+                    idMap.clear();
+                    for (const [k, v] of Object.entries(snap.idMappings)) {
+                        idMap.set(k, v as string | number);
+                    }
                 }
             } else {
                 baseGraph.restore(snap);
@@ -698,6 +838,8 @@ export function createApiGraph<D extends GraphDef<any, any>>(
                 }
             };
         },
+        resolveId: (id: string | number) => resolveId(id),
+        getOriginalId: (id: string | number) => getOriginalId(id),
         beginTransaction: (): ApiTransactionGraph<D> => {
             const txCoreGraph = baseGraph.beginTransaction();
             const txId = generateUUID();
@@ -714,6 +856,8 @@ export function createApiGraph<D extends GraphDef<any, any>>(
                     stagedDeltas,
                 },
                 listeners,
+                idMap,
+                edges,
             );
 
             let committed = false;
@@ -755,6 +899,23 @@ export function createApiGraph<D extends GraphDef<any, any>>(
                                     data: delta.data,
                                 });
                                 if (!error && res && typeof res === "object" && "id" in res) {
+                                    const resObj = res as any;
+                                    if (delta.entityId && resObj.id !== delta.entityId) {
+                                        remapEntityId(
+                                            txCoreGraph,
+                                            delta.entityType,
+                                            delta.entityId,
+                                            resObj.id,
+                                            stagedDeltas,
+                                        );
+                                        remapEntityId(
+                                            baseGraph,
+                                            delta.entityType,
+                                            delta.entityId,
+                                            resObj.id,
+                                            pendingDeltas,
+                                        );
+                                    }
                                     txCoreGraph.sync({ [delta.entityType]: [res] }, { mode: "merge" });
                                 }
                             }
@@ -906,15 +1067,21 @@ export function createApiGraph<D extends GraphDef<any, any>>(
                         return wrapNode(type, tempId);
                     }
 
+                    const resId = (response as any)?.id;
+                    const tempId = data.id;
+                    if (tempId && resId && tempId !== resId) {
+                        remapEntityId(baseGraph, type, tempId, resId, pendingDeltas);
+                    }
+
                     baseGraph.sync({ [type]: [response] }, { mode: "merge" });
                     notifyListeners({
                         type: "change",
                         op: "create",
                         entityType: type,
-                        entityId: (response as any)?.id,
+                        entityId: resId,
                         data: response,
                     });
-                    return wrapNode(type, (response as any).id);
+                    return wrapNode(type, resId);
                 };
             }
             if (propStr.startsWith("update") && propStr !== "update") {
@@ -933,7 +1100,7 @@ export function createApiGraph<D extends GraphDef<any, any>>(
                     return wrapList(type, baseList);
                 };
             }
-            return (id: any) => wrapNode(propStr, id);
+            return (id: any) => wrapNode(propStr, resolveId(id));
         },
     }) as any;
 }

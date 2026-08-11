@@ -138,16 +138,11 @@ export const createNonProxyGraph = <EM extends EntityMap, E extends GraphEdges<E
 
         const nodePath = [...path, id !== null ? `${String(key)}(${id})` : `${String(key)}(null)`];
 
-        let valueFetched = false;
-        let cachedValue: any;
         function getValue() {
-            if (valueFetched) return cachedValue;
             ensureIndexes();
-            valueFetched = true;
-            if (id === null) return (cachedValue = undefined);
+            if (id === null) return undefined;
             const entity = byId[key as string]?.[id];
-            cachedValue = entity ? (Object.freeze(entity) as Readonly<EM[typeof key]>) : undefined;
-            return cachedValue;
+            return entity ? (Object.freeze(entity) as Readonly<EM[typeof key]>) : undefined;
         }
 
         // Internal traversal methods — hidden from users under NODE_PROP.
@@ -284,7 +279,6 @@ export const createNonProxyGraph = <EM extends EntityMap, E extends GraphEdges<E
                 byId[key as string][id!.toString()] = updated;
                 const arrIdx = ents[key as string].findIndex((e: any) => e.id.toString() === id!.toString());
                 if (arrIdx !== -1) ents[key as string][arrIdx] = updated;
-                valueFetched = false;
                 nodeCache.delete(`${String(key)}:${id!.toString()}`);
                 if (entityEdges) {
                     for (const targetType in entityEdges) {
