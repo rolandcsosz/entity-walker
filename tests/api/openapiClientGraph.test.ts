@@ -185,7 +185,11 @@ describe("OpenAPI Client Integration with ApiGraph", () => {
                 if (method === "GET") {
                     responseBody = Array.from(mockDb.transactions.values());
                 } else if (method === "POST") {
-                    const bodyText = init?.body ? (init.body as string) : input instanceof Request ? await input.text() : "{}";
+                    const bodyText = init?.body
+                        ? (init.body as string)
+                        : input instanceof Request
+                          ? await input.text()
+                          : "{}";
                     const body = JSON.parse(bodyText || "{}");
                     const newId = `tx_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
                     const created: Transaction = { id: newId, ...body };
@@ -204,7 +208,11 @@ describe("OpenAPI Client Integration with ApiGraph", () => {
                         responseBody = { message: "Transaction not found" };
                     }
                 } else if (method === "PUT") {
-                    const bodyText = init?.body ? (init.body as string) : input instanceof Request ? await input.text() : "{}";
+                    const bodyText = init?.body
+                        ? (init.body as string)
+                        : input instanceof Request
+                          ? await input.text()
+                          : "{}";
                     const body = JSON.parse(bodyText || "{}");
                     const existing = mockDb.transactions.get(id);
                     if (existing) {
@@ -228,7 +236,11 @@ describe("OpenAPI Client Integration with ApiGraph", () => {
                 if (method === "GET") {
                     responseBody = Array.from(mockDb.subcategories.values());
                 } else if (method === "POST") {
-                    const bodyText = init?.body ? (init.body as string) : input instanceof Request ? await input.text() : "{}";
+                    const bodyText = init?.body
+                        ? (init.body as string)
+                        : input instanceof Request
+                          ? await input.text()
+                          : "{}";
                     const body = JSON.parse(bodyText || "{}");
                     const newId = `sub_${Date.now()}`;
                     const created: Subcategory = { id: newId, expenseTypeId: "exp1", ...body };
@@ -246,10 +258,21 @@ describe("OpenAPI Client Integration with ApiGraph", () => {
                         responseBody = { message: "Subcategory not found" };
                     }
                 } else if (method === "PUT") {
-                    const bodyText = init?.body ? (init.body as string) : input instanceof Request ? await input.text() : "{}";
+                    const bodyText = init?.body
+                        ? (init.body as string)
+                        : input instanceof Request
+                          ? await input.text()
+                          : "{}";
                     const body = JSON.parse(bodyText || "{}");
                     const existing = mockDb.subcategories.get(id);
-                    const updated: Subcategory = { expenseTypeId: "exp1", mainCategoryId: "mc1", name: "", ...existing, ...body, id };
+                    const updated: Subcategory = {
+                        expenseTypeId: "exp1",
+                        mainCategoryId: "mc1",
+                        name: "",
+                        ...existing,
+                        ...body,
+                        id,
+                    };
                     mockDb.subcategories.set(id, updated);
                     responseBody = updated;
                 } else if (method === "DELETE") {
@@ -282,7 +305,11 @@ describe("OpenAPI Client Integration with ApiGraph", () => {
                 if (method === "GET") {
                     responseBody = Array.from(mockDb.templates.values());
                 } else if (method === "POST") {
-                    const bodyText = init?.body ? (init.body as string) : input instanceof Request ? await input.text() : "{}";
+                    const bodyText = init?.body
+                        ? (init.body as string)
+                        : input instanceof Request
+                          ? await input.text()
+                          : "{}";
                     const body = JSON.parse(bodyText || "{}");
                     const newId = `tpl_${Date.now()}`;
                     const created: Template = { id: newId, ...body };
@@ -300,7 +327,11 @@ describe("OpenAPI Client Integration with ApiGraph", () => {
                         responseBody = { message: "Template not found" };
                     }
                 } else if (method === "PUT") {
-                    const bodyText = init?.body ? (init.body as string) : input instanceof Request ? await input.text() : "{}";
+                    const bodyText = init?.body
+                        ? (init.body as string)
+                        : input instanceof Request
+                          ? await input.text()
+                          : "{}";
                     const body = JSON.parse(bodyText || "{}");
                     const existing = mockDb.templates.get(id);
                     const updated: Template = { ...existing, ...body, id };

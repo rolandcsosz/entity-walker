@@ -46,7 +46,9 @@ function generateDataset({
     return { expenseType, incomeType, mainCategory, subcategory, transaction };
 }
 
-function randIdx(len: number) { return Math.floor(Math.random() * len); }
+function randIdx(len: number) {
+    return Math.floor(Math.random() * len);
+}
 
 /** Nested loop: expenseType → mainCategory → subcategory (filtered) → transactions */
 function loop_filteredReverse(entities: Entities<Schema>, expenseTypeId: string, subNamePrefix: string): string[] {
@@ -66,7 +68,8 @@ function loop_filteredReverse(entities: Entities<Schema>, expenseTypeId: string,
 }
 
 function proxyGraphQuery(graph: any, expenseTypeId: string, subNamePrefix: string): string[] {
-    return graph.expenseType(expenseTypeId)
+    return graph
+        .expenseType(expenseTypeId)
         .mainCategoryNodes()
         .subcategoryNodes((sc: any) => sc.name.startsWith(subNamePrefix))
         .transactionNodes()
@@ -74,7 +77,8 @@ function proxyGraphQuery(graph: any, expenseTypeId: string, subNamePrefix: strin
 }
 
 function nonProxyGraphQuery(graph: any, expenseTypeId: string, subNamePrefix: string): string[] {
-    return graph.to("expenseType", expenseTypeId)
+    return graph
+        .to("expenseType", expenseTypeId)
         .to("mainCategoryNodes")
         .to("subcategoryNodes", (sc: any) => sc.name.startsWith(subNamePrefix))
         .to("transactionNodes")
@@ -94,8 +98,6 @@ const DATASET_SIZES = [
     { sub: 30, tx: 30 },
     { sub: 70, tx: 70 },
     { sub: 150, tx: 150 },
-
-
 ];
 
 const N = 12;
@@ -114,7 +116,10 @@ async function runBenchmark() {
             transactionsPerSub: ds.tx,
         });
 
-        const queryEtIds = Array.from({ length: N }, () => entities.expenseType[randIdx(entities.expenseType.length)].id);
+        const queryEtIds = Array.from(
+            { length: N },
+            () => entities.expenseType[randIdx(entities.expenseType.length)].id,
+        );
 
         // ── nested loop ──
         let loopMs = 0;
@@ -149,22 +154,45 @@ async function runBenchmark() {
             nonProxy: npMs / N,
         };
         results.push(row);
-        console.log(`  tx=${row.size.toLocaleString()}  loop=${row.loop.toFixed(3)}ms  proxy=${row.proxy.toFixed(3)}ms  np=${row.nonProxy.toFixed(3)}ms`);
+        console.log(
+            `  tx=${row.size.toLocaleString()}  loop=${row.loop.toFixed(3)}ms  proxy=${row.proxy.toFixed(3)}ms  np=${row.nonProxy.toFixed(3)}ms`,
+        );
     }
 
     generatePlot(results);
 }
 
 function generatePlot(results: BenchmarkResult[]) {
-    const xs = results.map(r => r.size);
+    const xs = results.map((r) => r.size);
     const traces = [
-        { x: xs, y: results.map(r => r.loop), name: "Nested Loop", line: { color: "#f1634c", width: 3 }, mode: "lines+markers", type: "scatter" },
-        { x: xs, y: results.map(r => r.proxy), name: "Proxy Graph (pre-built)", line: { color: "#37b98b", width: 3 }, mode: "lines+markers", type: "scatter" },
-        { x: xs, y: results.map(r => r.nonProxy), name: "Non-Proxy Graph (pre-built)", line: { color: "#6b8cff", width: 3 }, mode: "lines+markers", type: "scatter" },
+        {
+            x: xs,
+            y: results.map((r) => r.loop),
+            name: "Nested Loop",
+            line: { color: "#f1634c", width: 3 },
+            mode: "lines+markers",
+            type: "scatter",
+        },
+        {
+            x: xs,
+            y: results.map((r) => r.proxy),
+            name: "Proxy Graph (pre-built)",
+            line: { color: "#37b98b", width: 3 },
+            mode: "lines+markers",
+            type: "scatter",
+        },
+        {
+            x: xs,
+            y: results.map((r) => r.nonProxy),
+            name: "Non-Proxy Graph (pre-built)",
+            line: { color: "#6b8cff", width: 3 },
+            mode: "lines+markers",
+            type: "scatter",
+        },
     ];
 
     const layout = {
-        xaxis: { title: "Number of Transactions", },
+        xaxis: { title: "Number of Transactions" },
         yaxis: { title: "Average runtime (ms)", tickformat: ".0s" },
         font: { size: 18 },
         legend: { orientation: "h", x: 0.5, xanchor: "center", y: 1.2 },

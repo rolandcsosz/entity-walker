@@ -36,19 +36,18 @@ export function buildGraphCore<EM extends EntityMap, E extends GraphEdges<EM>>(
             valueFetched = true;
             if (id === null) return (cachedValue = undefined);
             const entity = byId[key as string]?.[id];
-            cachedValue = entity ? Object.freeze(entity) as Readonly<EM[typeof key]> : undefined;
+            cachedValue = entity ? (Object.freeze(entity) as Readonly<EM[typeof key]>) : undefined;
             return cachedValue;
         }
 
         const valueOrThrowMethod = () => {
             const e = getValue();
             if (e === undefined) {
-                if (id === null) throw new Error(
-                    `[entity-walker] Cannot call valueOrThrow() on '${String(key)}': traversal led to a missing entity (null id).`
-                );
-                throw new Error(
-                    `[entity-walker] Entity '${String(key)}' with id '${id}' does not exist in the graph.`
-                );
+                if (id === null)
+                    throw new Error(
+                        `[entity-walker] Cannot call valueOrThrow() on '${String(key)}': traversal led to a missing entity (null id).`,
+                    );
+                throw new Error(`[entity-walker] Entity '${String(key)}' with id '${id}' does not exist in the graph.`);
             }
             return e;
         };
@@ -100,7 +99,7 @@ export function buildGraphCore<EM extends EntityMap, E extends GraphEdges<EM>>(
                     const edge = sourceEdges[targetType];
                     const sourceArr = (entities as Record<string, any[]>)[sourceType] ?? [];
                     // snapshot ids before mutating
-                    const pointingIds = sourceArr.filter(e => edge.resolve(e) === id).map(e => e.id.toString());
+                    const pointingIds = sourceArr.filter((e) => edge.resolve(e) === id).map((e) => e.id.toString());
                     for (const pid of pointingIds) {
                         createNode(sourceType as keyof EM, pid).deleteCascade();
                     }
@@ -142,7 +141,8 @@ export function buildGraphCore<EM extends EntityMap, E extends GraphEdges<EM>>(
                     if (newTargetId == null) continue;
                     if (!reverseIndex[targetType]) reverseIndex[targetType] = {};
                     if (!reverseIndex[targetType][key as string]) reverseIndex[targetType][key as string] = {};
-                    if (!reverseIndex[targetType][key as string][newTargetId]) reverseIndex[targetType][key as string][newTargetId] = [];
+                    if (!reverseIndex[targetType][key as string][newTargetId])
+                        reverseIndex[targetType][key as string][newTargetId] = [];
                     reverseIndex[targetType][key as string][newTargetId].push(id!.toString());
                 }
             }
@@ -155,56 +155,62 @@ export function buildGraphCore<EM extends EntityMap, E extends GraphEdges<EM>>(
             value: getValue(),
         });
 
-        const node = new Proxy({}, {
-            get(_, prop: string | symbol) {
-                if (typeof prop === 'symbol') return undefined;
-                if (prop === "then" || prop === "toJSON") return undefined;
-                if (prop === "value") return getValue;
-                if (prop === "valueOrThrow") return valueOrThrowMethod;
-                if (prop === "exists") return existsMethod;
-                if (prop === "path") return pathMethod;
-                if (prop === "info") return infoMethod;
-                if (prop === "delete") return deleteMethod;
-                if (prop === "deleteCascade") return deleteCascadeMethod;
-                if (prop === "update") return updateNodeMethod;
+        const node = new Proxy(
+            {},
+            {
+                get(_, prop: string | symbol) {
+                    if (typeof prop === "symbol") return undefined;
+                    if (prop === "then" || prop === "toJSON") return undefined;
+                    if (prop === "value") return getValue;
+                    if (prop === "valueOrThrow") return valueOrThrowMethod;
+                    if (prop === "exists") return existsMethod;
+                    if (prop === "path") return pathMethod;
+                    if (prop === "info") return infoMethod;
+                    if (prop === "delete") return deleteMethod;
+                    if (prop === "deleteCascade") return deleteCascadeMethod;
+                    if (prop === "update") return updateNodeMethod;
 
-                return (...args: any[]) => {
-                    const edge = (edges as any)[key]?.[prop];
+                    return (...args: any[]) => {
+                        const edge = (edges as any)[key]?.[prop];
 
-                    if (id === null) {
-                        if (edge) return createNode(prop as keyof EM, null, nodePath);
-                        if (prop.endsWith("Nodes")) return toNodeList([], prop.slice(0, -"Nodes".length));
-                        throw new Error(
-                            `[entity-walker] Relation '${prop}' called on a null '${String(key)}' node (traversal led to a missing entity).`
-                        );
-                    }
-
-                    if (edge) {
-                        const entity = getValue();
-                        const targetType = prop as keyof EM;
-                        if (!entity) return createNode(targetType, null, nodePath);
-                        const nextId = edge.resolve(entity);
-                        if (nextId == null) return createNode(targetType, null, nodePath);
-                        const targetExists = !!byId[targetType as string]?.[nextId];
-                        if (!targetExists) return createNode(targetType, null, nodePath);
-                        return createNode(targetType, nextId, nodePath);
-                    }
-
-                    if (prop.endsWith("Nodes")) {
-                        const sourceKey = prop.slice(0, -"Nodes".length);
-                        if (sourceKey) {
-                            if (getValue() === undefined) return toNodeList([], sourceKey);
-                            const pointingIds = reverseIndex[key as string]?.[sourceKey]?.[id] || [];
-                            return toNodeList(pointingIds.map(pid => createNode(sourceKey as keyof EM, pid, nodePath)), sourceKey);
+                        if (id === null) {
+                            if (edge) return createNode(prop as keyof EM, null, nodePath);
+                            if (prop.endsWith("Nodes")) return toNodeList([], prop.slice(0, -"Nodes".length));
+                            throw new Error(
+                                `[entity-walker] Relation '${prop}' called on a null '${String(key)}' node (traversal led to a missing entity).`,
+                            );
                         }
-                    }
 
-                    throw new Error(
-                        `[entity-walker] No relation '${prop}' on entity type '${String(key)}'. Available: ${availableRelations().join(', ') || 'none'}`
-                    );
-                };
+                        if (edge) {
+                            const entity = getValue();
+                            const targetType = prop as keyof EM;
+                            if (!entity) return createNode(targetType, null, nodePath);
+                            const nextId = edge.resolve(entity);
+                            if (nextId == null) return createNode(targetType, null, nodePath);
+                            const targetExists = !!byId[targetType as string]?.[nextId];
+                            if (!targetExists) return createNode(targetType, null, nodePath);
+                            return createNode(targetType, nextId, nodePath);
+                        }
+
+                        if (prop.endsWith("Nodes")) {
+                            const sourceKey = prop.slice(0, -"Nodes".length);
+                            if (sourceKey) {
+                                if (getValue() === undefined) return toNodeList([], sourceKey);
+                                const pointingIds = reverseIndex[key as string]?.[sourceKey]?.[id] || [];
+                                return toNodeList(
+                                    pointingIds.map((pid) => createNode(sourceKey as keyof EM, pid, nodePath)),
+                                    sourceKey,
+                                );
+                            }
+                        }
+
+                        throw new Error(
+                            `[entity-walker] No relation '${prop}' on entity type '${String(key)}'. Available: ${availableRelations().join(", ") || "none"}`,
+                        );
+                    };
+                },
             },
-        });
+        );
 
         if (cacheKey) nodeCache.set(cacheKey, node);
         return node;
@@ -212,32 +218,46 @@ export function buildGraphCore<EM extends EntityMap, E extends GraphEdges<EM>>(
 
     _createNode = createNode;
 
-    return { createNode, toNodeList, graphSchema, graphInfo, ensureIndexes, markIndexesDirty: core.markIndexesDirty, entities: core.entities, byId: core.byId, reverseIndex: core.reverseIndex, nodeCache: core.nodeCache };
+    return {
+        createNode,
+        toNodeList,
+        graphSchema,
+        graphInfo,
+        ensureIndexes,
+        markIndexesDirty: core.markIndexesDirty,
+        entities: core.entities,
+        byId: core.byId,
+        reverseIndex: core.reverseIndex,
+        nodeCache: core.nodeCache,
+    };
 }
 
-export function createGraph<
-    EM extends EntityMap,
-    E extends GraphEdges<EM>
->(config: {
+export function createGraph<EM extends EntityMap, E extends GraphEdges<EM>>(config: {
     entities: { [K in keyof EM]: EM[K][] };
     edges: E;
 }): EntityGraph<GraphDef<EM, E>>;
 
-export function createGraph<
-    D extends GraphDef<any, any>
->(config: {
+export function createGraph<D extends GraphDef<any, any>>(config: {
     entities: { [K in keyof D["entityModel"]]: D["entityModel"][K][] };
     edges: D["edges"];
 }): EntityGraph<D>;
 
-export function createGraph<
-    EM extends EntityMap,
-    E extends GraphEdges<EM>
->(config: {
+export function createGraph<EM extends EntityMap, E extends GraphEdges<EM>>(config: {
     entities: any;
     edges: any;
 }): any {
-    const { createNode, toNodeList, graphSchema, graphInfo, ensureIndexes, markIndexesDirty, entities, byId, reverseIndex, nodeCache } = buildGraphCore<EM, E>(config.entities, config.edges);
+    const {
+        createNode,
+        toNodeList,
+        graphSchema,
+        graphInfo,
+        ensureIndexes,
+        markIndexesDirty,
+        entities,
+        byId,
+        reverseIndex,
+        nodeCache,
+    } = buildGraphCore<EM, E>(config.entities, config.edges);
 
     let suppressSyncWarnings = false;
 
@@ -249,7 +269,9 @@ export function createGraph<
                 const edge = entityEdges[targetType];
                 const targetId = edge.resolve(entity);
                 if (targetId != null && !byId[targetType]?.[targetId.toString()]) {
-                    console.warn(`[entity-walker] Relation target missing: '${key}' with id '${entity.id}' is missing '${targetType}' id '${targetId}'.`);
+                    console.warn(
+                        `[entity-walker] Relation target missing: '${key}' with id '${entity.id}' is missing '${targetType}' id '${targetId}'.`,
+                    );
                 }
             }
         }
@@ -334,114 +356,127 @@ export function createGraph<
         }
     }
 
-    const baseGraph = new Proxy({}, {
-        get(_, prop: string | symbol) {
-            if (typeof prop === 'symbol') return undefined;
-            if (prop === "info") return graphInfo;
-            if (prop === "schema") return graphSchema;
-            if (prop === "snapshot") return () => {
-                const snap: Record<string, any[]> = {};
-                for (const key in entities) snap[key] = (entities as Record<string, any[]>)[key].map(e => ({ ...e }));
-                return snap;
-            };
-            if (prop === "restore") return (snapshot: Record<string, any[]>) => {
-                const ents = entities as Record<string, any[]>;
-                for (const key in ents) {
-                    ents[key] = (snapshot[key] ?? []).map((e: any) => ({ ...e }));
-                }
-                markIndexesDirty();
-            };
-            if (prop === "sync") return (fresh: Record<string, any[]>, options?: { mode?: "merge" | "replace" }) => {
-                ensureIndexes();
-                const mode = options?.mode ?? "replace";
-                const ents = entities as Record<string, any[]>;
-
-                for (const key in fresh) {
-                    const freshList = fresh[key] ?? [];
-                    for (const e of freshList) {
-                        if (e === undefined || e === null || e.id === undefined || e.id === null) {
-                            throw new Error(`[entity-walker] Sync payload is missing a valid 'id'.`);
+    const baseGraph = new Proxy(
+        {},
+        {
+            get(_, prop: string | symbol) {
+                if (typeof prop === "symbol") return undefined;
+                if (prop === "info") return graphInfo;
+                if (prop === "schema") return graphSchema;
+                if (prop === "snapshot")
+                    return () => {
+                        const snap: Record<string, any[]> = {};
+                        for (const key in entities)
+                            snap[key] = (entities as Record<string, any[]>)[key].map((e) => ({ ...e }));
+                        return snap;
+                    };
+                if (prop === "restore")
+                    return (snapshot: Record<string, any[]>) => {
+                        const ents = entities as Record<string, any[]>;
+                        for (const key in ents) {
+                            ents[key] = (snapshot[key] ?? []).map((e: any) => ({ ...e }));
                         }
-                    }
-                }
+                        markIndexesDirty();
+                    };
+                if (prop === "sync")
+                    return (fresh: Record<string, any[]>, options?: { mode?: "merge" | "replace" }) => {
+                        ensureIndexes();
+                        const mode = options?.mode ?? "replace";
+                        const ents = entities as Record<string, any[]>;
 
-                suppressSyncWarnings = true;
-                try {
-                    for (const key in fresh) {
-                        const freshList: any[] = fresh[key] ?? [];
-                        const freshIds = new Set(freshList.map((e: any) => String(e.id)));
-                        if (mode === "replace") {
-                            for (const existing of [...(ents[key] ?? [])]) {
-                                if (!freshIds.has(String(existing.id))) createNode(key as keyof EM, existing.id).delete();
+                        for (const key in fresh) {
+                            const freshList = fresh[key] ?? [];
+                            for (const e of freshList) {
+                                if (e === undefined || e === null || e.id === undefined || e.id === null) {
+                                    throw new Error(`[entity-walker] Sync payload is missing a valid 'id'.`);
+                                }
                             }
                         }
-                        if (freshList.length > 0) update(key as keyof EM, freshList);
-                        if (mode === "replace") {
-                            const sorted = freshList.map(e => byId[key]?.[e.id.toString()]).filter(Boolean);
-                            ents[key].length = 0;
-                            ents[key].push(...sorted);
+
+                        suppressSyncWarnings = true;
+                        try {
+                            for (const key in fresh) {
+                                const freshList: any[] = fresh[key] ?? [];
+                                const freshIds = new Set(freshList.map((e: any) => String(e.id)));
+                                if (mode === "replace") {
+                                    for (const existing of [...(ents[key] ?? [])]) {
+                                        if (!freshIds.has(String(existing.id)))
+                                            createNode(key as keyof EM, existing.id).delete();
+                                    }
+                                }
+                                if (freshList.length > 0) update(key as keyof EM, freshList);
+                                if (mode === "replace") {
+                                    const sorted = freshList.map((e) => byId[key]?.[e.id.toString()]).filter(Boolean);
+                                    ents[key].length = 0;
+                                    ents[key].push(...sorted);
+                                }
+                            }
+                        } finally {
+                            suppressSyncWarnings = false;
                         }
-                    }
-                } finally {
-                    suppressSyncWarnings = false;
+
+                        for (const key in fresh) {
+                            const freshList = fresh[key] ?? [];
+                            for (const e of freshList) {
+                                checkRelationTargets(key as keyof EM, e);
+                            }
+                        }
+                    };
+                if (prop === "beginTransaction")
+                    return () => {
+                        const snapshotMethod = () => {
+                            const snap: Record<string, any[]> = {};
+                            for (const key in entities)
+                                snap[key] = (entities as Record<string, any[]>)[key].map((e) => ({ ...e }));
+                            return snap;
+                        };
+                        const txEntities = snapshotMethod();
+                        const txGraph = createGraph({ entities: txEntities, edges: config.edges });
+                        let committed = false;
+                        let rolledBack = false;
+
+                        const commit = () => {
+                            if (committed || rolledBack) return;
+                            committed = true;
+                            const ents = entities as Record<string, any[]>;
+                            const txSnap = txGraph.snapshot();
+                            for (const key in ents) {
+                                ents[key] = (txSnap[key] ?? []).map((e: any) => ({ ...e }));
+                            }
+                            markIndexesDirty();
+                        };
+
+                        const rollback = () => {
+                            rolledBack = true;
+                            txGraph.restore(snapshotMethod());
+                        };
+
+                        return new Proxy(txGraph, {
+                            get(target, p) {
+                                if (p === "commit") return commit;
+                                if (p === "rollback") return rollback;
+                                return (target as any)[p];
+                            },
+                        }) as any;
+                    };
+                if (prop.startsWith("update") && prop.length > 6) {
+                    const rawKey = prop[6].toLowerCase() + prop.slice(7);
+                    return (entityOrEntities: any) => update(rawKey as keyof EM, entityOrEntities);
                 }
-
-                for (const key in fresh) {
-                    const freshList = fresh[key] ?? [];
-                    for (const e of freshList) {
-                        checkRelationTargets(key as keyof EM, e);
-                    }
+                if (prop.endsWith("Nodes")) {
+                    const entityKey = prop.slice(0, -"Nodes".length);
+                    return () => {
+                        const all = entities[entityKey] || [];
+                        return toNodeList(
+                            all.map((item: any) => createNode(entityKey as keyof EM, item.id.toString())),
+                            entityKey,
+                        );
+                    };
                 }
-            };
-            if (prop === "beginTransaction") return () => {
-                const snapshotMethod = () => {
-                    const snap: Record<string, any[]> = {};
-                    for (const key in entities) snap[key] = (entities as Record<string, any[]>)[key].map(e => ({ ...e }));
-                    return snap;
-                };
-                const txEntities = snapshotMethod();
-                const txGraph = createGraph({ entities: txEntities, edges: config.edges });
-                let committed = false;
-                let rolledBack = false;
-
-                const commit = () => {
-                    if (committed || rolledBack) return;
-                    committed = true;
-                    const ents = entities as Record<string, any[]>;
-                    const txSnap = txGraph.snapshot();
-                    for (const key in ents) {
-                        ents[key] = (txSnap[key] ?? []).map((e: any) => ({ ...e }));
-                    }
-                    markIndexesDirty();
-                };
-
-                const rollback = () => {
-                    rolledBack = true;
-                    txGraph.restore(snapshotMethod());
-                };
-
-                return new Proxy(txGraph, {
-                    get(target, p) {
-                        if (p === "commit") return commit;
-                        if (p === "rollback") return rollback;
-                        return (target as any)[p];
-                    }
-                }) as any;
-            };
-            if (prop.startsWith("update") && prop.length > 6) {
-                const rawKey = prop[6].toLowerCase() + prop.slice(7);
-                return (entityOrEntities: any) => update(rawKey as keyof EM, entityOrEntities);
-            }
-            if (prop.endsWith("Nodes")) {
-                const entityKey = prop.slice(0, -"Nodes".length);
-                return () => {
-                    const all = entities[entityKey] || [];
-                    return toNodeList(all.map((item: any) => createNode(entityKey as keyof EM, item.id.toString())), entityKey);
-                };
-            }
-            return (id: string | number) => createNode(prop as any, id.toString());
+                return (id: string | number) => createNode(prop as any, id.toString());
+            },
         },
-    }) as any;
+    ) as any;
 
     return baseGraph;
 }

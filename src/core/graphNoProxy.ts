@@ -8,14 +8,14 @@ export const createNonProxyGraph = <EM extends EntityMap, E extends GraphEdges<E
     let _createNode: (key: keyof EM, id: string | number | null, path?: string[]) => any;
 
     function addToList(list: any, _nodeKey: string): void {
-        Object.defineProperty(list, 'to', {
+        Object.defineProperty(list, "to", {
             value: (rel: string) => {
-                if (!rel.endsWith("Nodes")) throw new Error(
-                    `[entity-walker] EntityNodeListNoProxy.to() requires a 'Nodes' suffix (e.g. '${rel}Nodes')`
-                );
-                if (typeof list[rel] !== 'function') throw new Error(
-                    `[entity-walker] No relation '${rel}' on this node list.`
-                );
+                if (!rel.endsWith("Nodes"))
+                    throw new Error(
+                        `[entity-walker] EntityNodeListNoProxy.to() requires a 'Nodes' suffix (e.g. '${rel}Nodes')`,
+                    );
+                if (typeof list[rel] !== "function")
+                    throw new Error(`[entity-walker] No relation '${rel}' on this node list.`);
                 return list[rel]();
             },
             enumerable: false,
@@ -23,7 +23,17 @@ export const createNonProxyGraph = <EM extends EntityMap, E extends GraphEdges<E
     }
 
     const core = buildCore<EM, E>(config.entities, config.edges, () => _createNode, addToList);
-    const { byId, reverseIndex, nodeCache, toNodeList, graphSchema, graphInfo, ensureIndexes, markIndexesDirty, entities } = core;
+    const {
+        byId,
+        reverseIndex,
+        nodeCache,
+        toNodeList,
+        graphSchema,
+        graphInfo,
+        ensureIndexes,
+        markIndexesDirty,
+        entities,
+    } = core;
 
     let suppressSyncWarnings = false;
 
@@ -35,7 +45,9 @@ export const createNonProxyGraph = <EM extends EntityMap, E extends GraphEdges<E
                 const edge = entityEdges[targetType];
                 const targetId = edge.resolve(entity);
                 if (targetId != null && !byId[targetType]?.[targetId.toString()]) {
-                    console.warn(`[entity-walker] Relation target missing: '${key}' with id '${entity.id}' is missing '${targetType}' id '${targetId}'.`);
+                    console.warn(
+                        `[entity-walker] Relation target missing: '${key}' with id '${entity.id}' is missing '${targetType}' id '${targetId}'.`,
+                    );
                 }
             }
         }
@@ -134,7 +146,7 @@ export const createNonProxyGraph = <EM extends EntityMap, E extends GraphEdges<E
             valueFetched = true;
             if (id === null) return (cachedValue = undefined);
             const entity = byId[key as string]?.[id];
-            cachedValue = entity ? Object.freeze(entity) as Readonly<EM[typeof key]> : undefined;
+            cachedValue = entity ? (Object.freeze(entity) as Readonly<EM[typeof key]>) : undefined;
             return cachedValue;
         }
 
@@ -178,11 +190,12 @@ export const createNonProxyGraph = <EM extends EntityMap, E extends GraphEdges<E
             valueOrThrow: () => {
                 const e = getValue();
                 if (e === undefined) {
-                    if (id === null) throw new Error(
-                        `[entity-walker] Cannot call valueOrThrow() on '${String(key)}': traversal led to a missing entity (null id).`
-                    );
+                    if (id === null)
+                        throw new Error(
+                            `[entity-walker] Cannot call valueOrThrow() on '${String(key)}': traversal led to a missing entity (null id).`,
+                        );
                     throw new Error(
-                        `[entity-walker] Entity '${String(key)}' with id '${id}' does not exist in the graph.`
+                        `[entity-walker] Entity '${String(key)}' with id '${id}' does not exist in the graph.`,
                     );
                 }
                 return e;
@@ -237,7 +250,9 @@ export const createNonProxyGraph = <EM extends EntityMap, E extends GraphEdges<E
                         if (targetType !== String(key)) continue;
                         const edge = sourceEdges[targetType];
                         const sourceArr = (entities as Record<string, any[]>)[sourceType] ?? [];
-                        const pointingIds = sourceArr.filter((e: any) => edge.resolve(e) === id).map((e: any) => e.id.toString());
+                        const pointingIds = sourceArr
+                            .filter((e: any) => edge.resolve(e) === id)
+                            .map((e: any) => e.id.toString());
                         for (const pid of pointingIds) {
                             createNode(sourceType as keyof EM, pid).deleteCascade();
                         }
@@ -279,16 +294,18 @@ export const createNonProxyGraph = <EM extends EntityMap, E extends GraphEdges<E
                         if (newTargetId == null) continue;
                         if (!reverseIndex[targetType]) reverseIndex[targetType] = {};
                         if (!reverseIndex[targetType][key as string]) reverseIndex[targetType][key as string] = {};
-                        if (!reverseIndex[targetType][key as string][newTargetId]) reverseIndex[targetType][key as string][newTargetId] = [];
+                        if (!reverseIndex[targetType][key as string][newTargetId])
+                            reverseIndex[targetType][key as string][newTargetId] = [];
                         reverseIndex[targetType][key as string][newTargetId].push(id!.toString());
                     }
                 }
             },
             to: (rel: string) => {
                 const fn = internal[rel];
-                if (!fn) throw new Error(
-                    `[entity-walker] No relation '${rel}' on entity type '${String(key)}'. Available: ${Object.keys(internal).join(', ') || 'none'}`
-                );
+                if (!fn)
+                    throw new Error(
+                        `[entity-walker] No relation '${rel}' on entity type '${String(key)}'. Available: ${Object.keys(internal).join(", ") || "none"}`,
+                    );
                 return fn();
             },
             [NODE_PROP]: internal,
@@ -352,7 +369,7 @@ export const createNonProxyGraph = <EM extends EntityMap, E extends GraphEdges<E
                 }
                 if (freshList.length > 0) update(key as keyof EM, freshList);
                 if (mode === "replace") {
-                    const sorted = freshList.map(e => byId[key]?.[e.id.toString()]).filter(Boolean);
+                    const sorted = freshList.map((e) => byId[key]?.[e.id.toString()]).filter(Boolean);
                     ents[key].length = 0;
                     ents[key].push(...sorted);
                 }

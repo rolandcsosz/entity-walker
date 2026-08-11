@@ -16,12 +16,15 @@ function runSyncTests(label: string, make: () => any) {
         it("sync merge inserts and updates while keeping unmentioned entities", () => {
             const g = make();
 
-            g.sync({
-                transaction: [
-                    { id: "tx1", subcategoryId: "sub2" },
-                    { id: "tx99", subcategoryId: "sub1" },
-                ],
-            }, { mode: "merge" });
+            g.sync(
+                {
+                    transaction: [
+                        { id: "tx1", subcategoryId: "sub2" },
+                        { id: "tx99", subcategoryId: "sub1" },
+                    ],
+                },
+                { mode: "merge" },
+            );
 
             const txIds = (g.transactionNodes?.() ?? g.to("transactionNodes")).ids();
             expect(txIds).toEqual(["tx1", "tx2", "tx3", "tx99"]);
@@ -35,12 +38,15 @@ function runSyncTests(label: string, make: () => any) {
         it("sync replace inserts and updates while deleting missing entities", () => {
             const g = make();
 
-            g.sync({
-                transaction: [
-                    { id: "tx99", subcategoryId: "sub1" },
-                    { id: "tx1", subcategoryId: "sub2" },
-                ],
-            }, { mode: "replace" });
+            g.sync(
+                {
+                    transaction: [
+                        { id: "tx99", subcategoryId: "sub1" },
+                        { id: "tx1", subcategoryId: "sub2" },
+                    ],
+                },
+                { mode: "replace" },
+            );
 
             const txIds = (g.transactionNodes?.() ?? g.to("transactionNodes")).ids();
             expect(txIds).toEqual(["tx99", "tx1"]);
@@ -54,9 +60,14 @@ function runSyncTests(label: string, make: () => any) {
         it("sync rejects invalid entities (missing id) and keeps current data", () => {
             const g = make();
 
-            expect(() => g.sync({
-                transaction: [{ subcategoryId: "sub1" }],
-            }, { mode: "merge" })).toThrow("missing a valid 'id'");
+            expect(() =>
+                g.sync(
+                    {
+                        transaction: [{ subcategoryId: "sub1" }],
+                    },
+                    { mode: "merge" },
+                ),
+            ).toThrow("missing a valid 'id'");
 
             const txIds = (g.transactionNodes?.() ?? g.to("transactionNodes")).ids();
             expect(txIds).toEqual(["tx1", "tx2", "tx3"]);
@@ -77,10 +88,13 @@ function runSyncTests(label: string, make: () => any) {
             const g = make();
             const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 
-            g.sync({
-                transaction: [{ id: "tx99", subcategoryId: "sub99" }],
-                subcategory: [{ id: "sub99", name: "sub99", mainCategoryId: "cat1" }],
-            }, { mode: "merge" });
+            g.sync(
+                {
+                    transaction: [{ id: "tx99", subcategoryId: "sub99" }],
+                    subcategory: [{ id: "sub99", name: "sub99", mainCategoryId: "cat1" }],
+                },
+                { mode: "merge" },
+            );
 
             expect(warnSpy).not.toHaveBeenCalled();
             expect((g.transaction?.("tx99") ?? g.to("transaction", "tx99")).value()?.subcategoryId).toBe("sub99");

@@ -2,7 +2,6 @@ import { describe, it, expect } from "vitest";
 import { GraphWrapper, makeNonProxy, makeProxy } from "../shared";
 
 function runModificationTests(label: string, make: () => GraphWrapper) {
-
     describe(`${label} — update — upsert single new entity`, () => {
         it("new entity is retrievable by id", () => {
             const { rootNode, update } = make();

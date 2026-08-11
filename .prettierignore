@@ -1,0 +1,5 @@
+dist
+docs
+node_modules
+tests/api/generated
+coverage

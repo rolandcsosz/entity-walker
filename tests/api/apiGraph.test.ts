@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { createGraph, GraphDef, ValidApi } from "../../src";
+import { createGraph, GraphDef, ValidApi, ApiError } from "../../src";
 import { edges, Transaction, Subcategory, MainCategory, ExpenseType, IncomeType, Schema } from "../types";
 import { baseEntities } from "../shared";
 
@@ -19,9 +19,9 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
                             throw new Error("Network Error");
                         }
                         return data;
-                    }
-                }
-            }
+                    },
+                },
+            },
         });
 
         await apiGraph.transaction("tx1").update((tx) => ({ ...tx, subcategoryId: "sub2" }));
@@ -48,9 +48,9 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
                         if (shouldFail) {
                             throw new Error("Network Error");
                         }
-                    }
-                }
-            }
+                    },
+                },
+            },
         });
 
         expect(apiGraph.transaction("tx3").exists()).toBe(true);
@@ -75,9 +75,9 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
                     create: async (data) => {
                         handlerCalled++;
                         return { id: "tx_new", subcategoryId: data.subcategoryId };
-                    }
-                }
-            }
+                    },
+                },
+            },
         });
         const node = await apiGraph.createTransaction({ subcategoryId: "sub1" });
 
@@ -98,9 +98,9 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
                     update: async (data) => {
                         updateCalledWith = data;
                         return data;
-                    }
-                }
-            }
+                    },
+                },
+            },
         });
 
         await apiGraph.updateTransaction({
@@ -130,9 +130,9 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
                             return { id: "tx_ghost", subcategoryId: "sub2" };
                         }
                         throw new Error("Not Found");
-                    }
-                }
-            }
+                    },
+                },
+            },
         });
         const ghostNode = apiGraph.transaction("tx_ghost");
 
@@ -152,7 +152,7 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
                 subcategory: [] as Subcategory[],
                 mainCategory: [] as MainCategory[],
                 expenseType: [] as ExpenseType[],
-                incomeType: [] as IncomeType[]
+                incomeType: [] as IncomeType[],
             },
             edges,
             api: {
@@ -161,11 +161,11 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
                         requestCount++;
                         return [
                             { id: "t1", subcategoryId: "sub1" },
-                            { id: "t2", subcategoryId: "sub1" }
+                            { id: "t2", subcategoryId: "sub1" },
                         ] as Transaction[];
-                    }
-                }
-            }
+                    },
+                },
+            },
         });
 
         const list1 = await apiGraph.transactionNodes().load();
@@ -187,10 +187,10 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
                         archive: async (node) => {
                             await node.update((tx) => ({ ...tx, archived: true }));
                             return { ok: true };
-                        }
-                    }
-                }
-            }
+                        },
+                    },
+                },
+            },
         });
 
         const node = apiGraph.transaction("tx1");
@@ -209,14 +209,14 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
                     batchImport: async (graph, data: any[]) => {
                         graph.sync({ transaction: data }, { mode: "merge" });
                         return { imported: data.length };
-                    }
-                }
-            }
+                    },
+                },
+            },
         });
 
         const res = await apiGraph.api.batchImport([
             { id: "tx_batch_1", subcategoryId: "sub1" },
-            { id: "tx_batch_2", subcategoryId: "sub2" }
+            { id: "tx_batch_2", subcategoryId: "sub2" },
         ]);
 
         expect(res).toEqual({ imported: 2 });
@@ -231,19 +231,19 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
             transaction: {
                 create: async (data) => {
                     return { id: "tx_external", subcategoryId: data.subcategoryId } as Transaction;
-                }
+                },
             },
             actions: {
                 customGraphAction: async (graph, value: string) => {
                     return `external-${value}`;
-                }
-            }
+                },
+            },
         } satisfies ValidApi<MyGraphDef>;
 
         const apiGraph = createGraph({
             entities: structuredClone(baseEntities),
             edges,
-            api: apiOptions
+            api: apiOptions,
         });
 
         const node = await apiGraph.createTransaction({ subcategoryId: "sub1" });
@@ -267,8 +267,7 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
                 update: async (data) => {
                     return data as Transaction;
                 },
-                delete: async (id: string) => {
-                },
+                delete: async (id: string) => {},
             },
         };
 
@@ -305,5 +304,39 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
             data: { id: "tx1", subcategoryId: "sub1", amount: 99 },
         });
         expect(updateCalledWith.data.id).toBe("tx1");
+    });
+
+    it("includes pending deltas in full graph snapshot and restores them via restore()", async () => {
+        const apiGraph = createGraph({
+            entities: structuredClone(baseEntities),
+            edges,
+            api: {
+                transaction: {
+                    delete: async () => {
+                        return { message: "Offline", isTransient: true } as ApiError;
+                    },
+                },
+            },
+        });
+
+        await apiGraph.transaction("tx1").delete();
+        expect(apiGraph.pendingChanges().length).toBe(1);
+
+        const snap = apiGraph.snapshot();
+        expect(snap.entities).toBeDefined();
+        expect(snap.pendingDeltas.length).toBe(1);
+        expect(snap.pendingDeltas[0].op).toBe("delete");
+
+        // Restore into a fresh apiGraph
+        const freshGraph = createGraph({
+            entities: { ...structuredClone(baseEntities), transaction: [] as Transaction[] },
+            edges,
+            api: {},
+        });
+        expect(freshGraph.pendingChanges().length).toBe(0);
+
+        freshGraph.restore(snap);
+        expect(freshGraph.pendingChanges().length).toBe(1);
+        expect(freshGraph.pendingChanges()[0].op).toBe("delete");
     });
 });

@@ -1,8 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { createGraph, createNonProxyGraph, ApiError } from "../../src";
-import { edges, numericEdges, SchemaNumeric, Transaction } from "../types";
-import { baseEntities, baseEntitiesNumeric, GraphWrapper, makeNonProxy, makeProxy } from "../shared";
-import { Entities } from "../../src/core/types";
+import { createGraph, createNonProxyGraph } from "../../src";
+import { edges, numericEdges } from "../types";
+import { baseEntities, baseEntitiesNumeric } from "../shared";
 
 function proxyGraph() {
     return createGraph({ entities: structuredClone(baseEntities), edges }) as any;
@@ -17,16 +16,20 @@ function numericProxyGraph() {
 }
 
 function runSnapshotTests(label: string, make: () => any) {
-
     describe(label, () => {
-
         describe("snapshot()", () => {
             it("returns an object with all entity type keys", () => {
                 const g = make();
                 const snap = g.snapshot();
-                expect(Object.keys(snap).sort()).toEqual(
-                    ["expenseType", "incomeType", "mainCategory", "subcategory", "transaction"]
-                );
+                expect(Object.keys(snap).sort()).toEqual([
+                    "expenseType",
+                    "incomeType",
+                    "mainCategory",
+                    "subcategory",
+                    "transaction",
+                ]);
+                expect(snap.pendingDeltas).toBeUndefined();
+                expect(snap.entities).toBeUndefined();
             });
 
             it("snapshot arrays match the original entity arrays", () => {
@@ -41,8 +44,10 @@ function runSnapshotTests(label: string, make: () => any) {
                 const g = make();
                 const snap = g.snapshot();
                 snap.transaction[0].subcategoryId = "MUTATED";
-                expect(g.transaction?.("tx1").value()?.subcategoryId ?? g.to?.("transaction", "tx1").value()?.subcategoryId)
-                    .toBe("sub1");
+                expect(
+                    g.transaction?.("tx1").value()?.subcategoryId ??
+                        g.to?.("transaction", "tx1").value()?.subcategoryId,
+                ).toBe("sub1");
             });
 
             it("snapshot reflects mutations made after creation", () => {
@@ -164,7 +169,7 @@ function runSnapshotTests(label: string, make: () => any) {
 
                 for (const type of ["transaction", "subcategory", "mainCategory", "expenseType", "incomeType"]) {
                     const nodesBefore = (g.transactionNodes?.() ?? g.to(`${type}Nodes`)).entities();
-                    const nodesAfter  = (g2.transactionNodes?.() ?? g2.to(`${type}Nodes`)).entities();
+                    const nodesAfter = (g2.transactionNodes?.() ?? g2.to(`${type}Nodes`)).entities();
                     expect(nodesAfter.length).toEqual(nodesBefore.length);
                 }
             });
@@ -174,9 +179,9 @@ function runSnapshotTests(label: string, make: () => any) {
                 const g2 = make();
                 g2.restore(JSON.parse(JSON.stringify(g.snapshot())));
 
-                const name = (g2.transaction?.("tx1") ?? g2.to("transaction", "tx1"))
-                    .subcategory?.()?.value()?.name
-                    ?? (g2.to("transaction", "tx1")).to("subcategory").value()?.name;
+                const name =
+                    (g2.transaction?.("tx1") ?? g2.to("transaction", "tx1")).subcategory?.()?.value()?.name ??
+                    g2.to("transaction", "tx1").to("subcategory").value()?.name;
                 expect(name).toBe("sub1");
             });
         });
@@ -200,41 +205,5 @@ describe("EntityGraph (proxy) numeric IDs — snapshot/restore", () => {
         g.updateTransaction({ id: 1, subcategoryId: 99 });
         g.restore(snap);
         expect(g.transaction(1).value()?.subcategoryId).toBe(10);
-    });
-});
-
-describe("ApiGraph — snapshot/restore with offline queue", () => {
-    it("includes pending deltas in full graph snapshot and restores them via restore()", async () => {
-        const apiGraph = createGraph({
-            entities: structuredClone(baseEntities),
-            edges,
-            api: {
-                transaction: {
-                    delete: async () => {
-                        return { message: "Offline", isTransient: true } as ApiError;
-                    }
-                }
-            }
-        });
-
-        await apiGraph.transaction("tx1").delete();
-        expect(apiGraph.pendingChanges().length).toBe(1);
-
-        const snap = apiGraph.snapshot();
-        expect(snap.entities).toBeDefined();
-        expect(snap.pendingDeltas.length).toBe(1);
-        expect(snap.pendingDeltas[0].op).toBe("delete");
-
-        // Restore into a fresh apiGraph
-        const freshGraph = createGraph({
-            entities: { ...structuredClone(baseEntities), transaction: [] as Transaction[] },
-            edges,
-            api: {}
-        });
-        expect(freshGraph.pendingChanges().length).toBe(0);
-
-        freshGraph.restore(snap);
-        expect(freshGraph.pendingChanges().length).toBe(1);
-        expect(freshGraph.pendingChanges()[0].op).toBe("delete");
     });
 });

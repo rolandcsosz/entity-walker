@@ -46,7 +46,9 @@ function generateDataset({
     return { expenseType, incomeType, mainCategory, subcategory, transaction };
 }
 
-function randIdx(len: number) { return Math.floor(Math.random() * len); }
+function randIdx(len: number) {
+    return Math.floor(Math.random() * len);
+}
 
 /** Case 1 — deep forward chain: expenseType → mainCategory → subcategory → transaction */
 function loop_deepForward(entities: Entities<Schema>, expenseTypeId: string): string[] {
@@ -71,11 +73,11 @@ function loop_deepForward(entities: Entities<Schema>, expenseTypeId: string): st
 
 /** Case 2 — reverse lookup: transaction → subcategory → mainCategory, collect mainCategory names */
 function loop_reverseChain(entities: Entities<Schema>, transactionId: string): string[] {
-    const tx = entities.transaction.find(t => t.id === transactionId);
+    const tx = entities.transaction.find((t) => t.id === transactionId);
     if (!tx) return [];
-    const sc = entities.subcategory.find(s => s.id === tx.subcategoryId);
+    const sc = entities.subcategory.find((s) => s.id === tx.subcategoryId);
     if (!sc) return [];
-    const mc = entities.mainCategory.find(m => m.id === sc.mainCategoryId);
+    const mc = entities.mainCategory.find((m) => m.id === sc.mainCategoryId);
     return mc ? [mc.name] : [];
 }
 
@@ -157,14 +159,11 @@ function isProxy(graph: AnyGraph): graph is ReturnType<typeof createProxyGraph<a
 function graph_deepForward(graph: AnyGraph, expenseTypeId: string): (string | undefined)[] {
     if (isProxy(graph)) {
         const g = graph as any;
-        return g.expenseType(expenseTypeId)
-            .mainCategoryNodes()
-            .subcategoryNodes()
-            .transactionNodes()
-            .ids();
+        return g.expenseType(expenseTypeId).mainCategoryNodes().subcategoryNodes().transactionNodes().ids();
     } else {
         const g = graph as any;
-        return g.to("expenseType", expenseTypeId)
+        return g
+            .to("expenseType", expenseTypeId)
             .to("mainCategoryNodes")
             .to("subcategoryNodes")
             .to("transactionNodes")
@@ -187,14 +186,16 @@ function graph_reverseChain(graph: AnyGraph, transactionId: string): (string | u
 function graph_filteredReverse(graph: AnyGraph, expenseTypeId: string, subNamePrefix: string): (string | undefined)[] {
     if (isProxy(graph)) {
         const g = graph as any;
-        return g.expenseType(expenseTypeId)
+        return g
+            .expenseType(expenseTypeId)
             .mainCategoryNodes()
             .subcategoryNodes((sc: any) => sc.name.startsWith(subNamePrefix))
             .transactionNodes()
             .ids();
     } else {
         const g = graph as any;
-        return g.to("expenseType", expenseTypeId)
+        return g
+            .to("expenseType", expenseTypeId)
             .to("mainCategoryNodes")
             .to("subcategoryNodes", (sc: any) => sc.name.startsWith(subNamePrefix))
             .to("transactionNodes")
@@ -205,28 +206,24 @@ function graph_filteredReverse(graph: AnyGraph, expenseTypeId: string, subNamePr
 function graph_uniqueMainCategories(graph: AnyGraph, expenseTypeId: string): string[] {
     if (isProxy(graph)) {
         const g = graph as any;
-        return g.expenseType(expenseTypeId)
-            .mainCategoryNodes()
-            .unique()
-            .ids();
+        return g.expenseType(expenseTypeId).mainCategoryNodes().unique().ids();
     } else {
         const g = graph as any;
-        return g.to("expenseType", expenseTypeId)
-            .to("mainCategoryNodes")
-            .unique()
-            .ids();
+        return g.to("expenseType", expenseTypeId).to("mainCategoryNodes").unique().ids();
     }
 }
 
 function graph_rootListWithWhere(graph: AnyGraph, subNamePrefix: string): string[] {
     if (isProxy(graph)) {
         const g = graph as any;
-        return g.subcategoryNodes((sc: any) => sc.name.startsWith(subNamePrefix))
+        return g
+            .subcategoryNodes((sc: any) => sc.name.startsWith(subNamePrefix))
             .transactionNodes()
             .ids();
     } else {
         const g = graph as any;
-        return g.to("subcategoryNodes", (sc: any) => sc.name.startsWith(subNamePrefix))
+        return g
+            .to("subcategoryNodes", (sc: any) => sc.name.startsWith(subNamePrefix))
             .to("transactionNodes")
             .ids();
     }
@@ -247,8 +244,8 @@ type ScenarioSummary = {
 const DATASET_SIZES = [
     { sub: 2, tx: 2 },
     { sub: 10, tx: 10 },
-    { sub: 30,  tx: 30  },
-    { sub: 70,  tx: 70  },
+    { sub: 30, tx: 30 },
+    { sub: 70, tx: 70 },
 ];
 
 const N = 12;
@@ -261,32 +258,32 @@ async function runBenchmark() {
         loop: (entities: Entities<Schema>, et: string, sc: string) => any;
         graph: (graph: AnyGraph, et: string, sc: string) => any;
     }> = [
-            {
-                name: "Deep forward chain (expenseType → mainCategory → subcategory → transaction)",
-                loop: (e, et) => loop_deepForward(e, et),
-                graph: (g, et) => graph_deepForward(g, et),
-            },
-            {
-                name: "Reverse chain (transaction → subcategory → mainCategory, collect name)",
-                loop: (e, _et, sc) => loop_reverseChain(e, sc),
-                graph: (g, _et, sc) => graph_reverseChain(g, sc),
-            },
-            {
-                name: "Filtered reverse (expenseType → mainCategory → subcategory[filtered] → transactions)",
-                loop: (e, et) => loop_filteredReverse(e, et, "Sub 0"),
-                graph: (g, et) => graph_filteredReverse(g, et, "Sub 0"),
-            },
-            {
-                name: "Unique mainCategories reachable from expenseType",
-                loop: (e, et) => loop_uniqueMainCategories(e, et),
-                graph: (g, et) => graph_uniqueMainCategories(g, et),
-            },
-            {
-                name: "Root list with where + traversal (subcategoryNodes(filter) → transactions)",
-                loop: (e) => loop_rootListWithWhere(e, "Sub 0"),
-                graph: (g) => graph_rootListWithWhere(g, "Sub 0"),
-            },
-        ];
+        {
+            name: "Deep forward chain (expenseType → mainCategory → subcategory → transaction)",
+            loop: (e, et) => loop_deepForward(e, et),
+            graph: (g, et) => graph_deepForward(g, et),
+        },
+        {
+            name: "Reverse chain (transaction → subcategory → mainCategory, collect name)",
+            loop: (e, _et, sc) => loop_reverseChain(e, sc),
+            graph: (g, _et, sc) => graph_reverseChain(g, sc),
+        },
+        {
+            name: "Filtered reverse (expenseType → mainCategory → subcategory[filtered] → transactions)",
+            loop: (e, et) => loop_filteredReverse(e, et, "Sub 0"),
+            graph: (g, et) => graph_filteredReverse(g, et, "Sub 0"),
+        },
+        {
+            name: "Unique mainCategories reachable from expenseType",
+            loop: (e, et) => loop_uniqueMainCategories(e, et),
+            graph: (g, et) => graph_uniqueMainCategories(g, et),
+        },
+        {
+            name: "Root list with where + traversal (subcategoryNodes(filter) → transactions)",
+            loop: (e) => loop_rootListWithWhere(e, "Sub 0"),
+            graph: (g) => graph_rootListWithWhere(g, "Sub 0"),
+        },
+    ];
 
     for (const scenario of scenarioDefs) {
         console.log(`\n=== ${scenario.name} ===`);
@@ -301,8 +298,14 @@ async function runBenchmark() {
             });
 
             // pick random query ids for each iteration
-            const queryEtIds = Array.from({ length: N }, () => entities.expenseType[randIdx(entities.expenseType.length)].id);
-            const queryTxIds = Array.from({ length: N }, () => entities.transaction[randIdx(entities.transaction.length)].id);
+            const queryEtIds = Array.from(
+                { length: N },
+                () => entities.expenseType[randIdx(entities.expenseType.length)].id,
+            );
+            const queryTxIds = Array.from(
+                { length: N },
+                () => entities.transaction[randIdx(entities.transaction.length)].id,
+            );
 
             // ── nested loop ──
             let loopMs = 0;
@@ -337,7 +340,9 @@ async function runBenchmark() {
                 nonProxy: npMs / N,
             };
             results.push(row);
-            console.log(`  tx=${row.size.toLocaleString()}  loop=${row.loop.toFixed(3)}ms  proxy=${row.proxy.toFixed(3)}ms  np=${row.nonProxy.toFixed(3)}ms`);
+            console.log(
+                `  tx=${row.size.toLocaleString()}  loop=${row.loop.toFixed(3)}ms  proxy=${row.proxy.toFixed(3)}ms  np=${row.nonProxy.toFixed(3)}ms`,
+            );
         }
 
         scenarios.push({ name: scenario.name, results });
@@ -355,11 +360,32 @@ const COLORS = {
 };
 
 function makeTraces(results: ScenarioResult[]) {
-    const xs = results.map(r => r.size);
+    const xs = results.map((r) => r.size);
     return [
-        { x: xs, y: results.map(r => r.loop), name: "Nested Loop", line: { color: COLORS.loop.line, dash: COLORS.loop.dash, width: 3 }, mode: "lines+markers", type: "scatter" },
-        { x: xs, y: results.map(r => r.proxy), name: "Proxy Graph", line: { color: COLORS.proxy.line, dash: COLORS.proxy.dash, width: 3 }, mode: "lines+markers", type: "scatter" },
-        { x: xs, y: results.map(r => r.nonProxy), name: "Non-Proxy Graph", line: { color: COLORS.nonProxy.line, dash: COLORS.nonProxy.dash, width: 3 }, mode: "lines+markers", type: "scatter" },
+        {
+            x: xs,
+            y: results.map((r) => r.loop),
+            name: "Nested Loop",
+            line: { color: COLORS.loop.line, dash: COLORS.loop.dash, width: 3 },
+            mode: "lines+markers",
+            type: "scatter",
+        },
+        {
+            x: xs,
+            y: results.map((r) => r.proxy),
+            name: "Proxy Graph",
+            line: { color: COLORS.proxy.line, dash: COLORS.proxy.dash, width: 3 },
+            mode: "lines+markers",
+            type: "scatter",
+        },
+        {
+            x: xs,
+            y: results.map((r) => r.nonProxy),
+            name: "Non-Proxy Graph",
+            line: { color: COLORS.nonProxy.line, dash: COLORS.nonProxy.dash, width: 3 },
+            mode: "lines+markers",
+            type: "scatter",
+        },
     ];
 }
 
@@ -372,7 +398,7 @@ function generatePlot(scenarios: ScenarioSummary[]) {
         Array.from({ length: cols }, (_, c) => {
             const idx = r * cols + c;
             return idx < numScenarios ? { type: "scatter" } : {};
-        })
+        }),
     );
 
     const annotations: any[] = scenarios.map((s, i) => ({
@@ -381,7 +407,8 @@ function generatePlot(scenarios: ScenarioSummary[]) {
         showarrow: false,
         xref: `x${i + 1} domain`,
         yref: `y${i + 1} domain`,
-        x: 0.5, y: 1.07,
+        x: 0.5,
+        y: 1.07,
         xanchor: "center",
     }));
 
@@ -400,7 +427,7 @@ function generatePlot(scenarios: ScenarioSummary[]) {
     scenarios.forEach((scenario, si) => {
         const axSuffix = si === 0 ? "" : String(si + 1);
         const traces = makeTraces(scenario.results);
-        traces.forEach(tr => {
+        traces.forEach((tr) => {
             const showLegend = !addedToLegend.has(tr.name);
             if (showLegend) addedToLegend.add(tr.name);
             allTraces.push({

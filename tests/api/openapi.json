@@ -13,9 +13,7 @@
                         "type": "string"
                     }
                 },
-                "required": [
-                    "message"
-                ],
+                "required": ["message"],
                 "type": "object",
                 "additionalProperties": false
             },
@@ -28,10 +26,7 @@
                         "type": "string"
                     }
                 },
-                "required": [
-                    "id",
-                    "name"
-                ],
+                "required": ["id", "name"],
                 "type": "object",
                 "additionalProperties": false
             },
@@ -54,13 +49,7 @@
                         "type": "string"
                     }
                 },
-                "required": [
-                    "id",
-                    "item",
-                    "amount",
-                    "date",
-                    "subcategoryId"
-                ],
+                "required": ["id", "item", "amount", "date", "subcategoryId"],
                 "type": "object",
                 "additionalProperties": false
             },
@@ -80,12 +69,7 @@
                         "type": "string"
                     }
                 },
-                "required": [
-                    "item",
-                    "amount",
-                    "date",
-                    "subcategoryId"
-                ],
+                "required": ["item", "amount", "date", "subcategoryId"],
                 "type": "object",
                 "additionalProperties": false
             },
@@ -95,9 +79,7 @@
                         "type": "string"
                     }
                 },
-                "required": [
-                    "message"
-                ],
+                "required": ["message"],
                 "type": "object",
                 "additionalProperties": false
             },
@@ -125,14 +107,7 @@
                         "type": "string"
                     }
                 },
-                "required": [
-                    "id",
-                    "name",
-                    "itemName",
-                    "amount",
-                    "date",
-                    "subcategoryId"
-                ],
+                "required": ["id", "name", "itemName", "amount", "date", "subcategoryId"],
                 "type": "object",
                 "additionalProperties": false
             },
@@ -157,13 +132,7 @@
                         "type": "string"
                     }
                 },
-                "required": [
-                    "name",
-                    "itemName",
-                    "amount",
-                    "date",
-                    "subcategoryId"
-                ],
+                "required": ["name", "itemName", "amount", "date", "subcategoryId"],
                 "type": "object",
                 "additionalProperties": false
             },
@@ -182,12 +151,7 @@
                         "type": "string"
                     }
                 },
-                "required": [
-                    "id",
-                    "name",
-                    "mainCategoryId",
-                    "expenseTypeId"
-                ],
+                "required": ["id", "name", "mainCategoryId", "expenseTypeId"],
                 "type": "object",
                 "additionalProperties": false
             },
@@ -203,11 +167,7 @@
                         "type": "string"
                     }
                 },
-                "required": [
-                    "name",
-                    "mainCategoryId",
-                    "expenseTypeId"
-                ],
+                "required": ["name", "mainCategoryId", "expenseTypeId"],
                 "type": "object",
                 "additionalProperties": false
             },
@@ -226,12 +186,7 @@
                         "type": "string"
                     }
                 },
-                "required": [
-                    "id",
-                    "name",
-                    "expenseTypeId",
-                    "transactionTypeId"
-                ],
+                "required": ["id", "name", "expenseTypeId", "transactionTypeId"],
                 "type": "object",
                 "additionalProperties": false
             },
@@ -247,11 +202,7 @@
                         "type": "string"
                     }
                 },
-                "required": [
-                    "name",
-                    "expenseTypeId",
-                    "transactionTypeId"
-                ],
+                "required": ["name", "expenseTypeId", "transactionTypeId"],
                 "type": "object",
                 "additionalProperties": false
             },
@@ -259,10 +210,7 @@
                 "properties": {
                     "role": {
                         "type": "string",
-                        "enum": [
-                            "user",
-                            "caregiver"
-                        ]
+                        "enum": ["user", "caregiver"]
                     },
                     "token": {
                         "type": "string"
@@ -279,19 +227,11 @@
                                 "type": "string"
                             }
                         },
-                        "required": [
-                            "email",
-                            "name",
-                            "id"
-                        ],
+                        "required": ["email", "name", "id"],
                         "type": "object"
                     }
                 },
-                "required": [
-                    "role",
-                    "token",
-                    "user"
-                ],
+                "required": ["role", "token", "user"],
                 "type": "object",
                 "additionalProperties": false
             },
@@ -304,10 +244,7 @@
                         "type": "string"
                     }
                 },
-                "required": [
-                    "email",
-                    "password"
-                ],
+                "required": ["email", "password"],
                 "type": "object",
                 "additionalProperties": false
             },
@@ -320,10 +257,7 @@
                         "type": "string"
                     }
                 },
-                "required": [
-                    "id",
-                    "name"
-                ],
+                "required": ["id", "name"],
                 "type": "object",
                 "additionalProperties": false
             }
@@ -373,9 +307,7 @@
                         }
                     }
                 },
-                "tags": [
-                    "TransactionTypes"
-                ],
+                "tags": ["TransactionTypes"],
                 "security": [
                     {
                         "jwt": []
@@ -406,9 +338,7 @@
                         }
                     }
                 },
-                "tags": [
-                    "Transactions"
-                ],
+                "tags": ["Transactions"],
                 "security": [
                     {
                         "jwt": []
@@ -450,9 +380,7 @@
                         }
                     }
                 },
-                "tags": [
-                    "Transactions"
-                ],
+                "tags": ["Transactions"],
                 "security": [
                     {
                         "jwt": []
@@ -483,9 +411,7 @@
                         }
                     }
                 },
-                "tags": [
-                    "Transactions"
-                ],
+                "tags": ["Transactions"],
                 "security": [
                     {
                         "jwt": []
@@ -523,9 +449,7 @@
                         }
                     }
                 },
-                "tags": [
-                    "Transactions"
-                ],
+                "tags": ["Transactions"],
                 "security": [
                     {
                         "jwt": []
@@ -573,9 +497,7 @@
                         }
                     }
                 },
-                "tags": [
-                    "Transactions"
-                ],
+                "tags": ["Transactions"],
                 "security": [
                     {
                         "jwt": []
@@ -615,9 +537,7 @@
                         }
                     }
                 },
-                "tags": [
-                    "Templates"
-                ],
+                "tags": ["Templates"],
                 "security": [
                     {
                         "jwt": []
@@ -659,9 +579,7 @@
                         }
                     }
                 },
-                "tags": [
-                    "Templates"
-                ],
+                "tags": ["Templates"],
                 "security": [
                     {
                         "jwt": []
@@ -692,9 +610,7 @@
                         }
                     }
                 },
-                "tags": [
-                    "Templates"
-                ],
+                "tags": ["Templates"],
                 "security": [
                     {
                         "jwt": []
@@ -732,9 +648,7 @@
                         }
                     }
                 },
-                "tags": [
-                    "Templates"
-                ],
+                "tags": ["Templates"],
                 "security": [
                     {
                         "jwt": []
@@ -782,9 +696,7 @@
                         }
                     }
                 },
-                "tags": [
-                    "Templates"
-                ],
+                "tags": ["Templates"],
                 "security": [
                     {
                         "jwt": []
@@ -827,9 +739,7 @@
                         }
                     }
                 },
-                "tags": [
-                    "Subcategories"
-                ],
+                "tags": ["Subcategories"],
                 "security": [
                     {
                         "jwt": []
@@ -858,9 +768,7 @@
                         }
                     }
                 },
-                "tags": [
-                    "Subcategories"
-                ],
+                "tags": ["Subcategories"],
                 "security": [
                     {
                         "jwt": []
@@ -901,9 +809,7 @@
                         }
                     }
                 },
-                "tags": [
-                    "Subcategories"
-                ],
+                "tags": ["Subcategories"],
                 "security": [
                     {
                         "jwt": []
@@ -941,9 +847,7 @@
                         }
                     }
                 },
-                "tags": [
-                    "Subcategories"
-                ],
+                "tags": ["Subcategories"],
                 "security": [
                     {
                         "jwt": []
@@ -991,9 +895,7 @@
                         }
                     }
                 },
-                "tags": [
-                    "Subcategories"
-                ],
+                "tags": ["Subcategories"],
                 "security": [
                     {
                         "jwt": []
@@ -1033,9 +935,7 @@
                         }
                     }
                 },
-                "tags": [
-                    "MainCategories"
-                ],
+                "tags": ["MainCategories"],
                 "security": [
                     {
                         "jwt": []
@@ -1077,9 +977,7 @@
                         }
                     }
                 },
-                "tags": [
-                    "MainCategories"
-                ],
+                "tags": ["MainCategories"],
                 "security": [
                     {
                         "jwt": []
@@ -1110,9 +1008,7 @@
                         }
                     }
                 },
-                "tags": [
-                    "MainCategories"
-                ],
+                "tags": ["MainCategories"],
                 "security": [
                     {
                         "jwt": []
@@ -1150,9 +1046,7 @@
                         }
                     }
                 },
-                "tags": [
-                    "MainCategories"
-                ],
+                "tags": ["MainCategories"],
                 "security": [
                     {
                         "jwt": []
@@ -1200,9 +1094,7 @@
                         }
                     }
                 },
-                "tags": [
-                    "MainCategories"
-                ],
+                "tags": ["MainCategories"],
                 "security": [
                     {
                         "jwt": []
@@ -1242,9 +1134,7 @@
                         }
                     }
                 },
-                "tags": [
-                    "Login"
-                ],
+                "tags": ["Login"],
                 "security": [],
                 "parameters": [],
                 "requestBody": {
@@ -1284,9 +1174,7 @@
                         }
                     }
                 },
-                "tags": [
-                    "ExpenseTypes"
-                ],
+                "tags": ["ExpenseTypes"],
                 "security": [
                     {
                         "jwt": []

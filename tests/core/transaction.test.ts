@@ -49,7 +49,7 @@ describe("Transaction Support - Proxy Graph", () => {
 
     it("supports nested transactions with independent commit/rollback", () => {
         const g = createGraph({ entities: structuredClone(baseEntities), edges });
-        
+
         const tx1 = g.beginTransaction();
         tx1.updateTransaction({ id: "tx1", subcategoryId: "sub2" });
 
@@ -131,7 +131,7 @@ describe("Transaction Support - Non-Proxy Graph", () => {
 
     it("supports nested transactions", () => {
         const g = createNonProxyGraph({ entities: structuredClone(baseEntities), edges });
-        
+
         const tx1 = g.beginTransaction();
         tx1.updateTransaction({ id: "tx1", subcategoryId: "sub2" });
 

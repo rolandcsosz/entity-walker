@@ -8,14 +8,7 @@
         "type": "git",
         "url": "git+https://github.com/rolandcsosz/entity-walker.git"
     },
-    "keywords": [
-        "entity",
-        "graph",
-        "api",
-        "rest",
-        "offline-queue",
-        "entity-walker"
-    ],
+    "keywords": ["entity", "graph", "api", "rest", "offline-queue", "entity-walker"],
     "author": "Roland Csősz",
     "license": "MIT",
     "peerDependencies": {

@@ -12,9 +12,9 @@ describe("Offline Delta Queue & ApiError Handling", () => {
                 transaction: {
                     read: async (id) => {
                         return { id, subcategoryId: "sub_loaded" } as Transaction;
-                    }
-                }
-            }
+                    },
+                },
+            },
         });
 
         const ghostNode = apiGraph.transaction("tx_ghost");
@@ -35,11 +35,11 @@ describe("Offline Delta Queue & ApiError Handling", () => {
                     list: async () => {
                         return [
                             { id: "tx_10", subcategoryId: "sub1" },
-                            { id: "tx_11", subcategoryId: "sub2" }
+                            { id: "tx_11", subcategoryId: "sub2" },
                         ] as Transaction[];
-                    }
-                }
-            }
+                    },
+                },
+            },
         });
 
         const list = await apiGraph.transactionNodes().load();
@@ -60,9 +60,9 @@ describe("Offline Delta Queue & ApiError Handling", () => {
                             return { message: "Network unavailable", code: 503 } as ApiError;
                         }
                         return data;
-                    }
-                }
-            }
+                    },
+                },
+            },
         });
 
         const err = await apiGraph.transaction("tx1").update((tx) => ({ ...tx, amount: 999 }));
@@ -97,9 +97,9 @@ describe("Offline Delta Queue & ApiError Handling", () => {
                         if (attempts === 1) {
                             return { message: "Server offline", code: 500 } as ApiError;
                         }
-                    }
-                }
-            }
+                    },
+                },
+            },
         });
 
         expect(apiGraph.transaction("tx1").exists()).toBe(true);
@@ -130,9 +130,9 @@ describe("Offline Delta Queue & ApiError Handling", () => {
                             return { message: "Offline create", isTransient: true } as ApiError;
                         }
                         return { id: "tx_server_99", ...data } as Transaction;
-                    }
-                }
-            }
+                    },
+                },
+            },
         });
 
         const node = await apiGraph.createTransaction({ subcategoryId: "sub1", amount: 50 });
@@ -158,9 +158,9 @@ describe("Offline Delta Queue & ApiError Handling", () => {
                 transaction: {
                     update: async () => {
                         return { message: "Validation error: invalid amount", isTransient: false } as ApiError;
-                    }
-                }
-            }
+                    },
+                },
+            },
         });
 
         const initialAmount = apiGraph.transaction("tx1").value()?.amount;
@@ -179,9 +179,9 @@ describe("Offline Delta Queue & ApiError Handling", () => {
                 transaction: {
                     delete: async () => {
                         return { message: "Offline", isTransient: true } as ApiError;
-                    }
-                }
-            }
+                    },
+                },
+            },
         });
 
         await apiGraph.transaction("tx1").delete();
@@ -205,9 +205,9 @@ describe("Offline Delta Queue & ApiError Handling", () => {
                             return { message: "Service unavailable", status: 503 } as ApiError;
                         }
                         return data;
-                    }
-                }
-            }
+                    },
+                },
+            },
         });
 
         // 404 -> non-transient -> rollback & return error
@@ -232,9 +232,9 @@ describe("Offline Delta Queue & ApiError Handling", () => {
                 transaction: {
                     update: async () => {
                         return { message: "Custom failure", code: "RETRY_ME" } as ApiError;
-                    }
-                }
-            }
+                    },
+                },
+            },
         });
 
         const err = (await apiGraph.transaction("tx1").update((tx) => ({ ...tx, amount: 777 }))) as ApiError;

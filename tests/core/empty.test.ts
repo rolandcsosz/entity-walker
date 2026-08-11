@@ -6,7 +6,6 @@ import { emptyNode, emptyNodeList, emptyNodeNoProxy, emptyNodeListNoProxy } from
 const graph = createGraph({ entities: {}, edges });
 
 describe("Empty factory helpers", () => {
-
     describe("emptyNodeList()", () => {
         it("returns an empty array and behaves as EntityNodeList", () => {
             const list = emptyNodeList<CustomGraph, Transaction>();

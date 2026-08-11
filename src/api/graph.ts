@@ -1,6 +1,6 @@
 import { createGraph as createCoreGraph } from "../core/graph";
 import { GraphDef, EntityMap, GraphEdges } from "../core/types";
-import { ApiGraph, ApiGraphOptions, ApiError, PendingDelta, ValidApi } from "./types";
+import { ApiGraph, ApiError, PendingDelta, ValidApi } from "./types";
 
 function generateUUID(): string {
     if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -91,7 +91,10 @@ function toApiError(res: any, customIsTransient?: (err: ApiError) => boolean): A
         isTransient = byStatus !== undefined ? byStatus : false;
     } else if (isNetworkErrorMessage(message)) {
         isTransient = true;
-    } else if (typeof code === "string" && (code.includes("CONN") || code.includes("TIMEDOUT") || code.includes("NET"))) {
+    } else if (
+        typeof code === "string" &&
+        (code.includes("CONN") || code.includes("TIMEDOUT") || code.includes("NET"))
+    ) {
         isTransient = true;
     } else {
         isTransient = true;
@@ -115,42 +118,37 @@ function toApiError(res: any, customIsTransient?: (err: ApiError) => boolean): A
 export function createApiGraph<
     EM extends EntityMap,
     E extends GraphEdges<EM>,
-    ApiOpt extends ValidApi<GraphDef<EM, E>> = ValidApi<GraphDef<EM, E>>
->(config: {
-    entities: { [K in keyof EM]: EM[K][] };
-    edges: E;
-    api: ApiOpt;
-}): ApiGraph<GraphDef<EM, E>, ApiOpt>;
+    ApiOpt extends ValidApi<GraphDef<EM, E>> = ValidApi<GraphDef<EM, E>>,
+>(config: { entities: { [K in keyof EM]: EM[K][] }; edges: E; api: ApiOpt }): ApiGraph<GraphDef<EM, E>, ApiOpt>;
 
-export function createApiGraph<
-    D extends GraphDef<any, any>,
-    ApiOpt extends ValidApi<D> = ValidApi<D>
->(config: {
+export function createApiGraph<D extends GraphDef<any, any>, ApiOpt extends ValidApi<D> = ValidApi<D>>(config: {
     entities: { [K in keyof D["entityModel"]]: D["entityModel"][K][] };
     edges: D["edges"];
     api: ApiOpt;
 }): ApiGraph<D, ApiOpt>;
 
-export function createApiGraph<
-    D extends GraphDef<any, any>,
-    Options extends ValidApi<D> = ValidApi<D>
->(
+export function createApiGraph<D extends GraphDef<any, any>, Options extends ValidApi<D> = ValidApi<D>>(
     baseGraph: any,
     options?: Options,
     queryCache?: Map<string, { ids: (string | number)[]; fetchedAt: number }>,
-    pendingDeltas?: PendingDelta[]
+    pendingDeltas?: PendingDelta[],
 ): ApiGraph<D, Options>;
 
 export function createApiGraph<D extends GraphDef<any, any>>(
     baseGraphOrConfig: any,
     options?: any,
     queryCache: Map<string, { ids: (string | number)[]; fetchedAt: number }> = new Map(),
-    pendingDeltas: PendingDelta[] = []
+    pendingDeltas: PendingDelta[] = [],
 ): ApiGraph<D> {
     let baseGraph: any;
     let opts: any;
 
-    if (baseGraphOrConfig && typeof baseGraphOrConfig === "object" && "entities" in baseGraphOrConfig && "edges" in baseGraphOrConfig) {
+    if (
+        baseGraphOrConfig &&
+        typeof baseGraphOrConfig === "object" &&
+        "entities" in baseGraphOrConfig &&
+        "edges" in baseGraphOrConfig
+    ) {
         baseGraph = createCoreGraph({ entities: baseGraphOrConfig.entities, edges: baseGraphOrConfig.edges });
         opts = baseGraphOrConfig.api ?? options;
     } else {
@@ -321,7 +319,7 @@ export function createApiGraph<D extends GraphDef<any, any>>(
                     };
                 }
                 return undefined;
-            }
+            },
         }) as any;
     }
 
@@ -390,7 +388,7 @@ export function createApiGraph<D extends GraphDef<any, any>>(
                     return (target as any)[p];
                 }
                 return undefined;
-            }
+            },
         });
 
         return listProxy;
@@ -487,7 +485,9 @@ export function createApiGraph<D extends GraphDef<any, any>>(
         },
         pendingChanges: () => [...pendingDeltas],
         flushPending: () => flushPending(),
-        clearPending: () => { pendingDeltas.length = 0; },
+        clearPending: () => {
+            pendingDeltas.length = 0;
+        },
         api: rootActions,
     };
 
@@ -505,7 +505,9 @@ export function createApiGraph<D extends GraphDef<any, any>>(
                 return async (data: any) => {
                     const entityConfig = opts?.[type];
                     if (!entityConfig?.create) {
-                        return { message: `[entity-walker] create handler is required to create node of type '${type}'.` };
+                        return {
+                            message: `[entity-walker] create handler is required to create node of type '${type}'.`,
+                        };
                     }
 
                     let response: any;
@@ -559,6 +561,6 @@ export function createApiGraph<D extends GraphDef<any, any>>(
                 };
             }
             return (id: any) => wrapNode(propStr, id);
-        }
+        },
     }) as any;
 }

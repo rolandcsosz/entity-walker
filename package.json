@@ -16,7 +16,9 @@
         "test:core": "vitest tests/core",
         "test:api": "vitest tests/api",
         "test:watch": "vitest --watch",
-        "lint": "eslint . --ext .ts,.tsx",
+        "lint": "eslint .",
+        "format": "prettier --write .",
+        "format:check": "prettier --check .",
         "benchmark": "vitest ./tests/benchmarks/benchmark.ts",
         "generate:client": "openapi-ts -i ./tests/api/openapi.json -o tests/api/generated/client -c @hey-api/client-fetch"
     },
@@ -39,7 +41,10 @@
         "@hey-api/openapi-ts": "^0.95.0",
         "@types/node": "^20.5.0",
         "eslint": "^8.50.0",
+        "eslint-config-prettier": "^10.1.8",
+        "prettier": "^3.9.6",
         "typescript": "^5.3.0",
+        "typescript-eslint": "^8.67.0",
         "vitest": "^4.0.18"
     }
 }

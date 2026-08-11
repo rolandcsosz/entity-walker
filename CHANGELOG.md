@@ -3,6 +3,7 @@
 ## 2.2.0
 
 ### Added
+
 - **`emptyNode` and `emptyNodeList` init options** — Safe proxy-based initialization for traversing without throwing initial errors.
 - **`scoped()`** — Snapshots current entities during a traversal chain so filters from earlier steps stick through complex path jumps.
 - **`whereNode()`** — Filter node lists by examining node properties natively.
@@ -10,6 +11,7 @@
 - **`with(fn)`** — Wrapper method seamlessly closing scopes to return scalar values or encapsulated intersections from traversal chains.
 
 ### Changed
+
 - **Removed `where` argument on relation getters** — Replaced cleanly with chainable `.where(...)` API.
 
 ## 2.1.0

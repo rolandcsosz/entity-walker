@@ -1,7 +1,7 @@
 import { GraphDef, GraphEdges, ValidSchema } from "../src/core/types";
 
 export type Transaction = { id: string; subcategoryId: string; amount?: number; archived?: boolean };
-export type Subcategory = { id: string; name: string, mainCategoryId: string };
+export type Subcategory = { id: string; name: string; mainCategoryId: string };
 export type MainCategory = { id: string; name: string; expenseTypeId?: string; incomeTypeId?: string };
 export type ExpenseType = { id: string; description: string };
 export type IncomeType = { id: string; description: string };
@@ -40,18 +40,18 @@ export const edges = {
 
 export type CustomGraph = GraphDef<Schema, typeof edges>;
 
-export type TransactionN  = { id: number; subcategoryId: number };
-export type SubcategoryN  = { id: number; name: string; mainCategoryId: number };
+export type TransactionN = { id: number; subcategoryId: number };
+export type SubcategoryN = { id: number; name: string; mainCategoryId: number };
 export type MainCategoryN = { id: number; name: string; expenseTypeId?: number; incomeTypeId?: number };
-export type ExpenseTypeN  = { id: number; description: string };
-export type IncomeTypeN   = { id: number; description: string };
+export type ExpenseTypeN = { id: number; description: string };
+export type IncomeTypeN = { id: number; description: string };
 
 export type SchemaNumeric = ValidSchema<{
-    transaction:  TransactionN;
-    subcategory:  SubcategoryN;
+    transaction: TransactionN;
+    subcategory: SubcategoryN;
     mainCategory: MainCategoryN;
-    expenseType:  ExpenseTypeN;
-    incomeType:   IncomeTypeN;
+    expenseType: ExpenseTypeN;
+    incomeType: IncomeTypeN;
 }>;
 
 export const numericEdges = {

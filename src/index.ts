@@ -13,33 +13,21 @@ export { createCoreGraph };
 export function createGraph<
     EM extends EntityMap,
     E extends GraphEdges<EM>,
-    ApiOpt extends ValidApi<GraphDef<EM, E>> = ValidApi<GraphDef<EM, E>>
->(config: {
-    entities: { [K in keyof EM]: EM[K][] };
-    edges: E;
-    api: ApiOpt;
-}): ApiGraph<GraphDef<EM, E>, ApiOpt>;
+    ApiOpt extends ValidApi<GraphDef<EM, E>> = ValidApi<GraphDef<EM, E>>,
+>(config: { entities: { [K in keyof EM]: EM[K][] }; edges: E; api: ApiOpt }): ApiGraph<GraphDef<EM, E>, ApiOpt>;
 
-export function createGraph<
-    D extends GraphDef<any, any>,
-    ApiOpt extends ValidApi<D> = ValidApi<D>
->(config: {
+export function createGraph<D extends GraphDef<any, any>, ApiOpt extends ValidApi<D> = ValidApi<D>>(config: {
     entities: { [K in keyof D["entityModel"]]: D["entityModel"][K][] };
     edges: D["edges"];
     api: ApiOpt;
 }): ApiGraph<D, ApiOpt>;
 
-export function createGraph<
-    EM extends EntityMap,
-    E extends GraphEdges<EM>
->(config: {
+export function createGraph<EM extends EntityMap, E extends GraphEdges<EM>>(config: {
     entities: { [K in keyof EM]: EM[K][] };
     edges: E;
 }): EntityGraph<GraphDef<EM, E>>;
 
-export function createGraph<
-    D extends GraphDef<any, any>
->(config: {
+export function createGraph<D extends GraphDef<any, any>>(config: {
     entities: { [K in keyof D["entityModel"]]: D["entityModel"][K][] };
     edges: D["edges"];
 }): EntityGraph<D>;

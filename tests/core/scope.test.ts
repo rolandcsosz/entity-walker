@@ -5,13 +5,17 @@ function runScopeTests(label: string, wrapper: any) {
     const { nodeList, path } = wrapper;
     describe(label, () => {
         it("scoped() restricts entities() to scope ids", () => {
-            const scoped = nodeList("transaction").where((t: any) => t.id === "tx1" || t.id === "tx2").scoped();
+            const scoped = nodeList("transaction")
+                .where((t: any) => t.id === "tx1" || t.id === "tx2")
+                .scoped();
             const ids = path(path(scoped, "subcategoryNodes"), "transactionNodes").ids();
             expect(ids).toEqual(["tx1", "tx2"]);
         });
 
         it("scoped() does not affect intermediate traversal nodes", () => {
-            const scoped = nodeList("transaction").where((t: any) => t.id === "tx1").scoped();
+            const scoped = nodeList("transaction")
+                .where((t: any) => t.id === "tx1")
+                .scoped();
             const subs = path(scoped, "subcategoryNodes");
 
             expect(subs).toHaveLength(1);
@@ -19,26 +23,34 @@ function runScopeTests(label: string, wrapper: any) {
         });
 
         it("scoped() filters first()", () => {
-            const scoped = nodeList("transaction").where((t: any) => t.id === "tx2").scoped();
+            const scoped = nodeList("transaction")
+                .where((t: any) => t.id === "tx2")
+                .scoped();
             const first = path(path(scoped, "subcategoryNodes"), "transactionNodes").first();
             expect(first?.id).toBe("tx2");
         });
 
         it("scoped() filters select()", () => {
-            const scoped = nodeList("transaction").where((t: any) => t.id === "tx1").scoped();
+            const scoped = nodeList("transaction")
+                .where((t: any) => t.id === "tx1")
+                .scoped();
             const ids = path(path(scoped, "subcategoryNodes"), "transactionNodes").select((t: any) => t.id);
             expect(ids).toEqual(["tx1"]);
         });
 
         it("scoped() filters findEntity()", () => {
-            const scoped = nodeList("transaction").where((t: any) => t.id === "tx1").scoped();
+            const scoped = nodeList("transaction")
+                .where((t: any) => t.id === "tx1")
+                .scoped();
             const txs = path(path(scoped, "subcategoryNodes"), "transactionNodes");
             expect(txs.findEntity((t: any) => t.id === "tx3")).toBeUndefined();
             expect(txs.findEntity((t: any) => t.id === "tx1")?.id).toBe("tx1");
         });
 
         it("scoped() affects isEmpty() and isNotEmpty()", () => {
-            const scoped = nodeList("transaction").where((t: any) => t.id === "tx1").scoped();
+            const scoped = nodeList("transaction")
+                .where((t: any) => t.id === "tx1")
+                .scoped();
             const subs = path(scoped, "subcategoryNodes");
             expect(subs.isEmpty()).toBe(false);
             expect(subs.isNotEmpty()).toBe(true);
@@ -47,12 +59,15 @@ function runScopeTests(label: string, wrapper: any) {
         it("scoped() carries through where()", () => {
             const scoped = nodeList("transaction").scoped();
             const filtered = path(path(scoped, "subcategoryNodes"), "transactionNodes")
-                .where((t: any) => t.id === "tx1").unique();
+                .where((t: any) => t.id === "tx1")
+                .unique();
             expect(filtered.ids()).toEqual(["tx1"]);
         });
 
         it("scoped() with() traversal and intersect pattern", () => {
-            const result = nodeList("transaction").where((t: any) => t.id === "tx1" || t.id === "tx2").scoped()
+            const result = nodeList("transaction")
+                .where((t: any) => t.id === "tx1" || t.id === "tx2")
+                .scoped()
                 .with((self: any) => path(path(self, "subcategoryNodes"), "transactionNodes"));
             expect(result.ids()).toEqual(["tx1", "tx2"]);
         });
@@ -66,11 +81,11 @@ function runScopeTests(label: string, wrapper: any) {
 
         it("scoped() triple nesting narrows progressively", () => {
             const result = nodeList("transaction")
-                .scoped()                                              // scope = {tx1, tx2, tx3}
+                .scoped() // scope = {tx1, tx2, tx3}
                 .where((t: any) => t.id === "tx1" || t.id === "tx2")
-                .scoped()                                              // scope = {tx1, tx2}
+                .scoped() // scope = {tx1, tx2}
                 .where((t: any) => t.id === "tx1")
-                .scoped();                                             // scope = {tx1}
+                .scoped(); // scope = {tx1}
             const ids = path(path(result, "subcategoryNodes"), "transactionNodes").ids();
             expect(ids).toEqual(["tx1"]);
         });
@@ -87,8 +102,7 @@ function runScopeTests(label: string, wrapper: any) {
                 .scoped();
 
             // traverse to mainCategories, scope to {cat1}
-            const catScoped = path(subScoped, "mainCategoryNodes")
-                .scoped();
+            const catScoped = path(subScoped, "mainCategoryNodes").scoped();
 
             expect(catScoped.ids()).toEqual(["cat1"]);
 
@@ -124,7 +138,7 @@ function runScopeTests(label: string, wrapper: any) {
             const scoped = filtered.scoped();
             const result = path(
                 path(path(path(scoped, "subcategoryNodes"), "mainCategoryNodes"), "subcategoryNodes"),
-                "transactionNodes"
+                "transactionNodes",
             );
             expect(result.unique().ids()).toEqual(filtered.ids());
         });
@@ -170,8 +184,7 @@ function runScopeTests(label: string, wrapper: any) {
             const txScoped = nodeList("transaction")
                 .where((t: any) => t.id === "tx1")
                 .scoped();
-            const subs = path(txScoped, "subcategoryNodes")
-                .scoped();
+            const subs = path(txScoped, "subcategoryNodes").scoped();
             const info = subs.info();
             expect(info.scope).toEqual({
                 transaction: ["tx1"],
@@ -230,7 +243,9 @@ function runComplexTests(label: string, wrapper: any) {
 
     describe(label, () => {
         it("intersect() combined with where() on a scoped() traversal", () => {
-            const txs = nodeList("transaction").where((t: any) => t.id === "tx1" || t.id === "tx2").scoped();
+            const txs = nodeList("transaction")
+                .where((t: any) => t.id === "tx1" || t.id === "tx2")
+                .scoped();
             const subsList1 = path(txs, "subcategoryNodes").where((s: any) => s.id === "sub1");
             const subsList2 = nodeList("subcategory").where((s: any) => s.id === "sub1" || s.id === "sub2");
 
@@ -267,8 +282,12 @@ function runComplexTests(label: string, wrapper: any) {
         });
 
         it("where() filtering after intersect() of two scoped lists", () => {
-            const list1 = nodeList("transaction").where((t: any) => t.id === "tx1" || t.id === "tx2").scoped();
-            const list2 = nodeList("transaction").where((t: any) => t.id === "tx2" || t.id === "tx3").scoped();
+            const list1 = nodeList("transaction")
+                .where((t: any) => t.id === "tx1" || t.id === "tx2")
+                .scoped();
+            const list2 = nodeList("transaction")
+                .where((t: any) => t.id === "tx2" || t.id === "tx3")
+                .scoped();
 
             const intersection = list1.intersect(list2);
             const final = intersection.where((t: any) => t.id === "tx2").scoped();
@@ -295,10 +314,14 @@ function runComplexTests(label: string, wrapper: any) {
         });
 
         it("intersecting a scoped list with another scoped list from a different traversal path", () => {
-            const txScoped = nodeList("transaction").where((t: any) => t.id === "tx1").scoped();
+            const txScoped = nodeList("transaction")
+                .where((t: any) => t.id === "tx1")
+                .scoped();
             const subFromTx = path(txScoped, "subcategoryNodes");
 
-            const catScoped = nodeList("mainCategory").where((c: any) => c.id === "cat1").scoped();
+            const catScoped = nodeList("mainCategory")
+                .where((c: any) => c.id === "cat1")
+                .scoped();
             const subFromCat = path(catScoped, "subcategoryNodes");
 
             const inter = subFromTx.intersect(subFromCat).scoped();
@@ -318,13 +341,19 @@ function runComplexTests(label: string, wrapper: any) {
         });
 
         it("deeply nested with() calls within scoped traverses", () => {
-            const result = nodeList("transaction").scoped().with((txs: any) => {
-                return path(txs, "subcategoryNodes").scoped().with((subs: any) => {
-                    return path(subs, "mainCategoryNodes").scoped().with((cats: any) => {
-                        return cats.unique().where((c: any) => c.name === "Food");
-                    });
+            const result = nodeList("transaction")
+                .scoped()
+                .with((txs: any) => {
+                    return path(txs, "subcategoryNodes")
+                        .scoped()
+                        .with((subs: any) => {
+                            return path(subs, "mainCategoryNodes")
+                                .scoped()
+                                .with((cats: any) => {
+                                    return cats.unique().where((c: any) => c.name === "Food");
+                                });
+                        });
                 });
-            });
             expect(result.ids()).toEqual(["cat1"]);
         });
 
@@ -343,7 +372,9 @@ function runComplexTests(label: string, wrapper: any) {
         });
 
         it("scoped() behavior when where() returns nothing", () => {
-            const nothing = nodeList("transaction").where((t: any) => t.id === "nonexistent").scoped();
+            const nothing = nodeList("transaction")
+                .where((t: any) => t.id === "nonexistent")
+                .scoped();
             expect(nothing.isEmpty()).toBe(true);
 
             const sub = path(nothing, "subcategoryNodes");
@@ -358,7 +389,9 @@ function runComplexTests(label: string, wrapper: any) {
             const txs = nodeList("transaction").scoped();
             const subs = path(txs, "subcategoryNodes").unique().scoped();
 
-            const testSet = nodeList("subcategory").where((s: any) => s.id === "sub2").scoped();
+            const testSet = nodeList("subcategory")
+                .where((s: any) => s.id === "sub2")
+                .scoped();
 
             const inter = subs.intersect(testSet);
             expect(inter.ids()).toEqual(["sub2"]);
@@ -366,11 +399,8 @@ function runComplexTests(label: string, wrapper: any) {
             const backToTxs = path(inter, "transactionNodes").unique().scoped();
             expect(backToTxs.ids()).toEqual(["tx2"]);
         });
-
     });
 }
 
 runComplexTests("Complex queries: scoped, intersect, where [proxy]", proxyAdapter(baseEntities));
 runComplexTests("Complex queries: scoped, intersect, where [non-proxy]", nonProxyAdapter(baseEntities));
-
-

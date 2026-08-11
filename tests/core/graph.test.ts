@@ -1,12 +1,18 @@
-
 import { describe, it, expect } from "vitest";
 import { Schema } from "../types";
 import { Entities } from "../../src";
-import { baseEntities, baseEntitiesNumeric, GraphWrapper, nonProxyAdapter, nonProxyAdapterN, proxyAdapter, proxyAdapterN } from "../shared";
+import {
+    baseEntities,
+    baseEntitiesNumeric,
+    GraphWrapper,
+    nonProxyAdapter,
+    nonProxyAdapterN,
+    proxyAdapter,
+    proxyAdapterN,
+} from "../shared";
 
 function runEntityGraphTests(label: string, { rootNode, nodeList, path, makeGraph }: GraphWrapper) {
     describe(label, () => {
-
         it("access first node object", () => {
             const subcategoryId = rootNode("transaction", "tx1").value()?.subcategoryId;
             expect(subcategoryId).toBe("sub1");
@@ -24,9 +30,7 @@ function runEntityGraphTests(label: string, { rootNode, nodeList, path, makeGrap
         });
 
         it("access invalid related node object with valueOrThrow()", () => {
-            expect(() =>
-                path(rootNode("transaction", "error"), "subcategory").valueOrThrow()
-            ).toThrow();
+            expect(() => path(rootNode("transaction", "error"), "subcategory").valueOrThrow()).toThrow();
         });
 
         it("access invalid related node object with value()", () => {
@@ -65,15 +69,11 @@ function runEntityGraphTests(label: string, { rootNode, nodeList, path, makeGrap
         });
 
         it("handles relations with invalid FK throwing on valueOrThrow()", () => {
-            expect(() =>
-                path(rootNode("mainCategory", "cat2"), "incomeType").valueOrThrow()
-            ).toThrow();
+            expect(() => path(rootNode("mainCategory", "cat2"), "incomeType").valueOrThrow()).toThrow();
         });
 
         it("handles relations with missing property throwing on valueOrThrow()", () => {
-            expect(() =>
-                path(rootNode("mainCategory", "cat3"), "incomeType").valueOrThrow()
-            ).toThrow();
+            expect(() => path(rootNode("mainCategory", "cat3"), "incomeType").valueOrThrow()).toThrow();
         });
 
         it("returns defined for valid relation", () => {
@@ -89,9 +89,7 @@ function runEntityGraphTests(label: string, { rootNode, nodeList, path, makeGrap
         });
 
         it("throws on invalid relation", () => {
-            expect(() =>
-                path(rootNode("transaction", "tx1"), "mainCategory").value()
-            ).toThrow();
+            expect(() => path(rootNode("transaction", "tx1"), "mainCategory").value()).toThrow();
         });
 
         it("returns undefined for missing entity", () => {
@@ -127,7 +125,10 @@ function runEntityGraphTests(label: string, { rootNode, nodeList, path, makeGrap
 
         it("supports .filter() on references to select specific nodes", () => {
             const transactions = path(
-                path(nodeList("mainCategory", (mc: any) => mc.expenseTypeId === "et1"), "subcategoryNodes"),
+                path(
+                    nodeList("mainCategory", (mc: any) => mc.expenseTypeId === "et1"),
+                    "subcategoryNodes",
+                ),
                 "transactionNodes",
             );
             expect(transactions).toHaveLength(3);
@@ -248,8 +249,7 @@ function runEntityGraphTests(label: string, { rootNode, nodeList, path, makeGrap
 
         it("multi-level chained references with filter and entities()", () => {
             const mainCats = path(rootNode("expenseType", "et1"), "mainCategoryNodes");
-            const subs = path(mainCats, "subcategoryNodes")
-                .filter((sc: any) => sc.value()?.name === "sub2");
+            const subs = path(mainCats, "subcategoryNodes").filter((sc: any) => sc.value()?.name === "sub2");
 
             expect(subs).toHaveLength(1);
             expect(subs[0].value()?.id).toBe("sub2");
@@ -261,14 +261,18 @@ function runEntityGraphTests(label: string, { rootNode, nodeList, path, makeGrap
         it("base references with where into chained traversal", () => {
             const mainCats = nodeList("mainCategory", (c: any) => c.expenseTypeId === "et1");
             const subs = path(mainCats, "subcategoryNodes");
-            const ids = path(subs, "transactionNodes").entities().map((t: any) => t.id);
+            const ids = path(subs, "transactionNodes")
+                .entities()
+                .map((t: any) => t.id);
 
             expect(ids).toEqual(["tx1", "tx3", "tx2"]);
         });
 
         it("base references with where that narrows results through chain", () => {
             const subs = nodeList("subcategory", (s: any) => s.name === "sub1");
-            const ids = path(subs, "transactionNodes").entities().map((t: any) => t.id);
+            const ids = path(subs, "transactionNodes")
+                .entities()
+                .map((t: any) => t.id);
 
             expect(ids).toEqual(["tx1", "tx3"]);
         });
@@ -277,7 +281,9 @@ function runEntityGraphTests(label: string, { rootNode, nodeList, path, makeGrap
             const txs = nodeList("transaction", (t: any) => t.subcategoryId === "sub1");
             const subs = path(txs, "subcategoryNodes");
             const mainCats = path(subs, "mainCategoryNodes", (c: any) => c.expenseTypeId === "et1");
-            const descriptions = path(mainCats, "expenseTypeNodes").entities().map((e: any) => e.description);
+            const descriptions = path(mainCats, "expenseTypeNodes")
+                .entities()
+                .map((e: any) => e.description);
 
             expect(descriptions).toEqual(["Groceries", "Groceries"]);
         });
@@ -285,7 +291,9 @@ function runEntityGraphTests(label: string, { rootNode, nodeList, path, makeGrap
         it("chained where on reverse references at multiple levels", () => {
             const mainCats = path(rootNode("expenseType", "et1"), "mainCategoryNodes", (c: any) => c.name === "Food");
             const subs = path(mainCats, "subcategoryNodes", (s: any) => s.name === "sub1");
-            const ids = path(subs, "transactionNodes").entities().map((t: any) => t.id);
+            const ids = path(subs, "transactionNodes")
+                .entities()
+                .map((t: any) => t.id);
 
             expect(ids).toEqual(["tx1", "tx3"]);
         });
@@ -303,20 +311,28 @@ function runEntityGraphTests(label: string, { rootNode, nodeList, path, makeGrap
             const mainCats = nodeList("mainCategory", (c: any) => c.expenseTypeId === "et1");
             const subs = path(mainCats, "subcategoryNodes", (s: any) => s.name === "sub2");
             const ids = path(subs, "transactionNodes", (t: any) => t.subcategoryId === "sub2")
-                .entities().map((t: any) => t.id);
+                .entities()
+                .map((t: any) => t.id);
 
             expect(ids).toEqual(["tx2"]);
         });
 
         it("chained where that filters everything out", () => {
-            const mainCats = path(rootNode("expenseType", "et1"), "mainCategoryNodes", (c: any) => c.name === "NonExistent");
+            const mainCats = path(
+                rootNode("expenseType", "et1"),
+                "mainCategoryNodes",
+                (c: any) => c.name === "NonExistent",
+            );
             const ids = path(mainCats, "subcategoryNodes").entities();
 
             expect(ids).toHaveLength(0);
         });
 
         it("unique() removes duplicate entities from chained traversal", () => {
-            const categories = path(path(rootNode("mainCategory", "cat1"), "subcategoryNodes"), "mainCategoryNodes").entities();
+            const categories = path(
+                path(rootNode("mainCategory", "cat1"), "subcategoryNodes"),
+                "mainCategoryNodes",
+            ).entities();
 
             expect(categories).toHaveLength(2);
             expect(categories[0].id).toBe("cat1");
@@ -360,7 +376,9 @@ function runEntityGraphTests(label: string, { rootNode, nodeList, path, makeGrap
 
         it("where() returns walkable EntityNodeList", () => {
             const subs = nodeList("subcategory").where((s: any) => s.name === "sub1");
-            const txIds = path(subs, "transactionNodes").entities().map((t: any) => t.id);
+            const txIds = path(subs, "transactionNodes")
+                .entities()
+                .map((t: any) => t.id);
             expect(txIds).toEqual(["tx1", "tx3"]);
         });
 
@@ -381,7 +399,9 @@ function runEntityGraphTests(label: string, { rootNode, nodeList, path, makeGrap
         it("where() can chain further into forward and reverse edges", () => {
             const mainCats = path(rootNode("expenseType", "et1"), "mainCategoryNodes");
             const subs = path(mainCats, "subcategoryNodes").where((s: any) => s.name === "sub2");
-            const txIds = path(subs, "transactionNodes").entities().map((t: any) => t.id);
+            const txIds = path(subs, "transactionNodes")
+                .entities()
+                .map((t: any) => t.id);
             expect(txIds).toEqual(["tx2"]);
         });
 
@@ -393,7 +413,9 @@ function runEntityGraphTests(label: string, { rootNode, nodeList, path, makeGrap
 
         it("whereNode() returns walkable EntityNodeList", () => {
             const subs = nodeList("subcategory").whereNode((n: any) => n.value()?.name === "sub1");
-            const txIds = path(subs, "transactionNodes").entities().map((t: any) => t.id);
+            const txIds = path(subs, "transactionNodes")
+                .entities()
+                .map((t: any) => t.id);
             expect(txIds).toEqual(["tx1", "tx3"]);
         });
 
@@ -448,9 +470,9 @@ function runEntityGraphTests(label: string, { rootNode, nodeList, path, makeGrap
         });
 
         it("with() can traverse and intersect back", () => {
-            const result = nodeList("transaction").where((t: any) => t.id === "tx1" || t.id === "tx2").with((self: any) =>
-                path(path(self, "subcategoryNodes"), "transactionNodes").intersect(self)
-            );
+            const result = nodeList("transaction")
+                .where((t: any) => t.id === "tx1" || t.id === "tx2")
+                .with((self: any) => path(path(self, "subcategoryNodes"), "transactionNodes").intersect(self));
             expect(result.ids()).toEqual(["tx1", "tx2"]);
         });
 
@@ -458,8 +480,6 @@ function runEntityGraphTests(label: string, { rootNode, nodeList, path, makeGrap
             const count = nodeList("subcategory").with((self: any) => self.entities().length);
             expect(count).toBe(2);
         });
-
-
 
         it("select() maps resolved entities", () => {
             const names = nodeList("subcategory").select((s: any) => s.name);
@@ -472,7 +492,9 @@ function runEntityGraphTests(label: string, { rootNode, nodeList, path, makeGrap
         });
 
         it("select() works after chained traversal", () => {
-            const ids = path(path(rootNode("expenseType", "et1"), "mainCategoryNodes"), "subcategoryNodes").select((s: any) => s.id);
+            const ids = path(path(rootNode("expenseType", "et1"), "mainCategoryNodes"), "subcategoryNodes").select(
+                (s: any) => s.id,
+            );
             expect(ids).toEqual(["sub1", "sub2"]);
         });
 
@@ -502,7 +524,9 @@ function runEntityGraphTests(label: string, { rootNode, nodeList, path, makeGrap
         });
 
         it("first() returns first after where() filter", () => {
-            const sub = nodeList("subcategory").where((s: any) => s.name === "sub2").first();
+            const sub = nodeList("subcategory")
+                .where((s: any) => s.name === "sub2")
+                .first();
             expect(sub?.id).toBe("sub2");
         });
 
@@ -515,7 +539,11 @@ function runEntityGraphTests(label: string, { rootNode, nodeList, path, makeGrap
         });
 
         it("isEmpty() returns true after where() matches nothing", () => {
-            expect(nodeList("subcategory").where((s: any) => s.name === "nonexistent").isEmpty()).toBe(true);
+            expect(
+                nodeList("subcategory")
+                    .where((s: any) => s.name === "nonexistent")
+                    .isEmpty(),
+            ).toBe(true);
         });
 
         it("isNotEmpty() returns true when entities exist", () => {
@@ -527,7 +555,11 @@ function runEntityGraphTests(label: string, { rootNode, nodeList, path, makeGrap
         });
 
         it("isNotEmpty() returns false after where() matches nothing", () => {
-            expect(nodeList("subcategory").where((s: any) => s.name === "nonexistent").isNotEmpty()).toBe(false);
+            expect(
+                nodeList("subcategory")
+                    .where((s: any) => s.name === "nonexistent")
+                    .isNotEmpty(),
+            ).toBe(false);
         });
 
         it("exists() returns true for a valid entity", () => {
@@ -630,7 +662,6 @@ function runEntityGraphTests(label: string, { rootNode, nodeList, path, makeGrap
             expect(node).toBeDefined();
             expect(node!.value()?.subcategoryId).toBe("sub2");
         });
-
     });
 }
 
@@ -639,24 +670,25 @@ runEntityGraphTests("entity graph [non-proxy]", nonProxyAdapter(baseEntities));
 
 function runInfoHelperTests(label: string, { graph, rootNode, path, makeGraph }: GraphWrapper) {
     describe(label, () => {
-
         describe("graph.schema()", () => {
             it("lists all entity types", () => {
                 const schema = graph.schema();
-                expect(schema.entities).toEqual(expect.arrayContaining([
-                    "transaction", "subcategory", "mainCategory", "expenseType", "incomeType",
-                ]));
+                expect(schema.entities).toEqual(
+                    expect.arrayContaining(["transaction", "subcategory", "mainCategory", "expenseType", "incomeType"]),
+                );
             });
 
             it("lists all edges with correct from/to", () => {
                 const schema = graph.schema();
                 const edgePairs = schema.edges.map((e: any) => ({ from: e.from, to: e.to }));
-                expect(edgePairs).toEqual(expect.arrayContaining([
-                    { from: "transaction", to: "subcategory" },
-                    { from: "subcategory", to: "mainCategory" },
-                    { from: "mainCategory", to: "expenseType" },
-                    { from: "mainCategory", to: "incomeType" },
-                ]));
+                expect(edgePairs).toEqual(
+                    expect.arrayContaining([
+                        { from: "transaction", to: "subcategory" },
+                        { from: "subcategory", to: "mainCategory" },
+                        { from: "mainCategory", to: "expenseType" },
+                        { from: "mainCategory", to: "incomeType" },
+                    ]),
+                );
             });
 
             it("correctly marks bidirectional edges", () => {
@@ -695,7 +727,9 @@ function runInfoHelperTests(label: string, { graph, rootNode, path, makeGraph }:
 
             it("missing entities have correct type", () => {
                 const info = graph.info();
-                const missingExpense = info.missingEntities.find((m: any) => m.id === "error" && m.type === "expenseType");
+                const missingExpense = info.missingEntities.find(
+                    (m: any) => m.id === "error" && m.type === "expenseType",
+                );
                 expect(missingExpense).toBeDefined();
             });
 
@@ -785,14 +819,15 @@ function runInfoHelperTests(label: string, { graph, rootNode, path, makeGraph }:
             });
 
             it("valueOrThrow on null node mentions null traversal", () => {
-                expect(() => path(rootNode("transaction", "nonexistent"), "subcategory").valueOrThrow()).toThrow(/subcategory/);
+                expect(() => path(rootNode("transaction", "nonexistent"), "subcategory").valueOrThrow()).toThrow(
+                    /subcategory/,
+                );
             });
 
             it("accessing unknown relation mentions available relations", () => {
                 expect(() => path(rootNode("transaction", "tx1"), "unknownRel")).toThrow(/unknownRel/);
             });
         });
-
     });
 }
 
@@ -801,7 +836,6 @@ runInfoHelperTests("info helpers [non-proxy]", nonProxyAdapter(baseEntities));
 
 function runNumericIdTests(label: string, { rootNode, nodeList, path, makeGraph }: GraphWrapper) {
     describe(label, () => {
-
         it("resolves entity by numeric id", () => {
             expect(rootNode("transaction", 1).value()?.subcategoryId).toBe(10);
         });
@@ -889,60 +923,89 @@ function runNumericIdTests(label: string, { rootNode, nodeList, path, makeGraph 
         });
 
         it("insert then retrieve by numeric id", () => {
-            const { rootNode, update } = makeGraph(structuredClone({ transaction: [], subcategory: [{ id: 10, name: "sub1", mainCategoryId: 100 }], mainCategory: [], expenseType: [], incomeType: [] }) as any);
+            const { rootNode, update } = makeGraph(
+                structuredClone({
+                    transaction: [],
+                    subcategory: [{ id: 10, name: "sub1", mainCategoryId: 100 }],
+                    mainCategory: [],
+                    expenseType: [],
+                    incomeType: [],
+                }) as any,
+            );
             update("transaction", { id: 5, subcategoryId: 10 });
             expect(rootNode("transaction", 5).exists()).toBe(true);
             expect(rootNode("transaction", 5).value()?.subcategoryId).toBe(10);
         });
 
         it("update then retrieve updated value by numeric id", () => {
-            const { rootNode, update } = makeGraph(structuredClone({ transaction: [{ id: 1, subcategoryId: 10 }], subcategory: [], mainCategory: [], expenseType: [], incomeType: [] }) as any);
+            const { rootNode, update } = makeGraph(
+                structuredClone({
+                    transaction: [{ id: 1, subcategoryId: 10 }],
+                    subcategory: [],
+                    mainCategory: [],
+                    expenseType: [],
+                    incomeType: [],
+                }) as any,
+            );
             update("transaction", { id: 1, subcategoryId: 20 });
             expect(rootNode("transaction", 1).value()?.subcategoryId).toBe(20);
         });
 
         it("delete removes entity with numeric id", () => {
-            const { rootNode } = makeGraph(structuredClone({ transaction: [{ id: 1, subcategoryId: 10 }], subcategory: [], mainCategory: [], expenseType: [], incomeType: [] }) as any);
+            const { rootNode } = makeGraph(
+                structuredClone({
+                    transaction: [{ id: 1, subcategoryId: 10 }],
+                    subcategory: [],
+                    mainCategory: [],
+                    expenseType: [],
+                    incomeType: [],
+                }) as any,
+            );
             rootNode("transaction", 1).delete();
             expect(rootNode("transaction", 1).exists()).toBe(false);
         });
 
         it("supports 0 as a valid foreign key id", () => {
-            const g = makeGraph(structuredClone({
-                transaction: [{ id: 0, subcategoryId: 0 }],
-                subcategory: [{ id: 0, name: "zero", mainCategoryId: 100 }],
-                mainCategory: [{ id: 100, name: "Food", expenseTypeId: 1000, incomeTypeId: 2000 }],
-                expenseType: [{ id: 1000, description: "Groceries" }],
-                incomeType: [{ id: 2000, description: "Salary" }],
-            }) as any);
+            const g = makeGraph(
+                structuredClone({
+                    transaction: [{ id: 0, subcategoryId: 0 }],
+                    subcategory: [{ id: 0, name: "zero", mainCategoryId: 100 }],
+                    mainCategory: [{ id: 100, name: "Food", expenseTypeId: 1000, incomeTypeId: 2000 }],
+                    expenseType: [{ id: 1000, description: "Groceries" }],
+                    incomeType: [{ id: 2000, description: "Salary" }],
+                }) as any,
+            );
 
             expect(g.path(g.rootNode("transaction", 0), "subcategory").value()?.id).toBe(0);
         });
 
         it("supports reverse traversal when target id is 0", () => {
-            const g = makeGraph(structuredClone({
-                transaction: [{ id: 1, subcategoryId: 0 }],
-                subcategory: [{ id: 0, name: "zero", mainCategoryId: 100 }],
-                mainCategory: [{ id: 100, name: "Food", expenseTypeId: 1000, incomeTypeId: 2000 }],
-                expenseType: [{ id: 1000, description: "Groceries" }],
-                incomeType: [{ id: 2000, description: "Salary" }],
-            }) as any);
+            const g = makeGraph(
+                structuredClone({
+                    transaction: [{ id: 1, subcategoryId: 0 }],
+                    subcategory: [{ id: 0, name: "zero", mainCategoryId: 100 }],
+                    mainCategory: [{ id: 100, name: "Food", expenseTypeId: 1000, incomeTypeId: 2000 }],
+                    expenseType: [{ id: 1000, description: "Groceries" }],
+                    incomeType: [{ id: 2000, description: "Salary" }],
+                }) as any,
+            );
 
             expect(g.path(g.rootNode("subcategory", 0), "transactionNodes").ids()).toEqual([1]);
         });
 
         it("reports missing entity for foreign key id 0", () => {
-            const g = makeGraph(structuredClone({
-                transaction: [{ id: 1, subcategoryId: 0 }],
-                subcategory: [],
-                mainCategory: [],
-                expenseType: [],
-                incomeType: [],
-            }) as any);
+            const g = makeGraph(
+                structuredClone({
+                    transaction: [{ id: 1, subcategoryId: 0 }],
+                    subcategory: [],
+                    mainCategory: [],
+                    expenseType: [],
+                    incomeType: [],
+                }) as any,
+            );
 
             expect(g.graph.info().missingEntities).toEqual([{ type: "subcategory", id: 0 }]);
         });
-
     });
 }
 

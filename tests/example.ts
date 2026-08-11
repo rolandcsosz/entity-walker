@@ -1,7 +1,5 @@
-
-import { Entities, EntityGraph, EntityGraphNoProxy, createGraph, createNonProxyGraph} from "../src/index";
+import { Entities, EntityGraph, EntityGraphNoProxy, createGraph, createNonProxyGraph } from "../src/index";
 import { CustomGraph, edges, Schema } from "./types";
-
 
 const entities: Entities<Schema> = {
     transaction: [
