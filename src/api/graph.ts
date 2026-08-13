@@ -141,13 +141,31 @@ function toApiError(res: any, customIsTransient?: (err: ApiError) => boolean): A
 export function createApiGraph<
     EM extends EntityMap,
     E extends GraphEdges<EM>,
+    C extends { entities: any; edges: any; api?: ValidApi<GraphDef<EM, E>> },
+>(
+    config: C & { entities: { [K in keyof EM]: EM[K][] }; edges: E },
+): C["api"] extends ValidApi<GraphDef<EM, E>> ? ApiGraph<GraphDef<EM, E>, C["api"]> : ApiGraph<GraphDef<EM, E>>;
+
+export function createApiGraph<
+    D extends GraphDef<any, any>,
+    C extends { entities: any; edges: any; api?: ValidApi<D> },
+>(
+    config: C & {
+        entities: { [K in keyof D["entityModel"]]: D["entityModel"][K][] };
+        edges: D["edges"];
+    },
+): C["api"] extends ValidApi<D> ? ApiGraph<D, C["api"]> : ApiGraph<D>;
+
+export function createApiGraph<
+    EM extends EntityMap,
+    E extends GraphEdges<EM>,
     ApiOpt extends ValidApi<GraphDef<EM, E>> = ValidApi<GraphDef<EM, E>>,
->(config: { entities: { [K in keyof EM]: EM[K][] }; edges: E; api: ApiOpt }): ApiGraph<GraphDef<EM, E>, ApiOpt>;
+>(config: { entities: { [K in keyof EM]: EM[K][] }; edges: E; api?: ApiOpt }): ApiGraph<GraphDef<EM, E>, ApiOpt>;
 
 export function createApiGraph<D extends GraphDef<any, any>, ApiOpt extends ValidApi<D> = ValidApi<D>>(config: {
     entities: { [K in keyof D["entityModel"]]: D["entityModel"][K][] };
     edges: D["edges"];
-    api: ApiOpt;
+    api?: ApiOpt;
 }): ApiGraph<D, ApiOpt>;
 
 export function createApiGraph<D extends GraphDef<any, any>, Options extends ValidApi<D> = ValidApi<D>>(
@@ -174,7 +192,7 @@ export function createApiGraph<D extends GraphDef<any, any>>(
     graphEdges?: any,
     idCounters: Map<string, number> = new Map(),
     formatterRef: { fn?: NewIdFormatter } = { fn: undefined },
-): ApiGraph<D> {
+): ApiGraph<D, any> {
     let baseGraph: any;
     let opts: any;
     let edges: any;
@@ -408,6 +426,64 @@ export function createApiGraph<D extends GraphDef<any, any>>(
             }
         }
 
+        const apiProxy = new Proxy(apiActions, {
+            get(target, prop, receiver) {
+                if (typeof prop === "symbol" || prop === "then" || prop === "toJSON") {
+                    return undefined;
+                }
+                if (prop in target) {
+                    return target[prop];
+                }
+                const actionName = String(prop);
+                if (entityConfig?.actions?.[actionName]) {
+                    const actionFn = entityConfig.actions[actionName];
+                    return (...args: any[]) => {
+                        const txFn = activeGraph.meta?.beginTransaction ?? activeGraph.beginTransaction;
+                        const txGraph = txFn.call(activeGraph.meta ?? activeGraph);
+                        const txNode = wrapNode(type, id, txGraph);
+                        return (actionFn as any)(txNode, ...args)
+                            .then((res: any) => {
+                                const err = parseError(res, { op: actionName, entityType: type, entityId: id });
+                                if (err) {
+                                    txGraph.rollback();
+                                    notifyListeners({
+                                        type: "rollback",
+                                        error: err,
+                                        op: actionName,
+                                        entityType: type,
+                                        entityId: id,
+                                    });
+                                    return err;
+                                }
+                                txGraph.commit();
+                                notifyListeners({ type: "change", op: actionName, entityType: type, entityId: id });
+                                return res;
+                            })
+                            .catch((err: any) => {
+                                txGraph.rollback();
+                                const parsedErr = parseError(err, {
+                                    op: actionName,
+                                    entityType: type,
+                                    entityId: id,
+                                }) ?? {
+                                    message: String(err),
+                                    raw: err,
+                                };
+                                notifyListeners({
+                                    type: "rollback",
+                                    error: parsedErr,
+                                    op: actionName,
+                                    entityType: type,
+                                    entityId: id,
+                                });
+                                return parsedErr;
+                            });
+                    };
+                }
+                return Reflect.get(target, prop, receiver);
+            },
+        });
+
         const node = {
             value: () => getBaseNode().value(),
             exists: () => getBaseNode().exists(),
@@ -601,7 +677,7 @@ export function createApiGraph<D extends GraphDef<any, any>>(
                     idCounters,
                     formatterRef,
                 ),
-            api: apiActions,
+            api: apiProxy,
         };
 
         return new Proxy(node, {
@@ -613,6 +689,9 @@ export function createApiGraph<D extends GraphDef<any, any>>(
                     return (target as any)[p];
                 }
                 const propStr = String(p);
+                if (propStr in apiProxy) {
+                    return (apiProxy as any)[propStr];
+                }
                 if (propStr.endsWith("Nodes")) {
                     const relType = propStr.slice(0, -5);
                     return () => {

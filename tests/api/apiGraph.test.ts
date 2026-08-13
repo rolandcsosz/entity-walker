@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { createGraph, GraphDef, ValidApi, ApiError, ApiGraphEvent } from "../../src";
-import { edges, Transaction, Subcategory, MainCategory, ExpenseType, IncomeType, Schema } from "../types";
+import { edges, Transaction, Subcategory, MainCategory, ExpenseType, IncomeType, Schema, CustomGraph } from "../types";
 import { baseEntities } from "../shared";
 
 describe("API-Bound Graph Wrapper (Handlers)", () => {
@@ -8,7 +8,7 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
         let shouldFail = false;
         let handlerCalled = 0;
 
-        const apiGraph = createGraph({
+        const apiGraph = createGraph<CustomGraph>({
             entities: structuredClone(baseEntities),
             edges,
             api: {
@@ -38,7 +38,7 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
         let shouldFail = false;
         let handlerCalled = 0;
 
-        const apiGraph = createGraph({
+        const apiGraph = createGraph<CustomGraph>({
             entities: structuredClone(baseEntities),
             edges,
             api: {
@@ -67,7 +67,7 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
 
     it("supports create operations", async () => {
         let handlerCalled = 0;
-        const apiGraph = createGraph({
+        const apiGraph = createGraph<CustomGraph>({
             entities: structuredClone(baseEntities),
             edges,
             api: {
@@ -90,7 +90,7 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
     it("supports root-level create helpers like createTransaction(data)", async () => {
         let createCalledWith: Partial<Transaction> | null = null;
 
-        const apiGraph = createGraph({
+        const apiGraph = createGraph<CustomGraph>({
             entities: structuredClone(baseEntities),
             edges,
             api: {
@@ -119,7 +119,7 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
 
     it("supports lazy loading a missing node via load()", async () => {
         let handlerCalled = 0;
-        const apiGraph = createGraph({
+        const apiGraph = createGraph<CustomGraph>({
             entities: structuredClone(baseEntities),
             edges,
             api: {
@@ -146,7 +146,7 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
     it("handles list fetch and query caching (without params)", async () => {
         let requestCount = 0;
 
-        const apiGraph = createGraph({
+        const apiGraph = createGraph<CustomGraph>({
             entities: {
                 transaction: [] as Transaction[],
                 subcategory: [] as Subcategory[],
@@ -178,12 +178,13 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
     });
 
     it("respects custom node actions", async () => {
-        const apiGraph = createGraph({
+        const apiGraph = createGraph<CustomGraph>({
             entities: structuredClone(baseEntities),
             edges,
             api: {
                 transaction: {
                     actions: {
+                        vmi: async (node, vmi) => {},
                         archive: async (node) => {
                             await node.update((tx) => ({ ...tx, archived: true }));
                             return { ok: true };
@@ -195,13 +196,14 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
 
         const node = apiGraph.transaction("tx1");
         const res = await node.api.archive();
+        await node.api.vmi("test");
 
         expect(res).toEqual({ ok: true });
         expect(node.value()?.archived).toBe(true);
     });
 
     it("respects root-level graph actions", async () => {
-        const apiGraph = createGraph({
+        const apiGraph = createGraph<CustomGraph>({
             entities: structuredClone(baseEntities),
             edges,
             api: {
@@ -240,7 +242,7 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
             },
         } satisfies ValidApi<MyGraphDef>;
 
-        const apiGraph = createGraph({
+        const apiGraph = createGraph<CustomGraph>({
             entities: structuredClone(baseEntities),
             edges,
             api: apiOptions,
@@ -307,7 +309,7 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
     });
 
     it("includes pending deltas in full graph snapshot and restores them via restore()", async () => {
-        const apiGraph = createGraph({
+        const apiGraph = createGraph<CustomGraph>({
             entities: structuredClone(baseEntities),
             edges,
             api: {
@@ -327,7 +329,7 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
         expect(snap.pendingDeltas.length).toBe(1);
         expect(snap.pendingDeltas[0].op).toBe("delete");
 
-        const freshGraph = createGraph({
+        const freshGraph = createGraph<CustomGraph>({
             entities: { ...structuredClone(baseEntities), transaction: [] as Transaction[] },
             edges,
             api: {},
@@ -344,7 +346,7 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
             const updatedTransactions: Transaction[] = [];
             const updatedSubcategories: Subcategory[] = [];
 
-            const apiGraph = createGraph({
+            const apiGraph = createGraph<CustomGraph>({
                 entities: structuredClone(baseEntities),
                 edges,
                 api: {
@@ -379,7 +381,7 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
 
         it("discards uncommitted changes on rollback() without sending network requests", async () => {
             let apiCalled = false;
-            const apiGraph = createGraph({
+            const apiGraph = createGraph<CustomGraph>({
                 entities: structuredClone(baseEntities),
                 edges,
                 api: {
@@ -400,7 +402,7 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
         });
 
         it("rolls back local changes when commit() encounters a permanent server error", async () => {
-            const apiGraph = createGraph({
+            const apiGraph = createGraph<CustomGraph>({
                 entities: structuredClone(baseEntities),
                 edges,
                 api: {
@@ -424,7 +426,7 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
 
         it("supports nested transactions — inner commit merges into outer transaction without HTTP calls", async () => {
             const updatedTransactions: Transaction[] = [];
-            const apiGraph = createGraph({
+            const apiGraph = createGraph<CustomGraph>({
                 entities: structuredClone(baseEntities),
                 edges,
                 api: {
@@ -456,7 +458,7 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
 
         it("handles concurrent transactions independently", async () => {
             const callLog: string[] = [];
-            const apiGraph = createGraph({
+            const apiGraph = createGraph<CustomGraph>({
                 entities: structuredClone(baseEntities),
                 edges,
                 api: {
@@ -490,7 +492,7 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
     describe("Event Subscriptions & Auto-Flush", () => {
         it("emits events with rich metadata payloads to subscribers", async () => {
             const emittedEvents: ApiGraphEvent[] = [];
-            const apiGraph = createGraph({
+            const apiGraph = createGraph<CustomGraph>({
                 entities: structuredClone(baseEntities),
                 edges,
                 api: {
@@ -530,7 +532,7 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
 
         it("automatically flushes pending deltas on a timer interval", async () => {
             let flushCount = 0;
-            const apiGraph = createGraph({
+            const apiGraph = createGraph<CustomGraph>({
                 entities: structuredClone(baseEntities),
                 edges,
                 api: {
@@ -561,7 +563,7 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
 
     describe("Temporary-to-Server ID Remapping", () => {
         it("remaps temp ID to server ID and resolves original ID lookups", async () => {
-            const apiGraph = createGraph({
+            const apiGraph = createGraph<CustomGraph>({
                 entities: structuredClone(baseEntities),
                 edges,
                 api: {
@@ -595,7 +597,7 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
 
         it("remaps foreign keys across graph entities and queued deltas during flushPending()", async () => {
             let isOffline = true;
-            const apiGraph = createGraph({
+            const apiGraph = createGraph<CustomGraph>({
                 entities: structuredClone(baseEntities),
                 edges,
                 api: {
@@ -644,7 +646,7 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
 
     describe("Custom New Entity ID Formatting", () => {
         it("uses default UUID when no custom format is set", async () => {
-            const apiGraph = createGraph({
+            const apiGraph = createGraph<CustomGraph>({
                 entities: structuredClone(baseEntities),
                 edges,
                 api: {
@@ -665,7 +667,7 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
         });
 
         it("uses custom formatter configured via apiGraph.setIdFormat()", async () => {
-            const apiGraph = createGraph({
+            const apiGraph = createGraph<CustomGraph>({
                 entities: structuredClone(baseEntities),
                 edges,
                 api: {
@@ -692,7 +694,7 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
         });
 
         it("uses custom formatter configured via idFormat option", async () => {
-            const apiGraph = createGraph({
+            const apiGraph = createGraph<CustomGraph>({
                 entities: structuredClone(baseEntities),
                 edges,
                 api: {
@@ -715,7 +717,7 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
     describe("Transient Error Handling Options", () => {
         it("allows inspect err.raw in global isTransientError handler", async () => {
             let receivedRawResponse: any = null;
-            const apiGraph = createGraph({
+            const apiGraph = createGraph<CustomGraph>({
                 entities: structuredClone(baseEntities),
                 edges,
                 api: {
@@ -741,7 +743,7 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
         });
 
         it("decides transience from err.raw custom status property", async () => {
-            const apiGraph = createGraph({
+            const apiGraph = createGraph<CustomGraph>({
                 entities: structuredClone(baseEntities),
                 edges,
                 api: {
@@ -761,7 +763,7 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
         });
 
         it("allows entity-level isTransientError to override global options", async () => {
-            const apiGraph = createGraph({
+            const apiGraph = createGraph<CustomGraph>({
                 entities: structuredClone(baseEntities),
                 edges,
                 api: {
@@ -782,7 +784,7 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
         });
 
         it("converts status-only error responses into ApiError with default message", async () => {
-            const apiGraph = createGraph({
+            const apiGraph = createGraph<CustomGraph>({
                 entities: structuredClone(baseEntities),
                 edges,
                 api: {
@@ -793,9 +795,9 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
             });
 
             const err = await apiGraph.transaction("tx1").update((tx) => ({ ...tx, amount: 999 }));
-            expect(err.status).toBe(503);
-            expect(err.message).toContain("503");
-            expect(err.isTransient).toBe(true);
+            expect(err?.status).toBe(503);
+            expect(err?.message).toContain("503");
+            expect(err?.isTransient).toBe(true);
         });
     });
 });
