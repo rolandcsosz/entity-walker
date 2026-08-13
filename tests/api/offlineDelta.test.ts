@@ -72,17 +72,17 @@ describe("Offline Delta Queue & ApiError Handling", () => {
         expect(apiGraph.transaction("tx1").value()?.amount).toBe(999);
 
         // Pending queue should contain delta
-        const pending = apiGraph.pendingChanges();
+        const pending = apiGraph.meta.pendingChanges();
         expect(pending.length).toBe(1);
         expect(pending[0].op).toBe("update");
         expect(pending[0].entityType).toBe("transaction");
         expect(pending[0].data.amount).toBe(999);
 
         // Flush pending deltas once network recovers
-        const flushResult = await apiGraph.flushPending();
+        const flushResult = await apiGraph.meta.flushPending();
         expect(flushResult.synced.length).toBe(1);
         expect(flushResult.failed.length).toBe(0);
-        expect(apiGraph.pendingChanges().length).toBe(0);
+        expect(apiGraph.meta.pendingChanges().length).toBe(0);
     });
 
     it("retains local optimistic delete and queues pending delta when handler returns explicit ApiError", async () => {
@@ -108,13 +108,13 @@ describe("Offline Delta Queue & ApiError Handling", () => {
 
         expect(apiGraph.transaction("tx1").exists()).toBe(false);
 
-        expect(apiGraph.pendingChanges().length).toBe(1);
-        expect(apiGraph.pendingChanges()[0].op).toBe("delete");
+        expect(apiGraph.meta.pendingChanges().length).toBe(1);
+        expect(apiGraph.meta.pendingChanges()[0].op).toBe("delete");
 
         // Flush resolves delete on server
-        const flushResult = await apiGraph.flushPending();
+        const flushResult = await apiGraph.meta.flushPending();
         expect(flushResult.synced.length).toBe(1);
-        expect(apiGraph.pendingChanges().length).toBe(0);
+        expect(apiGraph.meta.pendingChanges().length).toBe(0);
     });
 
     it("supports optimistic create with temporary ID when handler returns ApiError", async () => {
@@ -141,12 +141,12 @@ describe("Offline Delta Queue & ApiError Handling", () => {
         expect(tempId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
         expect(apiGraph.transaction(tempId!).exists()).toBe(true);
 
-        expect(apiGraph.pendingChanges().length).toBe(1);
-        expect(apiGraph.pendingChanges()[0].op).toBe("create");
+        expect(apiGraph.meta.pendingChanges().length).toBe(1);
+        expect(apiGraph.meta.pendingChanges()[0].op).toBe("create");
 
-        const flushResult = await apiGraph.flushPending();
+        const flushResult = await apiGraph.meta.flushPending();
         expect(flushResult.synced.length).toBe(1);
-        expect(apiGraph.pendingChanges().length).toBe(0);
+        expect(apiGraph.meta.pendingChanges().length).toBe(0);
         expect(apiGraph.transaction("tx_server_99").exists()).toBe(true);
     });
 
@@ -168,7 +168,7 @@ describe("Offline Delta Queue & ApiError Handling", () => {
         expect(err.message).toBe("Validation error: invalid amount");
 
         expect(apiGraph.transaction("tx1").value()?.amount).toBe(initialAmount);
-        expect(apiGraph.pendingChanges().length).toBe(0);
+        expect(apiGraph.meta.pendingChanges().length).toBe(0);
     });
 
     it("supports clearPending() to clear queued deltas", async () => {
@@ -185,10 +185,10 @@ describe("Offline Delta Queue & ApiError Handling", () => {
         });
 
         await apiGraph.transaction("tx1").delete();
-        expect(apiGraph.pendingChanges().length).toBe(1);
+        expect(apiGraph.meta.pendingChanges().length).toBe(1);
 
-        apiGraph.clearPending();
-        expect(apiGraph.pendingChanges().length).toBe(0);
+        apiGraph.meta.clearPending();
+        expect(apiGraph.meta.pendingChanges().length).toBe(0);
     });
 
     it("automatically classifies HTTP 4xx as non-transient (rollback) and HTTP 5xx / 0 as transient (queued)", async () => {
@@ -214,13 +214,13 @@ describe("Offline Delta Queue & ApiError Handling", () => {
         const err404 = (await apiGraph.transaction("tx1").update((tx) => ({ ...tx, amount: 404 }))) as ApiError;
         expect(err404.status).toBe(404);
         expect(err404.isTransient).toBe(false);
-        expect(apiGraph.pendingChanges().length).toBe(0);
+        expect(apiGraph.meta.pendingChanges().length).toBe(0);
 
         // 503 -> transient -> queue & return error
         const err503 = (await apiGraph.transaction("tx1").update((tx) => ({ ...tx, amount: 503 }))) as ApiError;
         expect(err503.status).toBe(503);
         expect(err503.isTransient).toBe(true);
-        expect(apiGraph.pendingChanges().length).toBe(1);
+        expect(apiGraph.meta.pendingChanges().length).toBe(1);
     });
 
     it("supports custom isTransientError predicate in ValidApi options", async () => {
@@ -239,6 +239,6 @@ describe("Offline Delta Queue & ApiError Handling", () => {
 
         const err = (await apiGraph.transaction("tx1").update((tx) => ({ ...tx, amount: 777 }))) as ApiError;
         expect(err.isTransient).toBe(true);
-        expect(apiGraph.pendingChanges().length).toBe(1);
+        expect(apiGraph.meta.pendingChanges().length).toBe(1);
     });
 });

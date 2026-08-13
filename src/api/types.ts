@@ -130,6 +130,28 @@ export type ApiGraphSnapshot<D extends GraphDef<any, any>> = {
     idMappings?: Record<string | number, string | number>;
 };
 
+export type ApiGraphMeta<D extends GraphDef<any, any>, Options extends ValidApi<D> = ValidApi<D>> = {
+    sync(fresh: Partial<Entities<D["entityModel"]>>, options?: { mode?: "merge" | "replace" }): void;
+    snapshot(): ApiGraphSnapshot<D>;
+    restore(snapshot: ApiGraphSnapshot<D> | Entities<D["entityModel"]>): void;
+    pendingChanges(): PendingDelta[];
+    flushPending(): Promise<{ synced: PendingDelta[]; failed: { delta: PendingDelta; error: ApiError }[] }>;
+    clearPending(): void;
+    beginTransaction(): ApiTransactionGraph<D, Options>;
+    subscribe(subscriber: ApiGraphSubscriber<D>): () => void;
+    startAutoFlush(options?: AutoFlushOptions): () => void;
+    resolveId(id: string | number): string | number;
+    getOriginalId(id: string | number): string | number;
+    setIdFormat(formatter: NewIdFormatter): void;
+    api: Options extends { actions: infer Actions }
+        ? {
+              [K in keyof Actions]: Actions[K] extends (graph: any, ...args: infer Args) => Promise<infer R>
+                  ? (...args: Args) => Promise<R>
+                  : never;
+          }
+        : {};
+};
+
 export type ApiTransactionGraph<D extends GraphDef<any, any>, Options extends ValidApi<D> = ValidApi<D>> = ApiGraph<
     D,
     Options
@@ -152,25 +174,5 @@ export type ApiGraph<D extends GraphDef<any, any>, Options extends ValidApi<D> =
         data: Omit<D["entityModel"][K], "id"> & { id?: D["entityModel"][K]["id"] },
     ) => Promise<ApiEntityNode<D, D["entityModel"][K], Options[K]>>;
 } & {
-    [K in keyof D["entityModel"] as `update${Capitalize<string & K>}`]: (data: D["entityModel"][K]) => Promise<any>;
-} & {
-    sync(fresh: Partial<Entities<D["entityModel"]>>, options?: { mode?: "merge" | "replace" }): void;
-    snapshot(): ApiGraphSnapshot<D>;
-    restore(snapshot: ApiGraphSnapshot<D> | Entities<D["entityModel"]>): void;
-    pendingChanges(): PendingDelta[];
-    flushPending(): Promise<{ synced: PendingDelta[]; failed: { delta: PendingDelta; error: ApiError }[] }>;
-    clearPending(): void;
-    beginTransaction(): ApiTransactionGraph<D, Options>;
-    subscribe(subscriber: ApiGraphSubscriber<D>): () => void;
-    startAutoFlush(options?: AutoFlushOptions): () => void;
-    resolveId(id: string | number): string | number;
-    getOriginalId(id: string | number): string | number;
-    setIdFormat(formatter: NewIdFormatter): void;
-    api: Options extends { actions: infer Actions }
-        ? {
-              [K in keyof Actions]: Actions[K] extends (graph: any, ...args: infer Args) => Promise<infer R>
-                  ? (...args: Args) => Promise<R>
-                  : never;
-          }
-        : {};
+    meta: ApiGraphMeta<D, Options>;
 };

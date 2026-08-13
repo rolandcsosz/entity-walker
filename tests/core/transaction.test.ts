@@ -1,26 +1,26 @@
 import { describe, it, expect } from "vitest";
-import { createGraph, createNonProxyGraph } from "../../src";
-import { edges } from "../types";
+import { EntityGraph, EntityGraphNoProxy, createGraph, createNonProxyGraph } from "../../src";
+import { CustomGraph, edges } from "../types";
 import { baseEntities } from "../shared";
 
 describe("Transaction Support - Proxy Graph", () => {
     it("isolates modifications from the parent graph", () => {
-        const g = createGraph({ entities: structuredClone(baseEntities), edges });
-        const tx = g.beginTransaction();
+        const g: EntityGraph<CustomGraph> = createGraph({ entities: structuredClone(baseEntities), edges });
+        const tx = g.meta.beginTransaction();
 
-        tx.updateTransaction({ id: "tx1", subcategoryId: "sub2" });
+        tx.createTransaction({ id: "tx1", subcategoryId: "sub2" });
 
         expect(tx.transaction("tx1").value()?.subcategoryId).toBe("sub2");
         expect(g.transaction("tx1").value()?.subcategoryId).toBe("sub1");
     });
 
     it("commits modifications back to the parent graph", () => {
-        const g = createGraph({ entities: structuredClone(baseEntities), edges });
-        const tx = g.beginTransaction();
+        const g: EntityGraph<CustomGraph> = createGraph({ entities: structuredClone(baseEntities), edges });
+        const tx = g.meta.beginTransaction();
 
-        tx.updateTransaction({ id: "tx1", subcategoryId: "sub2" });
+        tx.createTransaction({ id: "tx1", subcategoryId: "sub2" });
         tx.transaction("tx2").delete();
-        tx.updateMainCategory({ id: "cat9", name: "New Category" });
+        tx.createMainCategory({ id: "cat9", name: "New Category" });
 
         tx.commit();
 
@@ -31,10 +31,10 @@ describe("Transaction Support - Proxy Graph", () => {
     });
 
     it("reverts/rolls back modifications", () => {
-        const g = createGraph({ entities: structuredClone(baseEntities), edges });
-        const tx = g.beginTransaction();
+        const g: EntityGraph<CustomGraph> = createGraph({ entities: structuredClone(baseEntities), edges });
+        const tx = g.meta.beginTransaction();
 
-        tx.updateTransaction({ id: "tx1", subcategoryId: "sub2" });
+        tx.createTransaction({ id: "tx1", subcategoryId: "sub2" });
         tx.transaction("tx2").delete();
 
         tx.rollback();
@@ -48,13 +48,13 @@ describe("Transaction Support - Proxy Graph", () => {
     });
 
     it("supports nested transactions with independent commit/rollback", () => {
-        const g = createGraph({ entities: structuredClone(baseEntities), edges });
+        const g: EntityGraph<CustomGraph> = createGraph({ entities: structuredClone(baseEntities), edges });
 
-        const tx1 = g.beginTransaction();
-        tx1.updateTransaction({ id: "tx1", subcategoryId: "sub2" });
+        const tx1 = g.meta.beginTransaction();
+        tx1.createTransaction({ id: "tx1", subcategoryId: "sub2" });
 
-        const tx2 = tx1.beginTransaction();
-        tx2.updateTransaction({ id: "tx1", subcategoryId: "sub3" });
+        const tx2 = tx1.meta.beginTransaction();
+        tx2.createTransaction({ id: "tx1", subcategoryId: "sub3" });
 
         expect(tx2.transaction("tx1").value()?.subcategoryId).toBe("sub3");
         expect(tx1.transaction("tx1").value()?.subcategoryId).toBe("sub2");
@@ -69,8 +69,8 @@ describe("Transaction Support - Proxy Graph", () => {
     });
 
     it("cascades deletes inside a transaction", () => {
-        const g = createGraph({ entities: structuredClone(baseEntities), edges });
-        const tx = g.beginTransaction();
+        const g: EntityGraph<CustomGraph> = createGraph({ entities: structuredClone(baseEntities), edges });
+        const tx = g.meta.beginTransaction();
 
         tx.subcategory("sub1").deleteCascade();
 
@@ -91,22 +91,28 @@ describe("Transaction Support - Proxy Graph", () => {
 
 describe("Transaction Support - Non-Proxy Graph", () => {
     it("isolates modifications from the parent graph", () => {
-        const g = createNonProxyGraph({ entities: structuredClone(baseEntities), edges });
-        const tx = g.beginTransaction();
+        const g: EntityGraphNoProxy<CustomGraph> = createNonProxyGraph({
+            entities: structuredClone(baseEntities),
+            edges,
+        });
+        const tx = g.meta.beginTransaction();
 
-        tx.updateTransaction({ id: "tx1", subcategoryId: "sub2" });
+        tx.create("transaction", { id: "tx1", subcategoryId: "sub2" });
 
         expect(tx.to("transaction", "tx1").value()?.subcategoryId).toBe("sub2");
         expect(g.to("transaction", "tx1").value()?.subcategoryId).toBe("sub1");
     });
 
     it("commits modifications back to the parent graph", () => {
-        const g = createNonProxyGraph({ entities: structuredClone(baseEntities), edges });
-        const tx = g.beginTransaction();
+        const g: EntityGraphNoProxy<CustomGraph> = createNonProxyGraph({
+            entities: structuredClone(baseEntities),
+            edges,
+        });
+        const tx = g.meta.beginTransaction();
 
-        tx.updateTransaction({ id: "tx1", subcategoryId: "sub2" });
+        tx.create("transaction", { id: "tx1", subcategoryId: "sub2" });
         tx.to("transaction", "tx2").delete();
-        tx.updateMainCategory({ id: "cat9", name: "New Category" });
+        tx.create("mainCategory", { id: "cat9", name: "New Category" });
 
         tx.commit();
 
@@ -117,10 +123,13 @@ describe("Transaction Support - Non-Proxy Graph", () => {
     });
 
     it("reverts/rolls back modifications", () => {
-        const g = createNonProxyGraph({ entities: structuredClone(baseEntities), edges });
-        const tx = g.beginTransaction();
+        const g: EntityGraphNoProxy<CustomGraph> = createNonProxyGraph({
+            entities: structuredClone(baseEntities),
+            edges,
+        });
+        const tx = g.meta.beginTransaction();
 
-        tx.updateTransaction({ id: "tx1", subcategoryId: "sub2" });
+        tx.create("transaction", { id: "tx1", subcategoryId: "sub2" });
         tx.rollback();
 
         expect(tx.to("transaction", "tx1").value()?.subcategoryId).toBe("sub1");
@@ -130,13 +139,16 @@ describe("Transaction Support - Non-Proxy Graph", () => {
     });
 
     it("supports nested transactions", () => {
-        const g = createNonProxyGraph({ entities: structuredClone(baseEntities), edges });
+        const g: EntityGraphNoProxy<CustomGraph> = createNonProxyGraph({
+            entities: structuredClone(baseEntities),
+            edges,
+        });
 
-        const tx1 = g.beginTransaction();
-        tx1.updateTransaction({ id: "tx1", subcategoryId: "sub2" });
+        const tx1 = g.meta.beginTransaction();
+        tx1.create("transaction", { id: "tx1", subcategoryId: "sub2" });
 
-        const tx2 = tx1.beginTransaction();
-        tx2.updateTransaction({ id: "tx1", subcategoryId: "sub3" });
+        const tx2 = tx1.meta.beginTransaction();
+        tx2.create("transaction", { id: "tx1", subcategoryId: "sub3" });
 
         expect(tx2.to("transaction", "tx1").value()?.subcategoryId).toBe("sub3");
         expect(tx1.to("transaction", "tx1").value()?.subcategoryId).toBe("sub2");

@@ -87,29 +87,29 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
         expect(handlerCalled).toBe(1);
     });
 
-    it("supports root-level update helpers like updateTransaction(data)", async () => {
-        let updateCalledWith: any = null;
+    it("supports root-level create helpers like createTransaction(data)", async () => {
+        let createCalledWith: Partial<Transaction> | null = null;
 
         const apiGraph = createGraph({
             entities: structuredClone(baseEntities),
             edges,
             api: {
                 transaction: {
-                    update: async (data) => {
-                        updateCalledWith = data;
-                        return data;
+                    create: async (data) => {
+                        createCalledWith = data;
+                        return { id: data.id ?? "tx1", ...data } as any;
                     },
                 },
             },
         });
 
-        await apiGraph.updateTransaction({
+        await apiGraph.createTransaction({
             id: "tx1",
             subcategoryId: "sub2",
             amount: 75,
         });
 
-        expect(updateCalledWith).toEqual({
+        expect(createCalledWith).toEqual({
             id: "tx1",
             subcategoryId: "sub2",
             amount: 75,
@@ -206,15 +206,15 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
             edges,
             api: {
                 actions: {
-                    batchImport: async (graph, data: any[]) => {
-                        graph.sync({ transaction: data }, { mode: "merge" });
+                    batchImport: async (graph, data: Transaction[]) => {
+                        graph.meta.sync({ transaction: data }, { mode: "merge" });
                         return { imported: data.length };
                     },
                 },
             },
         });
 
-        const res = await apiGraph.api.batchImport([
+        const res = await apiGraph.meta.api.batchImport([
             { id: "tx_batch_1", subcategoryId: "sub1" },
             { id: "tx_batch_2", subcategoryId: "sub2" },
         ]);
@@ -249,7 +249,7 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
         const node = await apiGraph.createTransaction({ subcategoryId: "sub1" });
         expect(node.value()?.id).toBe("tx_external");
 
-        const actionResult = await apiGraph.api.customGraphAction("test");
+        const actionResult = await apiGraph.meta.api.customGraphAction("test");
         expect(actionResult).toBe("external-test");
     });
 
@@ -282,7 +282,7 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
     });
 
     it("passes entity data to update handler", async () => {
-        let updateCalledWith: any = null;
+        let updateCalledWith: { data: Partial<Transaction> } = { data: {} };
 
         type MyGraphDef = GraphDef<Schema, typeof edges>;
 
@@ -320,9 +320,9 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
         });
 
         await apiGraph.transaction("tx1").delete();
-        expect(apiGraph.pendingChanges().length).toBe(1);
+        expect(apiGraph.meta.pendingChanges().length).toBe(1);
 
-        const snap = apiGraph.snapshot();
+        const snap = apiGraph.meta.snapshot();
         expect(snap.entities).toBeDefined();
         expect(snap.pendingDeltas.length).toBe(1);
         expect(snap.pendingDeltas[0].op).toBe("delete");
@@ -332,17 +332,17 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
             edges,
             api: {},
         });
-        expect(freshGraph.pendingChanges().length).toBe(0);
+        expect(freshGraph.meta.pendingChanges().length).toBe(0);
 
-        freshGraph.restore(snap);
-        expect(freshGraph.pendingChanges().length).toBe(1);
-        expect(freshGraph.pendingChanges()[0].op).toBe("delete");
+        freshGraph.meta.restore(snap);
+        expect(freshGraph.meta.pendingChanges().length).toBe(1);
+        expect(freshGraph.meta.pendingChanges()[0].op).toBe("delete");
     });
 
     describe("Multi-Entity API Transactions (tx.commit() and tx.rollback())", () => {
         it("stages multiple entity mutations in a transaction and pushes them on commit()", async () => {
-            const updatedTransactions: any[] = [];
-            const updatedSubcategories: any[] = [];
+            const updatedTransactions: Transaction[] = [];
+            const updatedSubcategories: Subcategory[] = [];
 
             const apiGraph = createGraph({
                 entities: structuredClone(baseEntities),
@@ -361,7 +361,7 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
                 },
             });
 
-            const tx = apiGraph.beginTransaction();
+            const tx = apiGraph.meta.beginTransaction();
             await tx.transaction("tx1").update((t) => ({ ...t, subcategoryId: "sub2" }));
             await tx.subcategory("sub1").update((s) => ({ ...s, name: "Renamed Sub" }));
 
@@ -391,7 +391,7 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
                 },
             });
 
-            const tx = apiGraph.beginTransaction();
+            const tx = apiGraph.meta.beginTransaction();
             await tx.transaction("tx1").update((t) => ({ ...t, subcategoryId: "sub2" }));
             tx.rollback();
 
@@ -412,7 +412,7 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
                 },
             });
 
-            const tx = apiGraph.beginTransaction();
+            const tx = apiGraph.meta.beginTransaction();
             await tx.transaction("tx1").update((t) => ({ ...t, subcategoryId: "sub2" }));
 
             const res = await tx.commit();
@@ -423,7 +423,7 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
         });
 
         it("supports nested transactions — inner commit merges into outer transaction without HTTP calls", async () => {
-            const updatedTransactions: any[] = [];
+            const updatedTransactions: Transaction[] = [];
             const apiGraph = createGraph({
                 entities: structuredClone(baseEntities),
                 edges,
@@ -436,8 +436,8 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
                 },
             });
 
-            const txOuter = apiGraph.beginTransaction();
-            const txInner = txOuter.beginTransaction();
+            const txOuter = apiGraph.meta.beginTransaction();
+            const txInner = txOuter.meta.beginTransaction();
 
             await txInner.transaction("tx1").update((t) => ({ ...t, subcategoryId: "sub_inner" }));
             expect(txInner.transaction("tx1").value()?.subcategoryId).toBe("sub_inner");
@@ -468,8 +468,8 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
                 },
             });
 
-            const txA = apiGraph.beginTransaction();
-            const txB = apiGraph.beginTransaction();
+            const txA = apiGraph.meta.beginTransaction();
+            const txB = apiGraph.meta.beginTransaction();
 
             await txA.transaction("tx1").update((t) => ({ ...t, subcategoryId: "subA" }));
             await txB.transaction("tx1").update((t) => ({ ...t, subcategoryId: "subB" }));
@@ -505,7 +505,7 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
                 },
             });
 
-            const unsubscribe = apiGraph.subscribe((evt) => {
+            const unsubscribe = apiGraph.meta.subscribe((evt) => {
                 emittedEvents.push(evt);
             });
 
@@ -547,14 +547,14 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
             });
 
             await apiGraph.transaction("tx1").delete();
-            expect(apiGraph.pendingChanges().length).toBe(1);
+            expect(apiGraph.meta.pendingChanges().length).toBe(1);
 
-            const stop = apiGraph.startAutoFlush({ intervalMs: 30, onOnline: false });
+            const stop = apiGraph.meta.startAutoFlush({ intervalMs: 30, onOnline: false });
 
             await new Promise((resolve) => setTimeout(resolve, 80));
 
             stop();
-            expect(apiGraph.pendingChanges().length).toBe(0);
+            expect(apiGraph.meta.pendingChanges().length).toBe(0);
             expect(flushCount).toBeGreaterThanOrEqual(2);
         });
     });
@@ -586,8 +586,8 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
 
             expect(node.value()?.id).toBe("real_sub_99");
 
-            expect(apiGraph.resolveId("temp_sub_1")).toBe("real_sub_99");
-            expect(apiGraph.getOriginalId("real_sub_99")).toBe("temp_sub_1");
+            expect(apiGraph.meta.resolveId("temp_sub_1")).toBe("real_sub_99");
+            expect(apiGraph.meta.getOriginalId("real_sub_99")).toBe("temp_sub_1");
 
             expect(apiGraph.subcategory("temp_sub_1").value()?.name).toBe("Groceries");
             expect(apiGraph.subcategory("real_sub_99").value()?.name).toBe("Groceries");
@@ -631,13 +631,13 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
             await apiGraph.transaction("tx1").update((tx) => ({ ...tx, subcategoryId: "temp_sub_offline" }));
 
             expect(apiGraph.transaction("tx1").value()?.subcategoryId).toBe("temp_sub_offline");
-            expect(apiGraph.pendingChanges().length).toBe(2);
+            expect(apiGraph.meta.pendingChanges().length).toBe(2);
 
             isOffline = false;
-            const res = await apiGraph.flushPending();
+            const res = await apiGraph.meta.flushPending();
 
             expect(res.synced.length).toBe(2);
-            expect(apiGraph.resolveId("temp_sub_offline")).toBe("real_sub_100");
+            expect(apiGraph.meta.resolveId("temp_sub_offline")).toBe("real_sub_100");
             expect(apiGraph.transaction("tx1").value()?.subcategoryId).toBe("real_sub_100");
         });
     });
@@ -675,7 +675,7 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
                 },
             });
 
-            apiGraph.setIdFormat((entity, index) => `${entity}_custom_${index}`);
+            apiGraph.meta.setIdFormat((entity, index) => `${entity}_custom_${index}`);
 
             const node1 = await apiGraph.createSubcategory({
                 name: "Offline Sub 1",
@@ -757,7 +757,7 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
 
             const err = await apiGraph.transaction("tx1").update((tx) => ({ ...tx, amount: 999 }));
             expect((err as ApiError).isTransient).toBe(true);
-            expect(apiGraph.pendingChanges().length).toBe(1);
+            expect(apiGraph.meta.pendingChanges().length).toBe(1);
         });
 
         it("allows entity-level isTransientError to override global options", async () => {
@@ -778,7 +778,7 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
 
             const err = await apiGraph.transaction("tx1").update((tx) => ({ ...tx, amount: 999 }));
             expect((err as ApiError).isTransient).toBe(true);
-            expect(apiGraph.pendingChanges().length).toBe(1);
+            expect(apiGraph.meta.pendingChanges().length).toBe(1);
         });
 
         it("converts status-only error responses into ApiError with default message", async () => {

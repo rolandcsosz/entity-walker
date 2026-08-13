@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { Schema } from "../types";
+import { Schema, SchemaNumeric } from "../types";
 import { Entities } from "../../src";
 import {
     baseEntities,
@@ -670,16 +670,16 @@ runEntityGraphTests("entity graph [non-proxy]", nonProxyAdapter(baseEntities));
 
 function runInfoHelperTests(label: string, { graph, rootNode, path, makeGraph }: GraphWrapper) {
     describe(label, () => {
-        describe("graph.schema()", () => {
+        describe("graph.meta.schema()", () => {
             it("lists all entity types", () => {
-                const schema = graph.schema();
+                const schema = graph.meta.schema();
                 expect(schema.entities).toEqual(
                     expect.arrayContaining(["transaction", "subcategory", "mainCategory", "expenseType", "incomeType"]),
                 );
             });
 
             it("lists all edges with correct from/to", () => {
-                const schema = graph.schema();
+                const schema = graph.meta.schema();
                 const edgePairs = schema.edges.map((e: any) => ({ from: e.from, to: e.to }));
                 expect(edgePairs).toEqual(
                     expect.arrayContaining([
@@ -692,21 +692,21 @@ function runInfoHelperTests(label: string, { graph, rootNode, path, makeGraph }:
             });
 
             it("correctly marks bidirectional edges", () => {
-                const schema = graph.schema();
+                const schema = graph.meta.schema();
                 const txSub = schema.edges.find((e: any) => e.from === "transaction" && e.to === "subcategory");
                 expect(txSub?.bidirectional).toBe(true);
             });
 
             it("correctly marks non-bidirectional edges", () => {
-                const schema = graph.schema();
+                const schema = graph.meta.schema();
                 const catIncome = schema.edges.find((e: any) => e.from === "mainCategory" && e.to === "incomeType");
                 expect(catIncome?.bidirectional).toBe(false);
             });
         });
 
-        describe("graph.info()", () => {
+        describe("graph.meta.info()", () => {
             it("returns entity counts", () => {
-                const info = graph.info();
+                const info = graph.meta.info();
                 expect(info.entityCounts.transaction).toBe(3);
                 expect(info.entityCounts.subcategory).toBe(2);
                 expect(info.entityCounts.mainCategory).toBe(3);
@@ -715,18 +715,18 @@ function runInfoHelperTests(label: string, { graph, rootNode, path, makeGraph }:
             });
 
             it("returns cache with nodeCount", () => {
-                const info = graph.info();
+                const info = graph.meta.info();
                 expect(typeof info.cache.nodeCount).toBe("number");
             });
 
             it("detects missing FK references", () => {
-                const info = graph.info();
+                const info = graph.meta.info();
                 const missingIds = info.missingEntities.map((m: any) => m.id);
                 expect(missingIds).toContain("error");
             });
 
             it("missing entities have correct type", () => {
-                const info = graph.info();
+                const info = graph.meta.info();
                 const missingExpense = info.missingEntities.find(
                     (m: any) => m.id === "error" && m.type === "expenseType",
                 );
@@ -741,22 +741,22 @@ function runInfoHelperTests(label: string, { graph, rootNode, path, makeGraph }:
                     expenseType: [{ id: "e1", description: "d" }],
                     incomeType: [{ id: "i1", description: "d" }],
                 });
-                expect(clean.graph.info().missingEntities).toHaveLength(0);
+                expect(clean.graph.meta.info().missingEntities).toHaveLength(0);
             });
 
             it("detects orphan entities not referenced by any edge", () => {
-                const info = graph.info();
+                const info = graph.meta.info();
                 expect(info.orphanEntities.transaction).toBeUndefined();
                 expect(info.orphanEntities.mainCategory).toEqual(["cat2", "cat3"]);
             });
 
             it("orphanEntities omits types that are fully referenced", () => {
-                const info = graph.info();
+                const info = graph.meta.info();
                 expect(info.orphanEntities.subcategory).toBeUndefined();
             });
 
             it("cat2 and cat3 are orphans in mainCategory (no subcategory points to them)", () => {
-                const info = graph.info();
+                const info = graph.meta.info();
                 expect(info.orphanEntities.mainCategory).toEqual(["cat2", "cat3"]);
             });
         });
@@ -834,7 +834,7 @@ function runInfoHelperTests(label: string, { graph, rootNode, path, makeGraph }:
 runInfoHelperTests("info helpers [proxy]", proxyAdapter(baseEntities));
 runInfoHelperTests("info helpers [non-proxy]", nonProxyAdapter(baseEntities));
 
-function runNumericIdTests(label: string, { rootNode, nodeList, path, makeGraph }: GraphWrapper) {
+function runNumericIdTests(label: string, { rootNode, nodeList, path, makeGraph }: GraphWrapper<SchemaNumeric>) {
     describe(label, () => {
         it("resolves entity by numeric id", () => {
             expect(rootNode("transaction", 1).value()?.subcategoryId).toBe(10);
@@ -1004,7 +1004,7 @@ function runNumericIdTests(label: string, { rootNode, nodeList, path, makeGraph 
                 }) as any,
             );
 
-            expect(g.graph.info().missingEntities).toEqual([{ type: "subcategory", id: 0 }]);
+            expect(g.graph.meta.info().missingEntities).toEqual([{ type: "subcategory", id: 0 }]);
         });
     });
 }

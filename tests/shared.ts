@@ -20,7 +20,7 @@ export const baseEntities: Entities<Schema> = {
     incomeType: [{ id: "it1", description: "Salary" }],
 };
 
-export type GraphWrapper = {
+export type GraphWrapper<S = Schema> = {
     /** rootNode: single node by type + id */
     rootNode: (type: string, id: string | number) => any;
     /** l: root node list, optionally filtered */
@@ -29,7 +29,7 @@ export type GraphWrapper = {
     path: (nodeOrList: any, rel: string, where?: (e: any) => boolean) => any;
     /** update: updateX on the graph */
     update: (type: string, entityOrEntities: any) => void;
-    makeGraph: (entities: Entities<Schema>) => GraphWrapper;
+    makeGraph: (entities: Entities<S>) => GraphWrapper<S>;
     graph: any;
 };
 
@@ -37,7 +37,7 @@ function cap(s: string) {
     return s[0].toUpperCase() + s.slice(1);
 }
 
-export function proxyAdapter(ents: Entities<Schema>): GraphWrapper {
+export function proxyAdapter(ents: Entities<Schema>): GraphWrapper<Schema> {
     const graph = createGraph({ entities: ents, edges }) as any;
     return {
         graph,
@@ -50,12 +50,12 @@ export function proxyAdapter(ents: Entities<Schema>): GraphWrapper {
             const res = nodeOrList[rel]();
             return where && typeof res.where === "function" ? res.where(where) : res;
         },
-        update: (type, e) => graph[`update${cap(type)}`](e),
+        update: (type, e) => graph[`create${cap(type)}`](e),
         makeGraph: (e) => proxyAdapter(e),
     };
 }
 
-export function nonProxyAdapter(ents: Entities<Schema>): GraphWrapper {
+export function nonProxyAdapter(ents: Entities<Schema>): GraphWrapper<Schema> {
     const graph = createNonProxyGraph({ entities: ents, edges }) as any;
     return {
         graph,
@@ -68,7 +68,7 @@ export function nonProxyAdapter(ents: Entities<Schema>): GraphWrapper {
             const res = nodeOrList.to(rel);
             return where && typeof res.where === "function" ? res.where(where) : res;
         },
-        update: (type, e) => graph[`update${cap(type)}`](e),
+        update: (type, e) => graph.create(type, e),
         makeGraph: (e) => nonProxyAdapter(e),
     };
 }
@@ -96,7 +96,7 @@ export const baseEntitiesNumeric: Entities<SchemaNumeric> = {
     incomeType: [{ id: 2000, description: "Salary" }],
 };
 
-export function proxyAdapterN(ents: Entities<SchemaNumeric>): GraphWrapper {
+export function proxyAdapterN(ents: Entities<SchemaNumeric>): GraphWrapper<SchemaNumeric> {
     const graph = createGraph({ entities: ents, edges: numericEdges }) as any;
     return {
         graph,
@@ -109,12 +109,12 @@ export function proxyAdapterN(ents: Entities<SchemaNumeric>): GraphWrapper {
             const res = nodeOrList[rel]();
             return where && typeof res.where === "function" ? res.where(where) : res;
         },
-        update: (type, e) => graph[`update${cap(type)}`](e),
-        makeGraph: (e) => proxyAdapterN(e as any),
+        update: (type, e) => graph[`create${cap(type)}`](e),
+        makeGraph: (e) => proxyAdapterN(e),
     };
 }
 
-export function nonProxyAdapterN(ents: Entities<SchemaNumeric>): GraphWrapper {
+export function nonProxyAdapterN(ents: Entities<SchemaNumeric>): GraphWrapper<SchemaNumeric> {
     const graph = createNonProxyGraph({ entities: ents, edges: numericEdges }) as any;
     return {
         graph,
@@ -127,8 +127,8 @@ export function nonProxyAdapterN(ents: Entities<SchemaNumeric>): GraphWrapper {
             const res = nodeOrList.to(rel);
             return where && typeof res.where === "function" ? res.where(where) : res;
         },
-        update: (type, e) => graph[`update${cap(type)}`](e),
-        makeGraph: (e) => nonProxyAdapterN(e as any),
+        update: (type, e) => graph.create(type, e),
+        makeGraph: (e) => nonProxyAdapterN(e),
     };
 }
 

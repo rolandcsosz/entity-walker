@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { createGraph, createNonProxyGraph, Entities, GraphEdges, ValidSchema } from "../../src";
+import {
+    createGraph,
+    createNonProxyGraph,
+    Entities,
+    EntityGraph,
+    EntityGraphNoProxy,
+    GraphDef,
+    GraphEdges,
+    ValidSchema,
+} from "../../src";
 
 type Transaction = { id: string; subcategoryId: string };
 type Subcategory = { id: string; name: string };
@@ -38,6 +47,8 @@ function makeLazyFixture() {
     return { counters, entities, edges };
 }
 
+type LazyGraphDef = GraphDef<Schema, ReturnType<typeof makeLazyFixture>["edges"]>;
+
 describe("lazy evaluation [proxy]", () => {
     it("does not resolve edges at graph creation", () => {
         const { counters, entities, edges } = makeLazyFixture();
@@ -47,18 +58,18 @@ describe("lazy evaluation [proxy]", () => {
 
     it("does not resolve edges for node/list/schema access only", () => {
         const { counters, entities, edges } = makeLazyFixture();
-        const graph = createGraph({ entities, edges });
+        const graph: EntityGraph<LazyGraphDef> = createGraph({ entities, edges });
 
         graph.transaction("tx1");
         graph.transactionNodes();
-        graph.schema();
+        graph.meta.schema();
 
         expect(counters.resolveCalls).toBe(0);
     });
 
     it("builds indexes when value is requested", () => {
         const { counters, entities, edges } = makeLazyFixture();
-        const graph = createGraph({ entities, edges });
+        const graph: EntityGraph<LazyGraphDef> = createGraph({ entities, edges });
 
         const tx = graph.transaction("tx1").value();
 
@@ -71,9 +82,9 @@ describe("lazy evaluation [proxy]", () => {
 
     it("preserves behavior when update happens before first value read", () => {
         const { entities, edges } = makeLazyFixture();
-        const graph = createGraph({ entities, edges });
+        const graph: EntityGraph<LazyGraphDef> = createGraph({ entities, edges });
 
-        graph.updateTransaction({ id: "tx1", subcategoryId: "sub2" });
+        graph.createTransaction({ id: "tx1", subcategoryId: "sub2" });
 
         expect(graph.transaction("tx1").subcategory().value()?.id).toBe("sub2");
         expect(graph.subcategory("sub2").transactionNodes().ids()).toContain("tx1");
@@ -89,18 +100,18 @@ describe("lazy evaluation [non-proxy]", () => {
 
     it("does not resolve edges for node/list/schema access only", () => {
         const { counters, entities, edges } = makeLazyFixture();
-        const graph = createNonProxyGraph({ entities, edges });
+        const graph: EntityGraphNoProxy<LazyGraphDef> = createNonProxyGraph({ entities, edges });
 
         graph.to("transaction", "tx1");
         graph.to("transactionNodes");
-        graph.schema();
+        graph.meta.schema();
 
         expect(counters.resolveCalls).toBe(0);
     });
 
     it("builds indexes when value is requested", () => {
         const { counters, entities, edges } = makeLazyFixture();
-        const graph = createNonProxyGraph({ entities, edges });
+        const graph: EntityGraphNoProxy<LazyGraphDef> = createNonProxyGraph({ entities, edges });
 
         const tx = graph.to("transaction", "tx1").value();
 
@@ -113,9 +124,9 @@ describe("lazy evaluation [non-proxy]", () => {
 
     it("preserves behavior when update happens before first value read", () => {
         const { entities, edges } = makeLazyFixture();
-        const graph = createNonProxyGraph({ entities, edges });
+        const graph: EntityGraphNoProxy<LazyGraphDef> = createNonProxyGraph({ entities, edges });
 
-        graph.updateTransaction({ id: "tx1", subcategoryId: "sub2" });
+        graph.create("transaction", { id: "tx1", subcategoryId: "sub2" });
 
         expect(graph.to("transaction", "tx1").to("subcategory").value()?.id).toBe("sub2");
         expect(graph.to("subcategory", "sub2").to("transactionNodes").ids()).toContain("tx1");

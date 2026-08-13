@@ -389,12 +389,12 @@ export const createNonProxyGraph = <EM extends EntityMap, E extends GraphEdges<E
         const commit = () => {
             if (committed || rolledBack) return;
             committed = true;
-            restore(txGraph.snapshot());
+            restore(txGraph.meta.snapshot());
         };
 
         const rollback = () => {
             rolledBack = true;
-            txGraph.restore(snapshot());
+            txGraph.meta.restore(snapshot());
         };
 
         return Object.assign({}, txGraph, {
@@ -403,10 +403,36 @@ export const createNonProxyGraph = <EM extends EntityMap, E extends GraphEdges<E
         });
     }
 
-    const graph: any = { to, info: graphInfo, schema: graphSchema, snapshot, restore, sync, beginTransaction };
-    for (const key in config.entities) {
-        const capKey = key[0].toUpperCase() + key.slice(1);
-        graph[`update${capKey}`] = (entityOrEntities: any) => update(key as keyof EM, entityOrEntities);
+    function generateUUID(): string {
+        if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+            return crypto.randomUUID();
+        }
+        return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+            const r = (Math.random() * 16) | 0;
+            const v = c === "x" ? r : (r & 0x3) | 0x8;
+            return v.toString(16);
+        });
     }
+
+    function create(type: keyof EM & string, dataOrEntities: any): any {
+        if (Array.isArray(dataOrEntities)) {
+            const items = dataOrEntities.map((d: any) => ({
+                ...d,
+                id: d?.id ?? generateUUID(),
+            }));
+            update(type as keyof EM, items);
+            return toNodeList(
+                items.map((item: any) => createNode(type as keyof EM, item.id.toString())),
+                type,
+            );
+        }
+        const id = dataOrEntities?.id ?? generateUUID();
+        const item = { ...dataOrEntities, id };
+        update(type as keyof EM, item);
+        return createNode(type as keyof EM, id.toString());
+    }
+
+    const meta = { info: graphInfo, schema: graphSchema, snapshot, restore, sync, beginTransaction };
+    const graph: any = { to, create, meta };
     return graph as any;
 };

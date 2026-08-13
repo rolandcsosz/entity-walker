@@ -1,5 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { createGraph, type ValidSchema, type GraphEdges, type GraphDef, type ValidApi, type Entities } from "../../src";
+import {
+    createGraph,
+    type ApiGraph,
+    type ValidSchema,
+    type GraphEdges,
+    type GraphDef,
+    type ValidApi,
+    type Entities,
+} from "../../src";
 import { client } from "./generated/client/client.gen";
 import {
     getTransactions,
@@ -362,7 +370,7 @@ describe("OpenAPI Client Integration with ApiGraph", () => {
         return data as T;
     }
 
-    function createTestApiGraph() {
+    function createTestApiGraph(): ApiGraph<OpenApiGraphDef> {
         const entities: Entities<OpenApiSchema> = {
             transaction: [],
             subcategory: [],

@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { proxyAdapter, nonProxyAdapter, baseEntities } from "../shared";
+import { proxyAdapter, nonProxyAdapter, baseEntities, GraphWrapper } from "../shared";
 
-function runScopeTests(label: string, wrapper: any) {
+function runScopeTests(label: string, wrapper: GraphWrapper) {
     const { nodeList, path } = wrapper;
     describe(label, () => {
         it("scoped() restricts entities() to scope ids", () => {
@@ -238,7 +238,7 @@ function runScopeTests(label: string, wrapper: any) {
 runScopeTests("scoped behavior [proxy]", proxyAdapter(baseEntities));
 runScopeTests("scoped behavior [non-proxy]", nonProxyAdapter(baseEntities));
 
-function runComplexTests(label: string, wrapper: any) {
+function runComplexTests(label: string, wrapper: GraphWrapper) {
     const { nodeList, path } = wrapper;
 
     describe(label, () => {

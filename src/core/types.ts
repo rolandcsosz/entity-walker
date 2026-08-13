@@ -1,6 +1,6 @@
 export type EntityBase = { id: string | number };
 
-type ForbiddenKeys = "to" | "info" | "schema" | `${string}Nodes` | `update${string}`;
+type ForbiddenKeys = "to" | "info" | "schema" | "meta" | `${string}Nodes` | `create${string}`;
 type InvalidKeys<T> = {
     [K in keyof T as K extends ForbiddenKeys ? K : never]: never;
 };
@@ -133,21 +133,25 @@ export type EntityNode<D extends GraphDef<any, any>, E extends EntityBase> = {
         >;
     };
 
-export type EntityGraph<D extends GraphDef<any, any>> = {
-    [K in keyof D["entityModel"]]: (id: D["entityModel"][K]["id"]) => EntityNode<D, D["entityModel"][K]>;
-} & {
-    [K in keyof D["entityModel"] as `${string & K}Nodes`]: () => EntityNodeList<D, D["entityModel"][K]>;
-} & {
+export type EntityGraphMeta<D extends GraphDef<any, any>, Tx = TransactionGraph<D>> = {
     info(): GraphDebugInfo;
     schema(): GraphSchema;
     snapshot(): Entities<D["entityModel"]>;
     restore(snapshot: Entities<D["entityModel"]>): void;
     sync(fresh: Partial<Entities<D["entityModel"]>>, options?: { mode?: "merge" | "replace" }): void;
-    beginTransaction(): TransactionGraph<D>;
+    beginTransaction(): Tx;
+};
+
+export type EntityGraph<D extends GraphDef<any, any>> = {
+    [K in keyof D["entityModel"]]: (id: D["entityModel"][K]["id"]) => EntityNode<D, D["entityModel"][K]>;
 } & {
-    [K in keyof D["entityModel"] as `update${Capitalize<string & K>}`]: (
-        entity: D["entityModel"][K] | D["entityModel"][K][],
-    ) => void;
+    [K in keyof D["entityModel"] as `${string & K}Nodes`]: () => EntityNodeList<D, D["entityModel"][K]>;
+} & {
+    meta: EntityGraphMeta<D>;
+} & {
+    [K in keyof D["entityModel"] as `create${Capitalize<string & K>}`]: (
+        data: Omit<D["entityModel"][K], "id"> & { id?: D["entityModel"][K]["id"] },
+    ) => EntityNode<D, D["entityModel"][K]>;
 };
 
 export type TransactionGraph<D extends GraphDef<any, any>> = EntityGraph<D> & {
@@ -212,16 +216,15 @@ export type EntityGraphNoProxy<D extends GraphDef<any, any>> = {
         D,
         D["entityModel"][Extract<Nodes, string> extends `${infer U}Nodes` ? U & keyof D["entityModel"] : never]
     >;
-    info(): GraphDebugInfo;
-    schema(): GraphSchema;
-    snapshot(): Entities<D["entityModel"]>;
-    restore(snapshot: Entities<D["entityModel"]>): void;
-    sync(fresh: Partial<Entities<D["entityModel"]>>, options?: { mode?: "merge" | "replace" }): void;
-    beginTransaction(): TransactionGraphNoProxy<D>;
-} & {
-    [K in keyof D["entityModel"] as `update${Capitalize<string & K>}`]: (
-        entity: D["entityModel"][K] | D["entityModel"][K][],
-    ) => void;
+    create<Key extends keyof D["entityModel"] & string>(
+        type: Key,
+        data: Omit<D["entityModel"][Key], "id"> & { id?: D["entityModel"][Key]["id"] },
+    ): EntityNodeNoProxy<D, D["entityModel"][Key]>;
+    create<Key extends keyof D["entityModel"] & string>(
+        type: Key,
+        data: (Omit<D["entityModel"][Key], "id"> & { id?: D["entityModel"][Key]["id"] })[],
+    ): EntityNodeListNoProxy<D, D["entityModel"][Key]>;
+    meta: EntityGraphMeta<D, TransactionGraphNoProxy<D>>;
 };
 
 export type TransactionGraphNoProxy<D extends GraphDef<any, any>> = EntityGraphNoProxy<D> & {
