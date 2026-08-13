@@ -205,7 +205,6 @@ export type EntityNodeListNoProxy<D extends GraphDef<any, any>, E extends Entity
 };
 
 export type EntityGraphNoProxy<D extends GraphDef<any, any>> = {
-    to<Target extends EntityBase>(type?: undefined, id?: string): EntityNodeNoProxy<D, Target>;
     to<Key extends keyof D["entityModel"] & string>(
         type: Key,
         id?: string,

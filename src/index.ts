@@ -7,8 +7,6 @@ export * from "./core/types";
 export * from "./core/graphNoProxy";
 export { emptyNode, emptyNodeList, emptyNodeNoProxy, emptyNodeListNoProxy } from "./core/helpers";
 export * from "./api/types";
-export { createApiGraph } from "./api/graph";
-export { createCoreGraph };
 
 export function createGraph<
     EM extends EntityMap,

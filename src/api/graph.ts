@@ -1085,7 +1085,7 @@ export function createApiGraph<D extends GraphDef<any, any>>(
     };
 
     return new Proxy(apiGraph, {
-        get(target, p) {
+        get(target, p, receiver) {
             if (p === "then" || p === "toJSON") {
                 return undefined;
             }
@@ -1093,13 +1093,7 @@ export function createApiGraph<D extends GraphDef<any, any>>(
                 return (target as any)[p];
             }
             const propStr = String(p);
-            if (propStr === "createEntity") {
-                return (type: string, data: any) => {
-                    const fnName = `create${type[0].toUpperCase()}${type.slice(1)}`;
-                    return (apiGraph as any)[fnName](data);
-                };
-            }
-            if (propStr.startsWith("create") && propStr !== "create") {
+            if (propStr.startsWith("create") && propStr !== "create" && propStr !== "createEntity") {
                 const type = propStr[6].toLowerCase() + propStr.slice(7);
                 return async (data: any) => {
                     if (isTx) {
