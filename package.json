@@ -20,7 +20,9 @@
         "format": "prettier --write .",
         "format:check": "prettier --check .",
         "benchmark": "vitest ./tests/benchmarks/benchmark.ts",
-        "generate:client": "openapi-ts -i ./tests/api/openapi.json -o tests/api/generated/client -c @hey-api/client-fetch"
+        "generate:client": "openapi-ts -i ./tests/api/openapi.json -o tests/api/generated/client -c @hey-api/client-fetch",
+        "list:api": "node scripts/list-api.js",
+        "api:list": "node scripts/list-api.js"
     },
     "repository": {
         "type": "git",
