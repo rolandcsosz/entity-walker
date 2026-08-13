@@ -1,10 +1,20 @@
 import { buildCore, NODE_PROP } from "./helpers";
 import { EntityGraphNoProxy, EntityMap, GraphDef, GraphEdges, NodeDebugInfo } from "./types";
 
-export const createNonProxyGraph = <EM extends EntityMap, E extends GraphEdges<EM>>(config: {
-    entities: { [K in keyof EM]: EM[K][] };
+export function createNonProxyGraph<D extends GraphDef<any, any>>(config: {
+    entities?: Partial<{ [K in keyof D["entityModel"]]: D["entityModel"][K][] }>;
+    edges: D["edges"];
+}): EntityGraphNoProxy<D>;
+
+export function createNonProxyGraph<EM extends EntityMap, E extends GraphEdges<EM>>(config: {
+    entities?: Partial<{ [K in keyof EM]: EM[K][] }>;
     edges: E;
-}): EntityGraphNoProxy<GraphDef<EM, E>> => {
+}): EntityGraphNoProxy<GraphDef<EM, E>>;
+
+export function createNonProxyGraph<EM extends EntityMap, E extends GraphEdges<EM>>(config: {
+    entities?: any;
+    edges: any;
+}): EntityGraphNoProxy<any> {
     let _createNode: (key: keyof EM, id: string | number | null, path?: string[]) => any;
 
     function addToList(list: any, _nodeKey: string): void {
@@ -314,7 +324,7 @@ export const createNonProxyGraph = <EM extends EntityMap, E extends GraphEdges<E
     const to = (type: string, id?: any): any => {
         if (type.endsWith("Nodes")) {
             const entityKey = type.slice(0, -"Nodes".length);
-            const all = entities[entityKey] || [];
+            const all = (entities as Record<string, any[]>)[entityKey] || [];
             return toNodeList(
                 all.map((item: any) => createNode(entityKey as keyof EM, item.id.toString())),
                 entityKey,
@@ -325,13 +335,14 @@ export const createNonProxyGraph = <EM extends EntityMap, E extends GraphEdges<E
 
     function snapshot(): Record<string, any[]> {
         const snap: Record<string, any[]> = {};
-        for (const key in entities) snap[key] = (entities as Record<string, any[]>)[key].map((e: any) => ({ ...e }));
+        for (const key in entities)
+            snap[key] = (entities as Record<string, any[]>)[key]?.map((e: any) => ({ ...e })) ?? [];
         return snap;
     }
 
     function restore(snap: Record<string, any[]>): void {
         const ents = entities as Record<string, any[]>;
-        for (const key in ents) {
+        for (const key in snap) {
             ents[key] = (snap[key] ?? []).map((e: any) => ({ ...e }));
         }
         markIndexesDirty();
@@ -364,6 +375,7 @@ export const createNonProxyGraph = <EM extends EntityMap, E extends GraphEdges<E
                 if (freshList.length > 0) update(key as keyof EM, freshList);
                 if (mode === "replace") {
                     const sorted = freshList.map((e) => byId[key]?.[e.id.toString()]).filter(Boolean);
+                    ents[key] = ents[key] ?? [];
                     ents[key].length = 0;
                     ents[key].push(...sorted);
                 }
@@ -435,4 +447,4 @@ export const createNonProxyGraph = <EM extends EntityMap, E extends GraphEdges<E
     const meta = { info: graphInfo, schema: graphSchema, snapshot, restore, sync, beginTransaction };
     const graph: any = { to, create, meta };
     return graph as any;
-};
+}

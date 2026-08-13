@@ -2,7 +2,7 @@ import { buildCore } from "./helpers";
 import { EntityGraph, EntityMap, GraphDef, GraphEdges, NodeDebugInfo } from "./types";
 
 export function buildGraphCore<EM extends EntityMap, E extends GraphEdges<EM>>(
-    entities: { [K in keyof EM]: EM[K][] },
+    entities: Partial<{ [K in keyof EM]: EM[K][] }> | undefined,
     edges: E,
 ) {
     let _createNode: (key: keyof EM, id: string | number | null, path?: string[]) => any;
@@ -226,18 +226,18 @@ export function buildGraphCore<EM extends EntityMap, E extends GraphEdges<EM>>(
     };
 }
 
-export function createGraph<EM extends EntityMap, E extends GraphEdges<EM>>(config: {
-    entities: { [K in keyof EM]: EM[K][] };
-    edges: E;
-}): EntityGraph<GraphDef<EM, E>>;
-
 export function createGraph<D extends GraphDef<any, any>>(config: {
-    entities: { [K in keyof D["entityModel"]]: D["entityModel"][K][] };
+    entities?: Partial<{ [K in keyof D["entityModel"]]: D["entityModel"][K][] }>;
     edges: D["edges"];
 }): EntityGraph<D>;
 
 export function createGraph<EM extends EntityMap, E extends GraphEdges<EM>>(config: {
-    entities: any;
+    entities?: Partial<{ [K in keyof EM]: EM[K][] }>;
+    edges: E;
+}): EntityGraph<GraphDef<EM, E>>;
+
+export function createGraph<EM extends EntityMap, E extends GraphEdges<EM>>(config: {
+    entities?: any;
     edges: any;
 }): any {
     const {
@@ -331,8 +331,10 @@ export function createGraph<EM extends EntityMap, E extends GraphEdges<EM>>(conf
             }
             // replace in byId and entities array
             byId[key][entity.id.toString()] = entity;
+            ents[key] = ents[key] ?? [];
             const arrIdx = ents[key].findIndex((e: any) => e.id.toString() === entity.id.toString());
             if (arrIdx !== -1) ents[key][arrIdx] = entity;
+            else ents[key].push(entity);
             nodeCache.delete(`${key}:${entity.id.toString()}`);
             // add new bidirectional reverse index entries
             if (entityEdges) {
@@ -355,12 +357,13 @@ export function createGraph<EM extends EntityMap, E extends GraphEdges<EM>>(conf
         schema: graphSchema,
         snapshot: () => {
             const snap: Record<string, any[]> = {};
-            for (const key in entities) snap[key] = (entities as Record<string, any[]>)[key].map((e) => ({ ...e }));
+            for (const key in entities)
+                snap[key] = (entities as Record<string, any[]>)[key]?.map((e) => ({ ...e })) ?? [];
             return snap;
         },
         restore: (snapshot: Record<string, any[]>) => {
             const ents = entities as Record<string, any[]>;
-            for (const key in ents) {
+            for (const key in snapshot) {
                 ents[key] = (snapshot[key] ?? []).map((e: any) => ({ ...e }));
             }
             markIndexesDirty();
@@ -392,6 +395,7 @@ export function createGraph<EM extends EntityMap, E extends GraphEdges<EM>>(conf
                     if (freshList.length > 0) update(key as keyof EM, freshList);
                     if (mode === "replace") {
                         const sorted = freshList.map((e) => byId[key]?.[e.id.toString()]).filter(Boolean);
+                        ents[key] = ents[key] ?? [];
                         ents[key].length = 0;
                         ents[key].push(...sorted);
                     }
@@ -410,7 +414,8 @@ export function createGraph<EM extends EntityMap, E extends GraphEdges<EM>>(conf
         beginTransaction: () => {
             const snapshotMethod = () => {
                 const snap: Record<string, any[]> = {};
-                for (const key in entities) snap[key] = (entities as Record<string, any[]>)[key].map((e) => ({ ...e }));
+                for (const key in entities)
+                    snap[key] = (entities as Record<string, any[]>)[key]?.map((e) => ({ ...e })) ?? [];
                 return snap;
             };
             const txEntities = snapshotMethod();
@@ -423,7 +428,7 @@ export function createGraph<EM extends EntityMap, E extends GraphEdges<EM>>(conf
                 committed = true;
                 const ents = entities as Record<string, any[]>;
                 const txSnap = txGraph.meta.snapshot();
-                for (const key in ents) {
+                for (const key in txSnap) {
                     ents[key] = (txSnap[key] ?? []).map((e: any) => ({ ...e }));
                 }
                 markIndexesDirty();
@@ -459,46 +464,39 @@ export function createGraph<EM extends EntityMap, E extends GraphEdges<EM>>(conf
         {},
         {
             get(_, prop: string | symbol) {
-                if (typeof prop === "symbol") return undefined;
+                if (typeof prop === "symbol" || prop === "then" || prop === "toJSON") return undefined;
                 if (prop === "meta") return metaObj;
                 if (prop.startsWith("create") && prop.length > 6 && prop !== "createEntity") {
                     const rawKey = prop[6].toLowerCase() + prop.slice(7);
-                    if (rawKey in entities) {
-                        return (dataOrEntities: any) => {
-                            if (Array.isArray(dataOrEntities)) {
-                                const items = dataOrEntities.map((d: any) => ({
-                                    ...d,
-                                    id: d?.id ?? generateUUID(),
-                                }));
-                                update(rawKey as keyof EM, items);
-                                return toNodeList(
-                                    items.map((item: any) => createNode(rawKey as keyof EM, item.id.toString())),
-                                    rawKey,
-                                );
-                            }
-                            const id = dataOrEntities?.id ?? generateUUID();
-                            const item = { ...dataOrEntities, id };
-                            update(rawKey as keyof EM, item);
-                            return createNode(rawKey as keyof EM, id.toString());
-                        };
-                    }
+                    return (dataOrEntities: any) => {
+                        if (Array.isArray(dataOrEntities)) {
+                            const items = dataOrEntities.map((d: any) => ({
+                                ...d,
+                                id: d?.id ?? generateUUID(),
+                            }));
+                            update(rawKey as keyof EM, items);
+                            return toNodeList(
+                                items.map((item: any) => createNode(rawKey as keyof EM, item.id.toString())),
+                                rawKey,
+                            );
+                        }
+                        const id = dataOrEntities?.id ?? generateUUID();
+                        const item = { ...dataOrEntities, id };
+                        update(rawKey as keyof EM, item);
+                        return createNode(rawKey as keyof EM, id.toString());
+                    };
                 }
                 if (prop.endsWith("Nodes")) {
                     const entityKey = prop.slice(0, -"Nodes".length);
-                    if (entityKey in entities) {
-                        return () => {
-                            const all = entities[entityKey] || [];
-                            return toNodeList(
-                                all.map((item: any) => createNode(entityKey as keyof EM, item.id.toString())),
-                                entityKey,
-                            );
-                        };
-                    }
+                    return () => {
+                        const all = (entities as Record<string, any[]>)[entityKey] || [];
+                        return toNodeList(
+                            all.map((item: any) => createNode(entityKey as keyof EM, item.id.toString())),
+                            entityKey,
+                        );
+                    };
                 }
-                if (prop in entities) {
-                    return (id: string | number) => createNode(prop as any, id ? id.toString() : (id as any));
-                }
-                return undefined;
+                return (id: string | number) => createNode(prop as any, id ? id.toString() : (id as any));
             },
         },
     ) as any;
