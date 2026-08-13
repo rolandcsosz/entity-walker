@@ -6,6 +6,7 @@ import { ValidApi, ApiGraph } from "./api/types";
 export * from "./core/types";
 export * from "./core/graphNoProxy";
 export { emptyNode, emptyNodeList, emptyNodeNoProxy, emptyNodeListNoProxy } from "./core/helpers";
+export { emptyApiNode, emptyApiNodeList } from "./api/helpers";
 export * from "./api/types";
 
 export function createGraph<

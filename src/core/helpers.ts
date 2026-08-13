@@ -346,27 +346,27 @@ export function emptyNodeList<G extends GraphDef<any, any>, E extends EntityBase
     const self = () => proxyList;
 
     def("entities", () => []);
-    def("select", () => []);
+    def("select", (_fn: (entity: E) => any) => []);
     def("ids", () => []);
     def("first", () => undefined);
-    def("findEntity", () => undefined);
-    def("findNode", () => undefined);
+    def("findEntity", (_predicate: (entity: E) => boolean) => undefined);
+    def("findNode", (_predicate: (entity: E) => boolean) => undefined);
     def("isEmpty", () => true);
     def("isNotEmpty", () => false);
-    def("unique", self);
-    def("where", self);
-    def("whereNode", self);
-    def("intersect", self);
+    def("unique", () => proxyList);
+    def("where", (_where: (entity: E) => boolean) => proxyList);
+    def("whereNode", (_where: (node: any) => boolean) => proxyList);
+    def("intersect", (_other: any) => proxyList);
     def("with", (fn: (self: any) => any) => fn(proxyList));
-    def("scoped", self);
-    def("resetScope", self);
+    def("scoped", () => proxyList);
+    def("resetScope", () => proxyList);
     def("info", () => ({ type: "unknown", length: 0, scope: null }));
 
     const proxyList = new Proxy(list, {
         get(target, prop: string | symbol) {
             if (typeof prop === "symbol") return target[prop as keyof typeof target];
             if (prop in target) return target[prop as keyof typeof target];
-            if (typeof prop === "string" && prop.endsWith("Nodes")) return self;
+            if (typeof prop === "string" && prop.endsWith("Nodes")) return () => proxyList;
             return undefined;
         },
     });
@@ -407,32 +407,26 @@ export function emptyNodeListNoProxy<G extends GraphDef<any, any>, E extends Ent
 > {
     const list: any = [];
     const def = (name: string, val: any) => Object.defineProperty(list, name, { value: val, enumerable: false });
-    const self = () => list;
 
     def("entities", () => []);
-    def("select", () => []);
+    def("select", (_fn: (entity: E) => any) => []);
     def("ids", () => []);
     def("first", () => undefined);
-    def("findEntity", () => undefined);
-    def("findNode", () => undefined);
+    def("findEntity", (_predicate: (entity: E) => boolean) => undefined);
+    def("findNode", (_predicate: (entity: E) => boolean) => undefined);
     def("isEmpty", () => true);
     def("isNotEmpty", () => false);
-    def("unique", self);
-    def("where", self);
-    def("whereNode", self);
-    def("intersect", self);
+    def("unique", () => list);
+    def("where", (_where: (entity: E) => boolean) => list);
+    def("whereNode", (_where: (node: any) => boolean) => list);
+    def("intersect", (_other: any) => list);
     def("with", (fn: (self: any) => any) => fn(list));
-    def("scoped", self);
-    def("resetScope", self);
+    def("scoped", () => list);
+    def("resetScope", () => list);
     def("info", () => ({ type: "unknown", length: 0, scope: null }));
-
     def("to", (rel: string) => {
-        if (!rel.endsWith("Nodes"))
-            throw new Error(
-                `[entity-walker] EntityNodeListNoProxy.to() requires a 'Nodes' suffix (e.g. '${rel}Nodes')`,
-            );
-        if (typeof (list as any)[rel] === "function") return (list as any)[rel]();
-        return list;
+        if (rel.endsWith("Nodes")) return list;
+        return emptyNodeNoProxy();
     });
 
     return list as any;
