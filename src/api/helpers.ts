@@ -1,7 +1,7 @@
 import { GraphDef, EntityBase } from "../core/types";
-import { ApiEntityNode, ApiEntityNodeList } from "./types";
+import { ApiNode, ApiNodeList } from "./types";
 
-export function emptyApiNodeList<G extends GraphDef<any, any>, E extends EntityBase>(): ApiEntityNodeList<G, E> {
+export function emptyApiNodeList<G extends GraphDef<any, any>, E extends EntityBase>(): ApiNodeList<G, E> {
     const list = [] as any;
     const def = (name: string, val: any) => Object.defineProperty(list, name, { value: val, enumerable: false });
 
@@ -23,7 +23,7 @@ export function emptyApiNodeList<G extends GraphDef<any, any>, E extends EntityB
     return proxyList;
 }
 
-export function emptyApiNode<G extends GraphDef<any, any>, E extends EntityBase>(): ApiEntityNode<G, E> {
+export function emptyApiNode<G extends GraphDef<any, any>, E extends EntityBase>(): ApiNode<G, E> {
     const nodeObj: any = {
         value: () => undefined,
         exists: () => false,

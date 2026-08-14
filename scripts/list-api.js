@@ -51,8 +51,8 @@ import {
     ApiGraph,
     EntityNode,
     EntityNodeList,
-    ApiEntityNode,
-    ApiEntityNodeList,
+    ApiNode,
+    ApiNodeList,
     EntityGraphMeta,
     ApiGraphMeta,
     TransactionGraph,
@@ -68,8 +68,8 @@ export type ConcreteApiTxGraph = ApiTransactionGraph<CustomGraph>;
 export type ConcreteTransactionNode = EntityNode<CustomGraph, Transaction>;
 export type ConcreteSubcategoryNode = EntityNode<CustomGraph, Subcategory>;
 export type ConcreteTransactionNodeList = EntityNodeList<CustomGraph, Transaction>;
-export type ConcreteApiTransactionNode = ApiEntityNode<CustomGraph, Transaction>;
-export type ConcreteApiTransactionNodeList = ApiEntityNodeList<CustomGraph, Transaction>;
+export type ConcreteApiTransactionNode = ApiNode<CustomGraph, Transaction>;
+export type ConcreteApiTransactionNodeList = ApiNodeList<CustomGraph, Transaction>;
 export type ConcreteCoreMeta = EntityGraphMeta<CustomGraph>;
 export type ConcreteApiMeta = ApiGraphMeta<CustomGraph>;
 `;
@@ -146,11 +146,11 @@ export type ConcreteApiMeta = ApiGraphMeta<CustomGraph>;
             },
             {
                 name: "ConcreteApiTransactionNode",
-                title: "ApiEntityNode<CustomGraph, Transaction> (API Transaction Node & Relationships)",
+                title: "ApiNode<CustomGraph, Transaction> (API Transaction Node & Relationships)",
             },
             {
                 name: "ConcreteApiTransactionNodeList",
-                title: "ApiEntityNodeList<CustomGraph, Transaction> (API Transaction Node List)",
+                title: "ApiNodeList<CustomGraph, Transaction> (API Transaction Node List)",
                 isList: true,
             },
             { name: "ConcreteCoreMeta", title: "EntityGraphMeta<CustomGraph> (Core Graph Meta)" },

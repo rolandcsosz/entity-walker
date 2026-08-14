@@ -13,7 +13,7 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
             edges,
             api: {
                 transaction: {
-                    update: async (data) => {
+                    update: async (data: any) => {
                         handlerCalled++;
                         if (shouldFail) {
                             throw new Error("Network Error");
@@ -43,7 +43,7 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
             edges,
             api: {
                 transaction: {
-                    delete: async (id) => {
+                    delete: async (id: string) => {
                         handlerCalled++;
                         if (shouldFail) {
                             throw new Error("Network Error");
@@ -72,7 +72,7 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
             edges,
             api: {
                 transaction: {
-                    create: async (data) => {
+                    create: async (data: any) => {
                         handlerCalled++;
                         return { id: "tx_new", subcategoryId: data.subcategoryId };
                     },
@@ -95,7 +95,7 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
             edges,
             api: {
                 transaction: {
-                    create: async (data) => {
+                    create: async (data: any) => {
                         createCalledWith = data;
                         return { id: data.id ?? "tx1", ...data } as any;
                     },
@@ -124,7 +124,7 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
             edges,
             api: {
                 transaction: {
-                    read: async (id) => {
+                    read: async (id: string) => {
                         handlerCalled++;
                         if (id === "tx_ghost") {
                             return { id: "tx_ghost", subcategoryId: "sub2" };
@@ -231,7 +231,7 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
 
         const apiOptions = {
             transaction: {
-                create: async (data) => {
+                create: async (data: any) => {
                     return { id: "tx_external", subcategoryId: data.subcategoryId } as Transaction;
                 },
             },
@@ -266,7 +266,7 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
                 list: async () => {
                     return [{ id: "tx1", subcategoryId: "sub1" }] as Transaction[];
                 },
-                update: async (data) => {
+                update: async (data: any) => {
                     return data as Transaction;
                 },
                 delete: async (id: string) => {},
@@ -293,7 +293,7 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
             edges,
             api: {
                 transaction: {
-                    update: async (data) => {
+                    update: async (data: any) => {
                         updateCalledWith = { data };
                         return undefined;
                     },
@@ -351,12 +351,12 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
                 edges,
                 api: {
                     transaction: {
-                        update: async (data) => {
+                        update: async (data: any) => {
                             updatedTransactions.push(data);
                         },
                     },
                     subcategory: {
-                        update: async (data) => {
+                        update: async (data: any) => {
                             updatedSubcategories.push(data);
                         },
                     },
@@ -431,7 +431,7 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
                 edges,
                 api: {
                     transaction: {
-                        update: async (data) => {
+                        update: async (data: any) => {
                             updatedTransactions.push(data);
                         },
                     },
@@ -463,7 +463,7 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
                 edges,
                 api: {
                     transaction: {
-                        update: async (data) => {
+                        update: async (data: any) => {
                             callLog.push(data.subcategoryId);
                         },
                     },
@@ -497,7 +497,7 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
                 edges,
                 api: {
                     transaction: {
-                        update: async (data) => {
+                        update: async (data: any) => {
                             if (data.subcategoryId === "fail") {
                                 return { message: "Permanent Error", status: 400, isTransient: false } as ApiError;
                             }
@@ -597,31 +597,33 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
 
         it("remaps foreign keys across graph entities and queued deltas during flushPending()", async () => {
             let isOffline = true;
-            const apiGraph = createGraph<CustomGraph>({
-                entities: structuredClone(baseEntities),
-                edges,
-                api: {
-                    subcategory: {
-                        create: async (data) => {
-                            if (isOffline) {
-                                return { message: "Offline", isTransient: true } as ApiError;
-                            }
-                            return {
-                                id: "real_sub_100",
-                                name: data.name,
-                                mainCategoryId: "mc1",
-                            } as Subcategory;
-                        },
-                    },
-                    transaction: {
-                        update: async (data) => {
-                            if (isOffline) {
-                                return { message: "Offline", isTransient: true } as ApiError;
-                            }
-                            return data;
-                        },
+            const api = {
+                subcategory: {
+                    create: async (data: Subcategory) => {
+                        if (isOffline) {
+                            return { message: "Offline", isTransient: true } as ApiError;
+                        }
+                        return {
+                            id: "real_sub_100",
+                            name: data.name,
+                            mainCategoryId: "mc1",
+                        } as Subcategory;
                     },
                 },
+                transaction: {
+                    update: async (data: any) => {
+                        if (isOffline) {
+                            return { message: "Offline", isTransient: true } as ApiError;
+                        }
+                        return data;
+                    },
+                },
+            } as const satisfies ValidApi<CustomGraph>;
+
+            const apiGraph = createGraph<CustomGraph, typeof api>({
+                entities: structuredClone(baseEntities),
+                edges,
+                api,
             });
 
             await apiGraph.createSubcategory({
@@ -677,7 +679,7 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
                 },
             });
 
-            apiGraph.meta.setIdFormat((entity, index) => `${entity}_custom_${index}`);
+            apiGraph.meta.setIdFormat((entity: string, index: number) => `${entity}_custom_${index}`);
 
             const node1 = await apiGraph.createSubcategory({
                 name: "Offline Sub 1",
@@ -698,7 +700,7 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
                 entities: structuredClone(baseEntities),
                 edges,
                 api: {
-                    idFormat: (entity, index) => `${entity}_opt_${index}`,
+                    idFormat: (entity: string, index: number) => `${entity}_opt_${index}`,
                     subcategory: {
                         create: async () => ({ message: "Offline", isTransient: true }) as ApiError,
                     },
@@ -726,7 +728,7 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
                         return err.raw?.customHeader === "RETRY_LATER";
                     },
                     transaction: {
-                        update: async (data) => {
+                        update: async (data: any) => {
                             return {
                                 status: 400,
                                 message: "Bad Request",
@@ -784,20 +786,56 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
         });
 
         it("converts status-only error responses into ApiError with default message", async () => {
-            const apiGraph = createGraph<CustomGraph>({
+            const api = {
+                transaction: {
+                    update: async () => ({ status: 503 }) as ApiError, // No explicit .message property
+                },
+            } as const satisfies ValidApi<CustomGraph>;
+
+            const apiGraph = createGraph<CustomGraph, typeof api>({
                 entities: structuredClone(baseEntities),
                 edges,
-                api: {
-                    transaction: {
-                        update: async () => ({ status: 503 }) as ApiError, // No explicit .message property
-                    },
-                },
+                api,
             });
 
             const err = await apiGraph.transaction("tx1").update((tx) => ({ ...tx, amount: 999 }));
             expect(err?.status).toBe(503);
             expect(err?.message).toContain("503");
             expect(err?.isTransient).toBe(true);
+        });
+    });
+
+    describe("Custom Create Signature Matching", () => {
+        it("mirrors the type signature of custom create handlers", async () => {
+            let passedExtraArg: string | undefined;
+
+            const api = {
+                subcategory: {
+                    create: async (payload: { data: { name: string; mainCategoryId: string }; extraArg: string }) => {
+                        passedExtraArg = payload.extraArg;
+                        return {
+                            id: "sub_1",
+                            name: payload.data.name,
+                            mainCategoryId: payload.data.mainCategoryId,
+                            expenseTypeId: "exp1",
+                        } as Subcategory;
+                    },
+                },
+            } as const satisfies ValidApi<CustomGraph>;
+
+            const apiGraph = createGraph({
+                entities: structuredClone(baseEntities),
+                edges,
+                api,
+            });
+
+            const node = await apiGraph.createSubcategory({
+                data: { name: "Electronics", mainCategoryId: "mc1" },
+                extraArg: "super-secret-token",
+            });
+
+            expect(node.value()?.name).toBe("Electronics");
+            expect(passedExtraArg).toBe("super-secret-token");
         });
     });
 });

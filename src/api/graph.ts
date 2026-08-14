@@ -1179,7 +1179,7 @@ export function createApiGraph<D extends GraphDef<any, any>>(
                 const type = propStr[6].toLowerCase() + propStr.slice(7);
                 return async (data: any) => {
                     if (isTx) {
-                        const tempId = data.id ?? generateNewEntityId(type, data);
+                        const tempId = data?.id ?? generateNewEntityId(type, data);
                         const optimisticEntity = { ...data, id: tempId };
                         const syncFn = baseGraph.meta?.sync ?? baseGraph.sync;
                         syncFn.call(baseGraph.meta ?? baseGraph, { [type]: [optimisticEntity] }, { mode: "merge" });
@@ -1218,7 +1218,7 @@ export function createApiGraph<D extends GraphDef<any, any>>(
                         if (error.isTransient === false) {
                             return error;
                         }
-                        const tempId = data.id ?? generateNewEntityId(type, data);
+                        const tempId = data?.id ?? generateNewEntityId(type, data);
                         const optimisticEntity = { ...data, id: tempId };
                         const syncFn = baseGraph.meta?.sync ?? baseGraph.sync;
                         syncFn.call(baseGraph.meta ?? baseGraph, { [type]: [optimisticEntity] }, { mode: "merge" });
@@ -1238,7 +1238,7 @@ export function createApiGraph<D extends GraphDef<any, any>>(
                     }
 
                     const resId = (response as any)?.id;
-                    const tempId = data.id;
+                    const tempId = data?.id;
                     if (tempId && resId && tempId !== resId) {
                         remapEntityId(baseGraph, type, tempId, resId, pendingDeltas);
                     }

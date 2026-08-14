@@ -142,7 +142,7 @@ describe("emptyNodeListNoProxy drift detection — EntityNodeListNoProxy", () =>
     });
 });
 
-describe("emptyApiNode drift detection — ApiEntityNode", () => {
+describe("emptyApiNode drift detection — ApiNode", () => {
     it("transaction api node", () => {
         const realNode = apiGraph().transaction("tx1");
         assertNoDrift(realNode, emptyApiNode<CustomGraph, Transaction>(), {
@@ -158,7 +158,7 @@ describe("emptyApiNode drift detection — ApiEntityNode", () => {
     });
 });
 
-describe("emptyApiNodeList drift detection — ApiEntityNodeList", () => {
+describe("emptyApiNodeList drift detection — ApiNodeList", () => {
     it("transactionNodes() api list", () => {
         const realList = apiGraph().transactionNodes();
         assertNoDrift(realList, emptyApiNodeList<CustomGraph, Transaction>());

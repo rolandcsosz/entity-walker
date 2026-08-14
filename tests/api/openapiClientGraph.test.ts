@@ -39,6 +39,10 @@ import {
     type TransactionType,
     type Template,
     ErrorResponse,
+    SubcategoryRequest,
+    MainCategoryRequest,
+    TransactionRequest,
+    TemplateRequest,
 } from "./generated/client";
 
 export type OpenApiSchema = ValidSchema<{
@@ -370,7 +374,7 @@ describe("OpenAPI Client Integration with ApiGraph", () => {
         return data as T;
     }
 
-    function createTestApiGraph(): ApiGraph<OpenApiGraphDef> {
+    function createTestApiGraph() {
         const entities: Entities<OpenApiSchema> = {
             transaction: [],
             subcategory: [],
@@ -379,7 +383,7 @@ describe("OpenAPI Client Integration with ApiGraph", () => {
             transactionType: [],
             template: [],
         };
-        const api: ValidApi<OpenApiGraphDef> = {
+        const api = {
             transaction: {
                 list: async () => {
                     const res = await getTransactions({ throwOnError: true });
@@ -389,11 +393,11 @@ describe("OpenAPI Client Integration with ApiGraph", () => {
                     const res = await getTransaction({ path: { id }, throwOnError: true });
                     return unwrap(res.data);
                 },
-                create: async (data) => {
+                create: async (data: TransactionRequest) => {
                     const res = await createTransaction({ body: data, throwOnError: true });
                     return unwrap(res.data);
                 },
-                update: async (data) => {
+                update: async (data: Transaction) => {
                     const res = await updateTransaction({ path: { id: data.id }, body: data, throwOnError: true });
                     return unwrap(res.data);
                 },
@@ -411,11 +415,11 @@ describe("OpenAPI Client Integration with ApiGraph", () => {
                     const res = await getSubcategory({ path: { id }, throwOnError: true });
                     return unwrap(res.data);
                 },
-                create: async (data) => {
+                create: async (data: SubcategoryRequest) => {
                     const res = await createSubcategory({ body: data, throwOnError: true });
                     return unwrap(res.data);
                 },
-                update: async (data) => {
+                update: async (data: Subcategory) => {
                     const res = await updateSubcategory({ path: { id: data.id }, body: data, throwOnError: true });
                     return unwrap(res.data);
                 },
@@ -433,11 +437,11 @@ describe("OpenAPI Client Integration with ApiGraph", () => {
                     const res = await getMainCategory({ path: { id }, throwOnError: true });
                     return unwrap(res.data);
                 },
-                create: async (data) => {
+                create: async (data: MainCategoryRequest) => {
                     const res = await createMainCategory({ body: data, throwOnError: true });
                     return unwrap(res.data);
                 },
-                update: async (data) => {
+                update: async (data: MainCategory) => {
                     const res = await updateMainCategory({ path: { id: data.id }, body: data, throwOnError: true });
                     return unwrap(res.data);
                 },
@@ -467,11 +471,11 @@ describe("OpenAPI Client Integration with ApiGraph", () => {
                     const res = await getTemplate({ path: { id }, throwOnError: true });
                     return unwrap(res.data);
                 },
-                create: async (data) => {
+                create: async (data: TemplateRequest) => {
                     const res = await createTemplate({ body: data, throwOnError: true });
                     return unwrap(res.data);
                 },
-                update: async (data) => {
+                update: async (data: Template) => {
                     const res = await updateTemplate({ path: { id: data.id }, body: data, throwOnError: true });
                     return unwrap(res.data);
                 },
@@ -480,9 +484,11 @@ describe("OpenAPI Client Integration with ApiGraph", () => {
                     unwrap(res.data);
                 },
             },
-        };
+        } as const satisfies ValidApi<OpenApiGraphDef>;
 
-        return createGraph<OpenApiGraphDef>({
+        type ApiDef = typeof api;
+
+        return createGraph<OpenApiGraphDef, ApiDef>({
             entities,
             edges: openApiEdges,
             api,
@@ -492,7 +498,6 @@ describe("OpenAPI Client Integration with ApiGraph", () => {
     it("fetches transaction list from OpenAPI backend client into graph", async () => {
         const graph = createTestApiGraph();
         expect(graph.transactionNodes().entities()).toHaveLength(0);
-
         const fetchedList = await graph.transactionNodes().load();
         expect(fetchedList.entities()).toHaveLength(2);
         expect(fetchedList.entities()[0].item).toBe("Coffee");
