@@ -8,6 +8,21 @@ export type ApiError = {
     raw?: any;
 };
 
+const API_ERROR_KEYS: ReadonlySet<string> = new Set<keyof ApiError>([
+    "message",
+    "code",
+    "status",
+    "isTransient",
+    "raw",
+]);
+
+export function isApiError(value: unknown): value is ApiError {
+    if (typeof value !== "object" || value === null) return false;
+    const obj = value as Record<string, unknown>;
+    if (typeof obj["message"] !== "string") return false;
+    return Object.keys(obj).every((k) => API_ERROR_KEYS.has(k));
+}
+
 export type PendingDelta = {
     id: string;
     transactionId?: string;

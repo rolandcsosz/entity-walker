@@ -341,6 +341,122 @@ export function buildCore<EM extends EntityMap, E extends GraphEdges<EM>>(
     };
 }
 
+/**
+ * Returns the shared `checkRelationTargets`, `insert`, and `update` helpers
+ * that are identical between the proxy and non-proxy graph implementations.
+ */
+export function buildMutations<EM extends EntityMap, E extends GraphEdges<EM>>(
+    core: CoreData<EM>,
+    edges: E,
+): {
+    checkRelationTargets(type: keyof EM, entity: any): void;
+    insert<K extends keyof EM>(type: K, entityOrEntities: EM[K] | EM[K][]): void;
+    update<K extends keyof EM>(type: K, entityOrEntities: EM[K] | EM[K][]): void;
+    suppressSyncWarnings: { value: boolean };
+} {
+    const { entities, byId, reverseIndex, nodeCache, ensureIndexes } = core;
+    const suppressSyncWarnings = { value: false };
+
+    function checkRelationTargets(type: keyof EM, entity: any): void {
+        const key = String(type);
+        const entityEdges = (edges as any)[key];
+        if (entityEdges) {
+            for (const targetType in entityEdges) {
+                const edge = entityEdges[targetType];
+                const targetId = edge.resolve(entity);
+                if (targetId != null && !byId[targetType]?.[targetId.toString()]) {
+                    console.warn(
+                        `[entity-walker] Relation target missing: '${key}' with id '${entity.id}' is missing '${targetType}' id '${targetId}'.`,
+                    );
+                }
+            }
+        }
+    }
+
+    function insert<K extends keyof EM>(type: K, entityOrEntities: EM[K] | EM[K][]): void {
+        const items = Array.isArray(entityOrEntities) ? entityOrEntities : [entityOrEntities];
+        const key = String(type);
+        const ents = entities as Record<string, any[]>;
+        for (const entity of items) {
+            ents[key] = ents[key] ?? [];
+            ents[key].push(entity);
+            byId[key] = byId[key] ?? {};
+            byId[key][entity.id.toString()] = entity;
+            nodeCache.delete(`${key}:${entity.id.toString()}`);
+            if (!suppressSyncWarnings.value) {
+                checkRelationTargets(type, entity);
+            }
+            const entityEdges = (edges as any)[key];
+            if (entityEdges) {
+                for (const targetType in entityEdges) {
+                    const edge = entityEdges[targetType];
+                    if (!edge.bidirectional) continue;
+                    const targetId = edge.resolve(entity);
+                    if (targetId == null) continue;
+                    if (!reverseIndex[targetType]) reverseIndex[targetType] = {};
+                    if (!reverseIndex[targetType][key]) reverseIndex[targetType][key] = {};
+                    if (!reverseIndex[targetType][key][targetId]) reverseIndex[targetType][key][targetId] = [];
+                    reverseIndex[targetType][key][targetId].push(entity.id.toString());
+                }
+            }
+        }
+    }
+
+    function update<K extends keyof EM>(type: K, entityOrEntities: EM[K] | EM[K][]): void {
+        ensureIndexes();
+        const items = Array.isArray(entityOrEntities) ? entityOrEntities : [entityOrEntities];
+        const key = String(type);
+        const ents = entities as Record<string, any[]>;
+        const entityEdges = (edges as any)[key];
+        for (const entity of items) {
+            const existing = byId[key]?.[entity.id.toString()];
+            if (!existing) {
+                insert(type, entity);
+                continue;
+            }
+            if (!suppressSyncWarnings.value) {
+                checkRelationTargets(type, entity);
+            }
+            // remove old bidirectional reverse index entries
+            if (entityEdges) {
+                for (const targetType in entityEdges) {
+                    const edge = entityEdges[targetType];
+                    if (!edge.bidirectional) continue;
+                    const oldTargetId = edge.resolve(existing);
+                    if (oldTargetId == null) continue;
+                    const bucket = reverseIndex[targetType]?.[key]?.[oldTargetId];
+                    if (bucket) {
+                        const idx = bucket.indexOf(entity.id.toString());
+                        if (idx !== -1) bucket.splice(idx, 1);
+                    }
+                }
+            }
+            // replace in byId and entities array
+            byId[key][entity.id.toString()] = entity;
+            ents[key] = ents[key] ?? [];
+            const arrIdx = ents[key].findIndex((e: any) => e.id.toString() === entity.id.toString());
+            if (arrIdx !== -1) ents[key][arrIdx] = entity;
+            else ents[key].push(entity);
+            nodeCache.delete(`${key}:${entity.id.toString()}`);
+            // add new bidirectional reverse index entries
+            if (entityEdges) {
+                for (const targetType in entityEdges) {
+                    const edge = entityEdges[targetType];
+                    if (!edge.bidirectional) continue;
+                    const newTargetId = edge.resolve(entity);
+                    if (newTargetId == null) continue;
+                    if (!reverseIndex[targetType]) reverseIndex[targetType] = {};
+                    if (!reverseIndex[targetType][key]) reverseIndex[targetType][key] = {};
+                    if (!reverseIndex[targetType][key][newTargetId]) reverseIndex[targetType][key][newTargetId] = [];
+                    reverseIndex[targetType][key][newTargetId].push(entity.id.toString());
+                }
+            }
+        }
+    }
+
+    return { checkRelationTargets, insert, update, suppressSyncWarnings };
+}
+
 export function emptyNodeList<G extends GraphDef<any, any>, E extends EntityBase>(): EntityNodeList<G, E> {
     const list = [] as any;
     const def = (name: string, val: any) => Object.defineProperty(list, name, { value: val, enumerable: false });

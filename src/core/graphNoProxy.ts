@@ -1,5 +1,6 @@
-import { buildCore, NODE_PROP } from "./helpers";
+import { buildCore, buildMutations, NODE_PROP } from "./helpers";
 import { EntityGraphNoProxy, EntityMap, GraphDef, GraphEdges, NodeDebugInfo } from "./types";
+import { generateUUID } from "../utils";
 
 export function createNonProxyGraph<D extends GraphDef<any, any>>(config: {
     entities?: Partial<{ [K in keyof D["entityModel"]]: D["entityModel"][K][] }>;
@@ -40,99 +41,7 @@ export function createNonProxyGraph<EM extends EntityMap, E extends GraphEdges<E
         entities,
     } = core;
 
-    let suppressSyncWarnings = false;
-
-    function checkRelationTargets(type: keyof EM, entity: any) {
-        const key = String(type);
-        const entityEdges = (config.edges as any)[key];
-        if (entityEdges) {
-            for (const targetType in entityEdges) {
-                const edge = entityEdges[targetType];
-                const targetId = edge.resolve(entity);
-                if (targetId != null && !byId[targetType]?.[targetId.toString()]) {
-                    console.warn(
-                        `[entity-walker] Relation target missing: '${key}' with id '${entity.id}' is missing '${targetType}' id '${targetId}'.`,
-                    );
-                }
-            }
-        }
-    }
-
-    function insert<K extends keyof EM>(type: K, entityOrEntities: EM[K] | EM[K][]): void {
-        const items = Array.isArray(entityOrEntities) ? entityOrEntities : [entityOrEntities];
-        const key = String(type);
-        const ents = entities as Record<string, any[]>;
-        for (const entity of items) {
-            ents[key] = ents[key] ?? [];
-            ents[key].push(entity);
-            byId[key] = byId[key] ?? {};
-            byId[key][entity.id.toString()] = entity;
-            nodeCache.delete(`${key}:${entity.id.toString()}`);
-            if (!suppressSyncWarnings) {
-                checkRelationTargets(type, entity);
-            }
-            const entityEdges = (config.edges as any)[key];
-            if (entityEdges) {
-                for (const targetType in entityEdges) {
-                    const edge = entityEdges[targetType];
-                    if (!edge.bidirectional) continue;
-                    const targetId = edge.resolve(entity);
-                    if (targetId == null) continue;
-                    if (!reverseIndex[targetType]) reverseIndex[targetType] = {};
-                    if (!reverseIndex[targetType][key]) reverseIndex[targetType][key] = {};
-                    if (!reverseIndex[targetType][key][targetId]) reverseIndex[targetType][key][targetId] = [];
-                    reverseIndex[targetType][key][targetId].push(entity.id.toString());
-                }
-            }
-        }
-    }
-
-    function update<K extends keyof EM>(type: K, entityOrEntities: EM[K] | EM[K][]): void {
-        ensureIndexes();
-        const items = Array.isArray(entityOrEntities) ? entityOrEntities : [entityOrEntities];
-        const key = String(type);
-        const ents = entities as Record<string, any[]>;
-        const entityEdges = (config.edges as any)[key];
-        for (const entity of items) {
-            const existing = byId[key]?.[entity.id.toString()];
-            if (!existing) {
-                insert(type, entity);
-                continue;
-            }
-            if (!suppressSyncWarnings) {
-                checkRelationTargets(type, entity);
-            }
-            if (entityEdges) {
-                for (const targetType in entityEdges) {
-                    const edge = entityEdges[targetType];
-                    if (!edge.bidirectional) continue;
-                    const oldTargetId = edge.resolve(existing);
-                    if (oldTargetId == null) continue;
-                    const bucket = reverseIndex[targetType]?.[key]?.[oldTargetId];
-                    if (bucket) {
-                        const idx = bucket.indexOf(entity.id.toString());
-                        if (idx !== -1) bucket.splice(idx, 1);
-                    }
-                }
-            }
-            byId[key][entity.id.toString()] = entity;
-            const arrIdx = ents[key].findIndex((e: any) => e.id.toString() === entity.id.toString());
-            if (arrIdx !== -1) ents[key][arrIdx] = entity;
-            nodeCache.delete(`${key}:${entity.id.toString()}`);
-            if (entityEdges) {
-                for (const targetType in entityEdges) {
-                    const edge = entityEdges[targetType];
-                    if (!edge.bidirectional) continue;
-                    const newTargetId = edge.resolve(entity);
-                    if (newTargetId == null) continue;
-                    if (!reverseIndex[targetType]) reverseIndex[targetType] = {};
-                    if (!reverseIndex[targetType][key]) reverseIndex[targetType][key] = {};
-                    if (!reverseIndex[targetType][key][newTargetId]) reverseIndex[targetType][key][newTargetId] = [];
-                    reverseIndex[targetType][key][newTargetId].push(entity.id.toString());
-                }
-            }
-        }
-    }
+    const { checkRelationTargets, insert, update, suppressSyncWarnings } = buildMutations<EM, E>(core, config.edges);
 
     function createNode(key: keyof EM, id: string | number | null, path: string[] = []): any {
         const cacheKey = id !== null ? `${String(key)}:${id}` : null;
@@ -357,7 +266,7 @@ export function createNonProxyGraph<EM extends EntityMap, E extends GraphEdges<E
             }
         }
 
-        suppressSyncWarnings = true;
+        suppressSyncWarnings.value = true;
         try {
             for (const key in fresh) {
                 const freshList: any[] = fresh[key] ?? [];
@@ -376,7 +285,7 @@ export function createNonProxyGraph<EM extends EntityMap, E extends GraphEdges<E
                 }
             }
         } finally {
-            suppressSyncWarnings = false;
+            suppressSyncWarnings.value = false;
         }
 
         for (const key in fresh) {
@@ -407,17 +316,6 @@ export function createNonProxyGraph<EM extends EntityMap, E extends GraphEdges<E
         return Object.assign({}, txGraph, {
             commit,
             rollback,
-        });
-    }
-
-    function generateUUID(): string {
-        if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-            return crypto.randomUUID();
-        }
-        return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
-            const r = (Math.random() * 16) | 0;
-            const v = c === "x" ? r : (r & 0x3) | 0x8;
-            return v.toString(16);
         });
     }
 
