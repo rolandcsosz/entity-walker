@@ -1,20 +1,22 @@
 import { describe, it, expect } from "vitest";
-import { createGraph, ApiError } from "../../src";
-import { edges, Transaction } from "../types";
+import { createGraph, ApiGraphDef, ApiError, ValidApi } from "../../src";
+import { edges, Transaction, CustomGraph, Schema } from "../types";
 import { baseEntities } from "../shared";
 
 describe("Offline Delta Queue & ApiError Handling", () => {
     it("allows chaining node.load() to return the loaded node", async () => {
-        const apiGraph = createGraph({
-            entities: structuredClone(baseEntities),
-            edges,
-            api: {
-                transaction: {
-                    read: async (id) => {
-                        return { id, subcategoryId: "sub_loaded" } as Transaction;
-                    },
+        const api = {
+            transaction: {
+                read: async (id: string) => {
+                    return { id, subcategoryId: "sub_loaded" } as Transaction;
                 },
             },
+        } as const satisfies ValidApi<CustomGraph>;
+
+        const apiGraph = createGraph<ApiGraphDef<Schema, typeof edges, typeof api>>({
+            entities: structuredClone(baseEntities),
+            edges,
+            api,
         });
 
         const ghostNode = apiGraph.transaction("tx_ghost");
@@ -27,19 +29,21 @@ describe("Offline Delta Queue & ApiError Handling", () => {
     });
 
     it("allows chaining list.load() to return the loaded list", async () => {
-        const apiGraph = createGraph({
-            entities: { ...structuredClone(baseEntities), transaction: [] },
-            edges,
-            api: {
-                transaction: {
-                    list: async () => {
-                        return [
-                            { id: "tx_10", subcategoryId: "sub1" },
-                            { id: "tx_11", subcategoryId: "sub2" },
-                        ] as Transaction[];
-                    },
+        const api = {
+            transaction: {
+                list: async () => {
+                    return [
+                        { id: "tx_10", subcategoryId: "sub1" },
+                        { id: "tx_11", subcategoryId: "sub2" },
+                    ] as Transaction[];
                 },
             },
+        } as const satisfies ValidApi<CustomGraph>;
+
+        const apiGraph = createGraph<ApiGraphDef<Schema, typeof edges, typeof api>>({
+            entities: { ...structuredClone(baseEntities), transaction: [] },
+            edges,
+            api,
         });
 
         const list = await apiGraph.transactionNodes().load();
@@ -49,20 +53,22 @@ describe("Offline Delta Queue & ApiError Handling", () => {
 
     it("retains local optimistic update and queues pending delta when handler returns explicit ApiError", async () => {
         let attempts = 0;
-        const apiGraph = createGraph({
-            entities: structuredClone(baseEntities),
-            edges,
-            api: {
-                transaction: {
-                    update: async (data) => {
-                        attempts++;
-                        if (attempts === 1) {
-                            return { message: "Network unavailable", code: 503 } as ApiError;
-                        }
-                        return data;
-                    },
+        const api = {
+            transaction: {
+                update: async (data: Transaction) => {
+                    attempts++;
+                    if (attempts === 1) {
+                        return { message: "Network unavailable", code: 503 } as ApiError;
+                    }
+                    return data;
                 },
             },
+        } as const satisfies ValidApi<CustomGraph>;
+
+        const apiGraph = createGraph<ApiGraphDef<Schema, typeof edges, typeof api>>({
+            entities: structuredClone(baseEntities),
+            edges,
+            api,
         });
 
         const err = await apiGraph.transaction("tx1").update((tx) => ({ ...tx, amount: 999 }));
@@ -87,19 +93,21 @@ describe("Offline Delta Queue & ApiError Handling", () => {
 
     it("retains local optimistic delete and queues pending delta when handler returns explicit ApiError", async () => {
         let attempts = 0;
-        const apiGraph = createGraph({
-            entities: structuredClone(baseEntities),
-            edges,
-            api: {
-                transaction: {
-                    delete: async (id) => {
-                        attempts++;
-                        if (attempts === 1) {
-                            return { message: "Server offline", code: 500 } as ApiError;
-                        }
-                    },
+        const api = {
+            transaction: {
+                delete: async (id: string) => {
+                    attempts++;
+                    if (attempts === 1) {
+                        return { message: "Server offline", code: 500 } as ApiError;
+                    }
                 },
             },
+        } as const satisfies ValidApi<CustomGraph>;
+
+        const apiGraph = createGraph<ApiGraphDef<Schema, typeof edges, typeof api>>({
+            entities: structuredClone(baseEntities),
+            edges,
+            api,
         });
 
         expect(apiGraph.transaction("tx1").exists()).toBe(true);
@@ -119,20 +127,22 @@ describe("Offline Delta Queue & ApiError Handling", () => {
 
     it("supports optimistic create with temporary ID when handler returns ApiError", async () => {
         let attempts = 0;
-        const apiGraph = createGraph({
-            entities: structuredClone(baseEntities),
-            edges,
-            api: {
-                transaction: {
-                    create: async (data) => {
-                        attempts++;
-                        if (attempts === 1) {
-                            return { message: "Offline create", isTransient: true } as ApiError;
-                        }
-                        return { id: "tx_server_99", ...data } as Transaction;
-                    },
+        const api = {
+            transaction: {
+                create: async (data: Omit<Transaction, "id">) => {
+                    attempts++;
+                    if (attempts === 1) {
+                        return { message: "Offline create", isTransient: true } as ApiError;
+                    }
+                    return { id: "tx_server_99", ...data } as Transaction;
                 },
             },
+        } as const satisfies ValidApi<CustomGraph>;
+
+        const apiGraph = createGraph<ApiGraphDef<Schema, typeof edges, typeof api>>({
+            entities: structuredClone(baseEntities),
+            edges,
+            api,
         });
 
         const node = await apiGraph.createTransaction({ subcategoryId: "sub1", amount: 50 });
@@ -151,16 +161,18 @@ describe("Offline Delta Queue & ApiError Handling", () => {
     });
 
     it("rolls back local changes when non-transient error (isTransient: false) occurs", async () => {
-        const apiGraph = createGraph({
-            entities: structuredClone(baseEntities),
-            edges,
-            api: {
-                transaction: {
-                    update: async () => {
-                        return { message: "Validation error: invalid amount", isTransient: false } as ApiError;
-                    },
+        const api = {
+            transaction: {
+                update: async () => {
+                    return { message: "Validation error: invalid amount", isTransient: false } as ApiError;
                 },
             },
+        } as const satisfies ValidApi<CustomGraph>;
+
+        const apiGraph = createGraph<ApiGraphDef<Schema, typeof edges, typeof api>>({
+            entities: structuredClone(baseEntities),
+            edges,
+            api,
         });
 
         const initialAmount = apiGraph.transaction("tx1").value()?.amount;
@@ -172,16 +184,18 @@ describe("Offline Delta Queue & ApiError Handling", () => {
     });
 
     it("supports clearPending() to clear queued deltas", async () => {
-        const apiGraph = createGraph({
-            entities: structuredClone(baseEntities),
-            edges,
-            api: {
-                transaction: {
-                    delete: async () => {
-                        return { message: "Offline", isTransient: true } as ApiError;
-                    },
+        const api = {
+            transaction: {
+                delete: async () => {
+                    return { message: "Offline", isTransient: true } as ApiError;
                 },
             },
+        } as const satisfies ValidApi<CustomGraph>;
+
+        const apiGraph = createGraph<ApiGraphDef<Schema, typeof edges, typeof api>>({
+            entities: structuredClone(baseEntities),
+            edges,
+            api,
         });
 
         await apiGraph.transaction("tx1").delete();
@@ -192,22 +206,24 @@ describe("Offline Delta Queue & ApiError Handling", () => {
     });
 
     it("automatically classifies HTTP 4xx as non-transient (rollback) and HTTP 5xx / 0 as transient (queued)", async () => {
-        const apiGraph = createGraph({
-            entities: structuredClone(baseEntities),
-            edges,
-            api: {
-                transaction: {
-                    update: async (data) => {
-                        if (data.amount === 404) {
-                            return { message: "Not found", status: 404 } as ApiError;
-                        }
-                        if (data.amount === 503) {
-                            return { message: "Service unavailable", status: 503 } as ApiError;
-                        }
-                        return data;
-                    },
+        const api = {
+            transaction: {
+                update: async (data: Transaction) => {
+                    if (data.amount === 404) {
+                        return { message: "Not found", status: 404 } as ApiError;
+                    }
+                    if (data.amount === 503) {
+                        return { message: "Service unavailable", status: 503 } as ApiError;
+                    }
+                    return data;
                 },
             },
+        } as const satisfies ValidApi<CustomGraph>;
+
+        const apiGraph = createGraph<ApiGraphDef<Schema, typeof edges, typeof api>>({
+            entities: structuredClone(baseEntities),
+            edges,
+            api,
         });
 
         // 404 -> non-transient -> rollback & return error
@@ -224,17 +240,19 @@ describe("Offline Delta Queue & ApiError Handling", () => {
     });
 
     it("supports custom isTransientError predicate in ValidApi options", async () => {
-        const apiGraph = createGraph({
-            entities: structuredClone(baseEntities),
-            edges,
-            api: {
-                isTransientError: (err) => err.code === "RETRY_ME",
-                transaction: {
-                    update: async () => {
-                        return { message: "Custom failure", code: "RETRY_ME" } as ApiError;
-                    },
+        const api = {
+            isTransientError: (err: ApiError) => err.code === "RETRY_ME",
+            transaction: {
+                update: async (data: Transaction) => {
+                    return { message: "Custom failure", code: "RETRY_ME" } as ApiError;
                 },
             },
+        } as const satisfies ValidApi<CustomGraph>;
+
+        const apiGraph = createGraph<ApiGraphDef<Schema, typeof edges, typeof api>>({
+            entities: structuredClone(baseEntities),
+            edges,
+            api,
         });
 
         const err = (await apiGraph.transaction("tx1").update((tx) => ({ ...tx, amount: 777 }))) as ApiError;

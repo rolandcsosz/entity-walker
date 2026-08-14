@@ -1,5 +1,5 @@
-import { Entities, createGraph, createNonProxyGraph } from "../src/index";
-import { edges, Schema, SchemaNumeric, numericEdges } from "./types";
+import { Entities, createGraph, createNonProxyGraph, GraphDef } from "../src/index";
+import { edges, Schema, SchemaNumeric, numericEdges, CustomGraph } from "./types";
 
 export const baseEntities: Entities<Schema> = {
     transaction: [
@@ -38,7 +38,7 @@ function cap(s: string) {
 }
 
 export function proxyAdapter(ents: Entities<Schema>): GraphWrapper<Schema> {
-    const graph = createGraph({ entities: ents, edges }) as any;
+    const graph = createGraph<CustomGraph>({ entities: ents, edges }) as any;
     return {
         graph,
         rootNode: (type, id) => graph[type](id),
@@ -97,7 +97,10 @@ export const baseEntitiesNumeric: Entities<SchemaNumeric> = {
 };
 
 export function proxyAdapterN(ents: Entities<SchemaNumeric>): GraphWrapper<SchemaNumeric> {
-    const graph = createGraph({ entities: ents, edges: numericEdges }) as any;
+    const graph = createGraph<GraphDef<SchemaNumeric, typeof numericEdges>>({
+        entities: ents,
+        edges: numericEdges,
+    }) as any;
     return {
         graph,
         rootNode: (type, id) => graph[type](id),

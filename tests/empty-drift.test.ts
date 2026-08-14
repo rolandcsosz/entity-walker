@@ -88,7 +88,7 @@ function assertNoDrift(realInstance: any, emptyInstance: any, options: { skipKey
 }
 
 function proxyGraph() {
-    return createGraph({ entities: structuredClone(baseEntities), edges });
+    return createGraph<CustomGraph>({ entities: structuredClone(baseEntities), edges });
 }
 
 function nonProxyGraph() {
@@ -96,7 +96,7 @@ function nonProxyGraph() {
 }
 
 function apiGraph() {
-    return createGraph({ entities: structuredClone(baseEntities), edges, api: {} });
+    return createGraph<CustomGraph>({ entities: structuredClone(baseEntities), edges });
 }
 
 describe("emptyNode drift detection — EntityNode", () => {

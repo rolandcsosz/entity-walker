@@ -139,14 +139,6 @@ function toApiError(res: any, customIsTransient?: (err: ApiError) => boolean): A
 }
 
 export function createApiGraph<
-    EM extends EntityMap,
-    E extends GraphEdges<EM>,
-    C extends { entities?: any; edges: any; api?: ValidApi<GraphDef<EM, E>> },
->(
-    config: C & { entities?: Partial<{ [K in keyof EM]: EM[K][] }>; edges: E },
-): C["api"] extends ValidApi<GraphDef<EM, E>> ? ApiGraph<GraphDef<EM, E>, C["api"]> : ApiGraph<GraphDef<EM, E>>;
-
-export function createApiGraph<
     D extends GraphDef<any, any>,
     C extends { entities?: any; edges: any; api?: ValidApi<D> },
 >(
@@ -155,16 +147,6 @@ export function createApiGraph<
         edges: D["edges"];
     },
 ): C["api"] extends ValidApi<D> ? ApiGraph<D, C["api"]> : ApiGraph<D>;
-
-export function createApiGraph<
-    EM extends EntityMap,
-    E extends GraphEdges<EM>,
-    ApiOpt extends ValidApi<GraphDef<EM, E>> = ValidApi<GraphDef<EM, E>>,
->(config: {
-    entities?: Partial<{ [K in keyof EM]: EM[K][] }>;
-    edges: E;
-    api?: ApiOpt;
-}): ApiGraph<GraphDef<EM, E>, ApiOpt>;
 
 export function createApiGraph<D extends GraphDef<any, any>, ApiOpt extends ValidApi<D> = ValidApi<D>>(config: {
     entities?: Partial<{ [K in keyof D["entityModel"]]: D["entityModel"][K][] }>;

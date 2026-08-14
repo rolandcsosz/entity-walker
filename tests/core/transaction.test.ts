@@ -5,7 +5,10 @@ import { baseEntities } from "../shared";
 
 describe("Transaction Support - Proxy Graph", () => {
     it("isolates modifications from the parent graph", () => {
-        const g: EntityGraph<CustomGraph> = createGraph({ entities: structuredClone(baseEntities), edges });
+        const g: EntityGraph<CustomGraph> = createGraph<CustomGraph>({
+            entities: structuredClone(baseEntities),
+            edges,
+        });
         const tx = g.meta.beginTransaction();
 
         tx.createTransaction({ id: "tx1", subcategoryId: "sub2" });
@@ -15,7 +18,10 @@ describe("Transaction Support - Proxy Graph", () => {
     });
 
     it("commits modifications back to the parent graph", () => {
-        const g: EntityGraph<CustomGraph> = createGraph({ entities: structuredClone(baseEntities), edges });
+        const g: EntityGraph<CustomGraph> = createGraph<CustomGraph>({
+            entities: structuredClone(baseEntities),
+            edges,
+        });
         const tx = g.meta.beginTransaction();
 
         tx.createTransaction({ id: "tx1", subcategoryId: "sub2" });
@@ -31,7 +37,10 @@ describe("Transaction Support - Proxy Graph", () => {
     });
 
     it("reverts/rolls back modifications", () => {
-        const g: EntityGraph<CustomGraph> = createGraph({ entities: structuredClone(baseEntities), edges });
+        const g: EntityGraph<CustomGraph> = createGraph<CustomGraph>({
+            entities: structuredClone(baseEntities),
+            edges,
+        });
         const tx = g.meta.beginTransaction();
 
         tx.createTransaction({ id: "tx1", subcategoryId: "sub2" });
@@ -48,7 +57,10 @@ describe("Transaction Support - Proxy Graph", () => {
     });
 
     it("supports nested transactions with independent commit/rollback", () => {
-        const g: EntityGraph<CustomGraph> = createGraph({ entities: structuredClone(baseEntities), edges });
+        const g: EntityGraph<CustomGraph> = createGraph<CustomGraph>({
+            entities: structuredClone(baseEntities),
+            edges,
+        });
 
         const tx1 = g.meta.beginTransaction();
         tx1.createTransaction({ id: "tx1", subcategoryId: "sub2" });
@@ -69,7 +81,10 @@ describe("Transaction Support - Proxy Graph", () => {
     });
 
     it("cascades deletes inside a transaction", () => {
-        const g: EntityGraph<CustomGraph> = createGraph({ entities: structuredClone(baseEntities), edges });
+        const g: EntityGraph<CustomGraph> = createGraph<CustomGraph>({
+            entities: structuredClone(baseEntities),
+            edges,
+        });
         const tx = g.meta.beginTransaction();
 
         tx.subcategory("sub1").deleteCascade();

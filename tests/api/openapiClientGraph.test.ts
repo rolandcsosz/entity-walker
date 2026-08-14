@@ -2,9 +2,10 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import {
     createGraph,
     type ApiGraph,
+    type ApiGraphDef,
+    type GraphDef,
     type ValidSchema,
     type GraphEdges,
-    type GraphDef,
     type ValidApi,
     type Entities,
 } from "../../src";
@@ -89,96 +90,102 @@ export const openApiEdges = {
     },
 } as const satisfies GraphEdges<OpenApiSchema>;
 
-export type OpenApiGraphDef = GraphDef<OpenApiSchema, typeof openApiEdges>;
+// Defined after `api` is declared at module scope — forward-reference resolved below.
+// See: export type OpenApiGraphDef at the bottom of this file.
+
+export function createMockDb() {
+    return {
+        transactions: new Map<string, Transaction>([
+            [
+                "tx1",
+                {
+                    id: "tx1",
+                    item: "Coffee",
+                    amount: 4.5,
+                    date: "2026-08-09",
+                    subcategoryId: "sub1",
+                },
+            ],
+            [
+                "tx2",
+                {
+                    id: "tx2",
+                    item: "Book",
+                    amount: 19.99,
+                    date: "2026-08-09",
+                    subcategoryId: "sub1",
+                },
+            ],
+        ]),
+        subcategories: new Map<string, Subcategory>([
+            [
+                "sub1",
+                {
+                    id: "sub1",
+                    name: "Groceries & Cafe",
+                    mainCategoryId: "mc1",
+                    expenseTypeId: "exp1",
+                },
+            ],
+        ]),
+        mainCategories: new Map<string, MainCategory>([
+            [
+                "mc1",
+                {
+                    id: "mc1",
+                    name: "Daily Expenses",
+                    expenseTypeId: "exp1",
+                    transactionTypeId: "tt1",
+                },
+            ],
+        ]),
+        expenseTypes: new Map<string, ExpenseType>([
+            [
+                "exp1",
+                {
+                    id: "exp1",
+                    name: "Food & Household",
+                },
+            ],
+        ]),
+        transactionTypes: new Map<string, TransactionType>([
+            [
+                "tt1",
+                {
+                    id: "tt1",
+                    name: "Expense",
+                },
+            ],
+        ]),
+        templates: new Map<string, Template>([
+            [
+                "tpl1",
+                {
+                    id: "tpl1",
+                    name: "Weekly Coffee",
+                    itemName: "Espresso",
+                    amount: 4.5,
+                    date: null,
+                    subcategoryId: "sub1",
+                },
+            ],
+        ]),
+    };
+}
+
+export function unwrap<T>(data: (T | ErrorResponse) | { message: string } | undefined): T {
+    if (!data) throw new Error("No response data");
+    if (typeof data === "object" && !Array.isArray(data) && "message" in data && !("id" in data)) {
+        throw new Error((data as { message: string }).message);
+    }
+    return data as T;
+}
 
 describe("OpenAPI Client Integration with ApiGraph", () => {
-    let mockDb: {
-        transactions: Map<string, Transaction>;
-        subcategories: Map<string, Subcategory>;
-        mainCategories: Map<string, MainCategory>;
-        expenseTypes: Map<string, ExpenseType>;
-        transactionTypes: Map<string, TransactionType>;
-        templates: Map<string, Template>;
-    };
+    let mockDb: ReturnType<typeof createMockDb>;
 
     beforeEach(() => {
-        mockDb = {
-            transactions: new Map([
-                [
-                    "tx1",
-                    {
-                        id: "tx1",
-                        item: "Coffee",
-                        amount: 4.5,
-                        date: "2026-08-09",
-                        subcategoryId: "sub1",
-                    },
-                ],
-                [
-                    "tx2",
-                    {
-                        id: "tx2",
-                        item: "Book",
-                        amount: 19.99,
-                        date: "2026-08-09",
-                        subcategoryId: "sub1",
-                    },
-                ],
-            ]),
-            subcategories: new Map([
-                [
-                    "sub1",
-                    {
-                        id: "sub1",
-                        name: "Groceries & Cafe",
-                        mainCategoryId: "mc1",
-                        expenseTypeId: "exp1",
-                    },
-                ],
-            ]),
-            mainCategories: new Map([
-                [
-                    "mc1",
-                    {
-                        id: "mc1",
-                        name: "Daily Expenses",
-                        expenseTypeId: "exp1",
-                        transactionTypeId: "tt1",
-                    },
-                ],
-            ]),
-            expenseTypes: new Map([
-                [
-                    "exp1",
-                    {
-                        id: "exp1",
-                        name: "Food & Household",
-                    },
-                ],
-            ]),
-            transactionTypes: new Map([
-                [
-                    "tt1",
-                    {
-                        id: "tt1",
-                        name: "Expense",
-                    },
-                ],
-            ]),
-            templates: new Map([
-                [
-                    "tpl1",
-                    {
-                        id: "tpl1",
-                        name: "Weekly Coffee",
-                        itemName: "Espresso",
-                        amount: 4.5,
-                        date: null,
-                        subcategoryId: "sub1",
-                    },
-                ],
-            ]),
-        };
+        mockDb = createMockDb();
 
         client.setConfig({
             baseUrl: "http://api.mock.test",
@@ -366,14 +373,6 @@ describe("OpenAPI Client Integration with ApiGraph", () => {
         vi.restoreAllMocks();
     });
 
-    function unwrap<T>(data: (T | ErrorResponse) | { message: string } | undefined): T {
-        if (!data) throw new Error("No response data");
-        if (typeof data === "object" && !Array.isArray(data) && "message" in data && !("id" in data)) {
-            throw new Error((data as { message: string }).message);
-        }
-        return data as T;
-    }
-
     function createTestApiGraph() {
         const entities: Entities<OpenApiSchema> = {
             transaction: [],
@@ -484,11 +483,9 @@ describe("OpenAPI Client Integration with ApiGraph", () => {
                     unwrap(res.data);
                 },
             },
-        } as const satisfies ValidApi<OpenApiGraphDef>;
+        } as const satisfies ValidApi<GraphDef<OpenApiSchema, typeof openApiEdges>>;
 
-        type ApiDef = typeof api;
-
-        return createGraph<OpenApiGraphDef, ApiDef>({
+        return createGraph<ApiGraphDef<OpenApiSchema, typeof openApiEdges, typeof api>>({
             entities,
             edges: openApiEdges,
             api,
@@ -618,3 +615,139 @@ describe("OpenAPI Client Integration with ApiGraph", () => {
         expect(tplNode.subcategory().value()?.id).toBe("sub1");
     });
 });
+
+const api = {
+    mainCategory: {
+        list: async () => {
+            const res = await getMainCategories({ throwOnError: true });
+            return unwrap(res.data);
+        },
+        read: async (id: string) => {
+            const res = await getMainCategory({ path: { id }, throwOnError: true });
+            return unwrap(res.data);
+        },
+        create: async (data: MainCategoryRequest) => {
+            const res = await createMainCategory({ body: data, throwOnError: true });
+            return unwrap(res.data);
+        },
+        update: async (data: MainCategory) => {
+            const res = await updateMainCategory({ path: { id: data.id }, body: data, throwOnError: true });
+            return unwrap(res.data);
+        },
+        delete: async (id: string) => {
+            const res = await deleteMainCategory({ path: { id }, throwOnError: true });
+            unwrap(res.data);
+        },
+    },
+    subcategory: {
+        read: async (id: string) => {
+            const res = await getSubcategory({ path: { id }, throwOnError: true });
+            return unwrap(res.data);
+        },
+        list: async () => {
+            const res = await getSubcategories({ throwOnError: true });
+            return unwrap(res.data);
+        },
+        create: async (data: SubcategoryRequest) => {
+            const res = await createSubcategory({ body: data, throwOnError: true });
+            return unwrap(res.data);
+        },
+        update: async (data: Subcategory) => {
+            const res = await updateSubcategory({
+                path: { id: data.id },
+                body: data,
+                throwOnError: true,
+            });
+            return unwrap(res.data);
+        },
+        delete: async (id: string) => {
+            const res = await deleteSubcategory({ path: { id }, throwOnError: true });
+            unwrap(res.data);
+        },
+    },
+    transaction: {
+        list: async () => {
+            const res = await getTransactions({ throwOnError: true });
+            return unwrap(res.data);
+        },
+        read: async (id: string) => {
+            const res = await getTransaction({ path: { id }, throwOnError: true });
+            return unwrap(res.data);
+        },
+        create: async (data: Omit<Transaction, "id">) => {
+            const res = await createTransaction({ body: data, throwOnError: true });
+            return unwrap(res.data);
+        },
+        update: async (data: Transaction) => {
+            const res = await updateTransaction({
+                path: { id: data.id },
+                body: data,
+                throwOnError: true,
+            });
+            return unwrap(res.data);
+        },
+        delete: async (id: string) => {
+            const res = await deleteTransaction({ path: { id }, throwOnError: true });
+            unwrap(res.data);
+        },
+    },
+    expenseType: {
+        list: async () => {
+            const res = await getExpenseTypes({ throwOnError: true });
+            return unwrap(res.data);
+        },
+    },
+    transactionType: {
+        list: async () => {
+            const res = await getTransactionTypes({ throwOnError: true });
+            return unwrap(res.data);
+        },
+    },
+    template: {
+        list: async () => {
+            const res = await getTemplates({ throwOnError: true });
+            return unwrap(res.data);
+        },
+        read: async (id: string) => {
+            const res = await getTemplate({ path: { id }, throwOnError: true });
+            return unwrap(res.data);
+        },
+        create: async (data: TemplateRequest) => {
+            const res = await createTemplate({ body: data, throwOnError: true });
+            return unwrap(res.data);
+        },
+        update: async (data: Template) => {
+            const res = await updateTemplate({ path: { id: data.id }, body: data, throwOnError: true });
+            return unwrap(res.data);
+        },
+        delete: async (id: string) => {
+            const res = await deleteTemplate({ path: { id }, throwOnError: true });
+            unwrap(res.data);
+        },
+        actions: {
+            copyToTemplate: async () => {},
+        },
+    },
+} as const satisfies ValidApi<GraphDef<OpenApiSchema, typeof openApiEdges>>;
+
+export type OpenApiGraphDef = ApiGraphDef<OpenApiSchema, typeof openApiEdges, typeof api>;
+
+export const getApiGraph = (): ApiGraph<OpenApiGraphDef> => {
+    const mockDb = createMockDb();
+    void mockDb;
+
+    const baseEntities: Entities<OpenApiSchema> = {
+        transaction: [],
+        subcategory: [],
+        mainCategory: [],
+        expenseType: [],
+        transactionType: [],
+        template: [],
+    };
+
+    return createGraph<OpenApiGraphDef>({
+        entities: structuredClone(baseEntities),
+        edges: openApiEdges,
+        api,
+    });
+};

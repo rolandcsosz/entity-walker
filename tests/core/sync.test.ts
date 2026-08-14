@@ -4,7 +4,7 @@ import { CustomGraph, edges, Transaction } from "../types";
 import { baseEntities } from "../shared";
 
 function proxyGraph(): EntityGraph<CustomGraph> {
-    return createGraph({ entities: structuredClone(baseEntities), edges });
+    return createGraph<CustomGraph>({ entities: structuredClone(baseEntities), edges });
 }
 
 function nonProxyGraph(): EntityGraphNoProxy<CustomGraph> {

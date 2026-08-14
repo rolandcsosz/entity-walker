@@ -6,7 +6,7 @@ import { baseEntities } from "./shared";
 describe("Undefined Entities Support", () => {
     describe("Proxy Graph (createGraph)", () => {
         it("allows omitting entities in config", () => {
-            const graph = createGraph({ edges });
+            const graph = createGraph<CustomGraph>({ edges });
 
             const txNodes = graph.transactionNodes();
             expect(txNodes.isEmpty()).toBe(true);

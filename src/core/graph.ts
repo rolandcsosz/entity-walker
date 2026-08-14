@@ -232,11 +232,6 @@ export function createGraph<D extends GraphDef<any, any>>(config: {
 }): EntityGraph<D>;
 
 export function createGraph<EM extends EntityMap, E extends GraphEdges<EM>>(config: {
-    entities?: Partial<{ [K in keyof EM]: EM[K][] }>;
-    edges: E;
-}): EntityGraph<GraphDef<EM, E>>;
-
-export function createGraph<EM extends EntityMap, E extends GraphEdges<EM>>(config: {
     entities?: any;
     edges: any;
 }): any {

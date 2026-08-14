@@ -7,11 +7,6 @@ export function createNonProxyGraph<D extends GraphDef<any, any>>(config: {
 }): EntityGraphNoProxy<D>;
 
 export function createNonProxyGraph<EM extends EntityMap, E extends GraphEdges<EM>>(config: {
-    entities?: Partial<{ [K in keyof EM]: EM[K][] }>;
-    edges: E;
-}): EntityGraphNoProxy<GraphDef<EM, E>>;
-
-export function createNonProxyGraph<EM extends EntityMap, E extends GraphEdges<EM>>(config: {
     entities?: any;
     edges: any;
 }): EntityGraphNoProxy<any> {

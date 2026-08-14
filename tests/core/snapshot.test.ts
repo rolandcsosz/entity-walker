@@ -6,7 +6,7 @@ import { baseEntities, baseEntitiesNumeric } from "../shared";
 type CustomGraphNumeric = GraphDef<SchemaNumeric, typeof numericEdges>;
 
 function proxyGraph(): EntityGraph<CustomGraph> {
-    return createGraph({ entities: structuredClone(baseEntities), edges });
+    return createGraph<CustomGraph>({ entities: structuredClone(baseEntities), edges });
 }
 
 function nonProxyGraph(): EntityGraphNoProxy<CustomGraph> {
@@ -14,7 +14,7 @@ function nonProxyGraph(): EntityGraphNoProxy<CustomGraph> {
 }
 
 function numericProxyGraph(): EntityGraph<CustomGraphNumeric> {
-    return createGraph({ entities: structuredClone(baseEntitiesNumeric), edges: numericEdges });
+    return createGraph<CustomGraphNumeric>({ entities: structuredClone(baseEntitiesNumeric), edges: numericEdges });
 }
 
 describe("EntityGraph (proxy) — snapshot/restore", () => {
@@ -103,7 +103,7 @@ describe("EntityGraph (proxy) — snapshot/restore", () => {
                 ...structuredClone(baseEntities),
                 transaction: [{ id: "tx99", subcategoryId: "sub1" }],
             };
-            const altSnap = createGraph({ entities: altEntities, edges }).meta.snapshot();
+            const altSnap = createGraph<CustomGraph>({ entities: altEntities, edges }).meta.snapshot();
 
             g.meta.restore(altSnap);
 
@@ -265,7 +265,7 @@ describe("EntityGraphNoProxy — snapshot/restore", () => {
                 ...structuredClone(baseEntities),
                 transaction: [{ id: "tx99", subcategoryId: "sub1" }],
             };
-            const altSnap = createGraph({ entities: altEntities, edges }).meta.snapshot();
+            const altSnap = createGraph<CustomGraph>({ entities: altEntities, edges }).meta.snapshot();
 
             g.meta.restore(altSnap);
 

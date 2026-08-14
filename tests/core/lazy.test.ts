@@ -52,13 +52,13 @@ type LazyGraphDef = GraphDef<Schema, ReturnType<typeof makeLazyFixture>["edges"]
 describe("lazy evaluation [proxy]", () => {
     it("does not resolve edges at graph creation", () => {
         const { counters, entities, edges } = makeLazyFixture();
-        createGraph({ entities, edges });
+        createGraph<LazyGraphDef>({ entities, edges });
         expect(counters.resolveCalls).toBe(0);
     });
 
     it("does not resolve edges for node/list/schema access only", () => {
         const { counters, entities, edges } = makeLazyFixture();
-        const graph: EntityGraph<LazyGraphDef> = createGraph({ entities, edges });
+        const graph: EntityGraph<LazyGraphDef> = createGraph<LazyGraphDef>({ entities, edges });
 
         graph.transaction("tx1");
         graph.transactionNodes();
@@ -69,7 +69,7 @@ describe("lazy evaluation [proxy]", () => {
 
     it("builds indexes when value is requested", () => {
         const { counters, entities, edges } = makeLazyFixture();
-        const graph: EntityGraph<LazyGraphDef> = createGraph({ entities, edges });
+        const graph: EntityGraph<LazyGraphDef> = createGraph<LazyGraphDef>({ entities, edges });
 
         const tx = graph.transaction("tx1").value();
 
@@ -82,7 +82,7 @@ describe("lazy evaluation [proxy]", () => {
 
     it("preserves behavior when update happens before first value read", () => {
         const { entities, edges } = makeLazyFixture();
-        const graph: EntityGraph<LazyGraphDef> = createGraph({ entities, edges });
+        const graph: EntityGraph<LazyGraphDef> = createGraph<LazyGraphDef>({ entities, edges });
 
         graph.createTransaction({ id: "tx1", subcategoryId: "sub2" });
 
