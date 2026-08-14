@@ -73,7 +73,47 @@ export type IsTransientFn = (error: ApiError) => boolean;
 
 export type ApiHandlerResult<T = void> = Promise<T | void | ApiError> | T | void | ApiError;
 
-export interface ApiEntityConfig<D extends GraphDef<any, any>, E extends EntityBase> {
+export type ApiCallContext<D extends GraphDef<any, any> = GraphDef<any, any>> = {
+    op: "create" | "update" | "delete" | "read" | "list" | undefined;
+    entityType?: keyof D["entityModel"] & string;
+    entityId?: string | number;
+    data?: any;
+};
+
+export type ApiEntityCallContext<
+    D extends GraphDef<any, any>,
+    K extends keyof D["entityModel"] & string = keyof D["entityModel"] & string,
+> = {
+    op: "create" | "update" | "delete" | "read" | "list" | undefined;
+    entityType: K;
+    entityId?: string | number;
+    data?: any;
+};
+
+export type BeforeApiCallResult = void | boolean | { cancel?: boolean; data?: any };
+
+export type ApiHooks<D extends GraphDef<any, any> = GraphDef<any, any>> = {
+    beforeCall?: (context: ApiCallContext<D>) => Promise<BeforeApiCallResult> | BeforeApiCallResult;
+    afterCall?: (context: ApiCallContext<D> & { result: any }) => Promise<any> | any;
+    onError?: (context: ApiCallContext<D> & { error: ApiError }) => Promise<void | ApiError> | void | ApiError;
+    onFinally?: (context: ApiCallContext<D> & { result?: any; error?: ApiError }) => Promise<void> | void;
+};
+
+export type ApiEntityHooks<
+    D extends GraphDef<any, any>,
+    K extends keyof D["entityModel"] & string = keyof D["entityModel"] & string,
+> = {
+    beforeCall?: (context: ApiEntityCallContext<D, K>) => Promise<BeforeApiCallResult> | BeforeApiCallResult;
+    afterCall?: (context: ApiEntityCallContext<D, K> & { result: any }) => Promise<any> | any;
+    onError?: (context: ApiEntityCallContext<D, K> & { error: ApiError }) => Promise<void | ApiError> | void | ApiError;
+    onFinally?: (context: ApiEntityCallContext<D, K> & { result?: any; error?: ApiError }) => Promise<void> | void;
+};
+
+export interface ApiEntityConfig<
+    D extends GraphDef<any, any>,
+    E extends EntityBase,
+    K extends keyof D["entityModel"] & string = keyof D["entityModel"] & string,
+> {
     create?(data: unknown): ApiHandlerResult<E>;
     read?(data: unknown): ApiHandlerResult<E>;
     update?(data: unknown): ApiHandlerResult<E>;
@@ -81,6 +121,7 @@ export interface ApiEntityConfig<D extends GraphDef<any, any>, E extends EntityB
     list?(data: unknown): ApiHandlerResult<E[]>;
     actions?: Record<string, (node: ApiNode<D, E>, ...args: any[]) => Promise<any>>;
     isTransientError?: IsTransientFn;
+    hooks?: ApiEntityHooks<D, K>;
 }
 
 export type NewIdFormatter = (entity: string, index: number, data?: any) => string | number;
@@ -88,9 +129,10 @@ export type NewIdFormatter = (entity: string, index: number, data?: any) => stri
 export type ValidApi<D extends GraphDef<any, any>> = {
     isTransientError?: IsTransientFn;
     idFormat?: NewIdFormatter;
+    hooks?: ApiHooks<D>;
     actions?: Record<string, (graph: any, ...args: any[]) => Promise<any>>;
 } & {
-    [K in keyof D["entityModel"]]?: ApiEntityConfig<D, D["entityModel"][K]>;
+    [K in keyof D["entityModel"]]?: ApiEntityConfig<D, D["entityModel"][K], K & string>;
 };
 
 export type ApiGraphOptions<D extends GraphDef<any, any>> = ValidApi<D>;
@@ -184,6 +226,7 @@ export type ApiGraphMeta<D extends GraphDef<any, any>, Options extends ValidApi<
     resolveId(id: string | number): string | number;
     getOriginalId(id: string | number): string | number;
     setIdFormat(formatter: NewIdFormatter): void;
+    addHook(hooks: ApiHooks<D>): () => void;
     api: {};
 };
 
