@@ -9,7 +9,7 @@
         "docs"
     ],
     "scripts": {
-        "build": "npm run build:core && npm run build:api",
+        "build": "tsc -p tsconfig.json && cp package.api.json dist/api/package.json",
         "build:core": "tsc -p tsconfig.core.json",
         "build:api": "tsc -p tsconfig.api.json && cp package.api.json dist/api/package.json",
         "test": "vitest",
