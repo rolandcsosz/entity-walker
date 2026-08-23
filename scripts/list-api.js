@@ -53,12 +53,20 @@ import {
     EntityNodeList,
     ApiNode,
     ApiNodeList,
+    ApiCustomNode,
+    ApiCustomNodeList,
     EntityGraphMeta,
     ApiGraphMeta,
     TransactionGraph,
     ApiTransactionGraph,
+    ValidApi,
+    ApiEntityConfig,
+    ApiEntityGraphConfig,
+    ApiEntityHandlers,
 } from "../src/index";
 import { CustomGraph, Transaction, Subcategory } from "../tests/types";
+import { OpenApiGraphDef } from "../tests/api/openapiClientGraph.test";
+import { Transaction as OpenApiTransaction } from "../tests/api/generated/client";
 
 export type ConcreteProxyGraph = EntityGraph<CustomGraph>;
 export type ConcreteNonProxyGraph = EntityGraphNoProxy<CustomGraph>;
@@ -70,8 +78,15 @@ export type ConcreteSubcategoryNode = EntityNode<CustomGraph, Subcategory>;
 export type ConcreteTransactionNodeList = EntityNodeList<CustomGraph, Transaction>;
 export type ConcreteApiTransactionNode = ApiNode<CustomGraph, Transaction>;
 export type ConcreteApiTransactionNodeList = ApiNodeList<CustomGraph, Transaction>;
+export type ConcreteOpenApiGraph = ApiGraph<OpenApiGraphDef>;
+export type ConcreteOpenApiTransactionNode = ApiCustomNode<OpenApiGraphDef, OpenApiTransaction>;
+export type ConcreteOpenApiTransactionNodeList = ApiCustomNodeList<OpenApiGraphDef, OpenApiTransaction>;
 export type ConcreteCoreMeta = EntityGraphMeta<CustomGraph>;
 export type ConcreteApiMeta = ApiGraphMeta<CustomGraph>;
+export type ConcreteValidApi = ValidApi<CustomGraph>;
+export type ConcreteSubcategoryApiConfig = ApiEntityGraphConfig<CustomGraph, Subcategory>;
+export type ConcreteSubcategoryEntityConfig = ApiEntityConfig<Subcategory>;
+export type ConcreteSubcategoryApiHandlers = ApiEntityHandlers<Subcategory>;
 `;
 
     fs.writeFileSync(demoPath, demoContent, "utf-8");
@@ -120,6 +135,19 @@ export type ConcreteApiMeta = ApiGraphMeta<CustomGraph>;
                     console.log(` • ${name}${sigStr}`);
                 }
             }
+
+            console.log("\n📦 EXPORTED TYPES & INTERFACES");
+            console.log("--------------------------------------------------------------------------------");
+            for (const exp of exports) {
+                const name = exp.getName();
+                const decl = exp.declarations && exp.declarations[0];
+                if (!decl || (!ts.isTypeAliasDeclaration(decl) && !ts.isInterfaceDeclaration(decl))) continue;
+
+                const type = checker.getDeclaredTypeOfSymbol(exp);
+                let typeStr = checker.typeToString(type, decl, ts.TypeFormatFlags.NoTruncation);
+                typeStr = cleanTypeString(typeStr);
+                console.log(` • ${name}: ${typeStr}`);
+            }
         }
 
         console.log("\n📦 INSTANTIATED CONCRETE GRAPH & NODE SIGNATURES (CustomGraph)");
@@ -153,8 +181,22 @@ export type ConcreteApiMeta = ApiGraphMeta<CustomGraph>;
                 title: "ApiNodeList<CustomGraph, Transaction> (API Transaction Node List)",
                 isList: true,
             },
+            { name: "ConcreteOpenApiGraph", title: "ApiGraph<OpenApiGraphDef> (OpenAPI Graph)" },
+            {
+                name: "ConcreteOpenApiTransactionNode",
+                title: "ApiCustomNode<OpenApiGraphDef, Transaction> (OpenAPI Custom Transaction Node)",
+            },
+            {
+                name: "ConcreteOpenApiTransactionNodeList",
+                title: "ApiCustomNodeList<OpenApiGraphDef, Transaction> (OpenAPI Custom Transaction Node List)",
+                isList: true,
+            },
             { name: "ConcreteCoreMeta", title: "EntityGraphMeta<CustomGraph> (Core Graph Meta)" },
             { name: "ConcreteApiMeta", title: "ApiGraphMeta<CustomGraph> (API Graph Meta)" },
+            { name: "ConcreteValidApi", title: "ValidApi<CustomGraph> (API Graph Config)" },
+            { name: "ConcreteSubcategoryApiConfig", title: "ApiEntityGraphConfig<CustomGraph, Subcategory> (Graph Entity API Config)" },
+            { name: "ConcreteSubcategoryEntityConfig", title: "ApiEntityConfig<Subcategory> (Entity API Config)" },
+            { name: "ConcreteSubcategoryApiHandlers", title: "ApiEntityHandlers<Subcategory> (Entity API Handlers)" },
         ];
 
         for (const target of targets) {
@@ -178,7 +220,8 @@ function cleanTypeString(str) {
         .replace(
             /\{\s*transaction:\s*Transaction;\s*subcategory:\s*Subcategory;\s*mainCategory:\s*MainCategory;\s*expenseType:\s*ExpenseType;\s*incomeType:\s*IncomeType;\s*\}\[Key\]/g,
             "Schema[Key]",
-        );
+        )
+        .replace(/ApiEntityHandlers<(\w+)>\s*&\s*\{[\s\S]*?\}/g, "ApiEntityConfig<$1>");
 }
 
 function printTypeDetailsFromDemo(checker, demoFile, aliasName, title, isList = false) {

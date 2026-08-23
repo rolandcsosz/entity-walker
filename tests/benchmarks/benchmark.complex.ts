@@ -150,9 +150,9 @@ function loop_deepForwardWithRebuildCost(entities: Entities<Schema>, expenseType
     return result;
 }
 
-type AnyGraph = ReturnType<typeof createProxyGraph<any, any>> | ReturnType<typeof createNonProxyGraph<any, any>>;
+type AnyGraph = ReturnType<typeof createProxyGraph<any>> | ReturnType<typeof createNonProxyGraph<any>>;
 
-function isProxy(graph: AnyGraph): graph is ReturnType<typeof createProxyGraph<any, any>> {
+function isProxy(graph: AnyGraph): graph is ReturnType<typeof createProxyGraph<any>> {
     return typeof (graph as any).expenseType === "function";
 }
 

@@ -47,7 +47,8 @@ describe("ApiGraph Lifecycle Hooks", () => {
             },
         } as const satisfies ValidApi<AppGraphDef>;
 
-        const graph = createGraph<ApiGraphDef<Schema, typeof edges, typeof api>>({ edges, api });
+        type CustomApiGraphDef = ApiGraphDef<Schema, typeof edges, typeof api>;
+        const graph = createGraph<CustomApiGraphDef>({ edges, api });
         const userNode = await graph.createUser({ name: "Alice" });
 
         expect(beforeCallSpy).toHaveBeenCalledWith(
@@ -71,7 +72,7 @@ describe("ApiGraph Lifecycle Hooks", () => {
         const api = {
             hooks: {
                 beforeCall: (ctx) => {
-                    ctx.op;
+                    void ctx.op;
                     if (ctx.op === "create") return false;
                     if (ctx.op === "read") return { cancel: true };
                 },
@@ -82,7 +83,8 @@ describe("ApiGraph Lifecycle Hooks", () => {
             },
         } as const satisfies ValidApi<AppGraphDef>;
 
-        const graph = createGraph<ApiGraphDef<Schema, typeof edges, typeof api>>({ edges, api });
+        type CustomApiGraphDef = ApiGraphDef<Schema, typeof edges, typeof api>;
+        const graph = createGraph<CustomApiGraphDef>({ edges, api });
 
         const createResult = await graph.createUser({ name: "Bob" });
         expect(createSpy).not.toHaveBeenCalled();
@@ -117,7 +119,8 @@ describe("ApiGraph Lifecycle Hooks", () => {
             },
         } as const satisfies ValidApi<AppGraphDef>;
 
-        const graph = createGraph<ApiGraphDef<Schema, typeof edges, typeof api>>({ edges, api });
+        type CustomApiGraphDef = ApiGraphDef<Schema, typeof edges, typeof api>;
+        const graph = createGraph<CustomApiGraphDef>({ edges, api });
         const node = await graph.user("u1").load();
 
         expect(afterCallSpy).toHaveBeenCalledWith(
@@ -156,7 +159,8 @@ describe("ApiGraph Lifecycle Hooks", () => {
             user: [{ id: "u1", name: "Alice" }],
         };
 
-        const graph = createGraph<ApiGraphDef<Schema, typeof edges, typeof api>>({ entities, edges, api });
+        type CustomApiGraphDef = ApiGraphDef<Schema, typeof edges, typeof api>;
+        const graph = createGraph<CustomApiGraphDef>({ entities, edges, api });
         const res = await graph.user("u1").update((u) => ({ ...u, name: "Alice Updated" }));
 
         expect(onErrorSpy).toHaveBeenCalled();
@@ -184,7 +188,8 @@ describe("ApiGraph Lifecycle Hooks", () => {
             user: [{ id: "u1", name: "Alice" }],
         };
 
-        const graph = createGraph<ApiGraphDef<Schema, typeof edges, typeof api>>({ entities, edges, api });
+        type CustomApiGraphDef = ApiGraphDef<Schema, typeof edges, typeof api>;
+        const graph = createGraph<CustomApiGraphDef>({ entities, edges, api });
 
         await graph.createUser({ name: "Bob" });
         await graph.user("u1").delete();
@@ -211,7 +216,8 @@ describe("ApiGraph Lifecycle Hooks", () => {
             },
         } as const satisfies ValidApi<AppGraphDef>;
 
-        const graph = createGraph<ApiGraphDef<Schema, typeof edges, typeof api>>({ edges, api });
+        type CustomApiGraphDef = ApiGraphDef<Schema, typeof edges, typeof api>;
+        const graph = createGraph<CustomApiGraphDef>({ edges, api });
 
         const unsubscribe = graph.meta.addHook({
             beforeCall: () => {

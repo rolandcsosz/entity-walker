@@ -382,6 +382,7 @@ describe("OpenAPI Client Integration with ApiGraph", () => {
             transactionType: [],
             template: [],
         };
+        type CoreGraphDef = GraphDef<OpenApiSchema, typeof openApiEdges>;
         const api = {
             transaction: {
                 list: async () => {
@@ -483,9 +484,11 @@ describe("OpenAPI Client Integration with ApiGraph", () => {
                     unwrap(res.data);
                 },
             },
-        } as const satisfies ValidApi<GraphDef<OpenApiSchema, typeof openApiEdges>>;
+        } as const satisfies ValidApi<CoreGraphDef>;
 
-        return createGraph<ApiGraphDef<OpenApiSchema, typeof openApiEdges, typeof api>>({
+        type OpenApiGraphDef = ApiGraphDef<OpenApiSchema, typeof openApiEdges, typeof api>;
+
+        return createGraph<OpenApiGraphDef>({
             entities,
             edges: openApiEdges,
             api,
@@ -616,6 +619,8 @@ describe("OpenAPI Client Integration with ApiGraph", () => {
     });
 });
 
+export type OpenApiCoreGraphDef = GraphDef<OpenApiSchema, typeof openApiEdges>;
+
 const api = {
     mainCategory: {
         list: async () => {
@@ -728,7 +733,7 @@ const api = {
             copyToTemplate: async () => {},
         },
     },
-} as const satisfies ValidApi<GraphDef<OpenApiSchema, typeof openApiEdges>>;
+} as const satisfies ValidApi<OpenApiCoreGraphDef>;
 
 export type OpenApiGraphDef = ApiGraphDef<OpenApiSchema, typeof openApiEdges, typeof api>;
 

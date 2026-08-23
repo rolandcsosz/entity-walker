@@ -146,13 +146,13 @@ export function createApiGraph<
         entities?: Partial<{ [K in keyof D["entityModel"]]: D["entityModel"][K][] }>;
         edges: D["edges"];
     },
-): C["api"] extends ValidApi<D> ? ApiGraph<D, C["api"]> : ApiGraph<D>;
+): C["api"] extends ValidApi<D> ? ApiGraph<D & { api: C["api"] }> : ApiGraph<D>;
 
 export function createApiGraph<D extends GraphDef<any, any>, ApiOpt extends ValidApi<D> = ValidApi<D>>(config: {
     entities?: Partial<{ [K in keyof D["entityModel"]]: D["entityModel"][K][] }>;
     edges: D["edges"];
     api?: ApiOpt;
-}): ApiGraph<D, ApiOpt>;
+}): ApiGraph<D & { api: ApiOpt }>;
 
 export function createApiGraph<D extends GraphDef<any, any>, Options extends ValidApi<D> = ValidApi<D>>(
     baseGraph: any,
@@ -166,7 +166,7 @@ export function createApiGraph<D extends GraphDef<any, any>, Options extends Val
     idCounters?: Map<string, number>,
     formatterRef?: { fn?: NewIdFormatter },
     dynamicHooks?: Set<ApiHooks<any>>,
-): ApiGraph<D, Options>;
+): ApiGraph<D & { api: Options }>;
 
 export function createApiGraph<D extends GraphDef<any, any>>(
     baseGraphOrConfig: any,
@@ -180,7 +180,7 @@ export function createApiGraph<D extends GraphDef<any, any>>(
     idCounters: Map<string, number> = new Map(),
     formatterRef: { fn?: NewIdFormatter } = { fn: undefined },
     dynamicHooks: Set<ApiHooks<any>> = new Set(),
-): ApiGraph<D, any> {
+): ApiGraph<D> {
     let baseGraph: any;
     let opts: any;
     let edges: any;

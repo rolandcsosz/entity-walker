@@ -13,7 +13,8 @@ describe("Offline Delta Queue & ApiError Handling", () => {
             },
         } as const satisfies ValidApi<CustomGraph>;
 
-        const apiGraph = createGraph<ApiGraphDef<Schema, typeof edges, typeof api>>({
+        type CustomApiGraphDef = ApiGraphDef<Schema, typeof edges, typeof api>;
+        const apiGraph = createGraph<CustomApiGraphDef>({
             entities: structuredClone(baseEntities),
             edges,
             api,
@@ -40,7 +41,8 @@ describe("Offline Delta Queue & ApiError Handling", () => {
             },
         } as const satisfies ValidApi<CustomGraph>;
 
-        const apiGraph = createGraph<ApiGraphDef<Schema, typeof edges, typeof api>>({
+        type CustomApiGraphDef = ApiGraphDef<Schema, typeof edges, typeof api>;
+        const apiGraph = createGraph<CustomApiGraphDef>({
             entities: { ...structuredClone(baseEntities), transaction: [] },
             edges,
             api,
@@ -65,7 +67,8 @@ describe("Offline Delta Queue & ApiError Handling", () => {
             },
         } as const satisfies ValidApi<CustomGraph>;
 
-        const apiGraph = createGraph<ApiGraphDef<Schema, typeof edges, typeof api>>({
+        type CustomApiGraphDef = ApiGraphDef<Schema, typeof edges, typeof api>;
+        const apiGraph = createGraph<CustomApiGraphDef>({
             entities: structuredClone(baseEntities),
             edges,
             api,
@@ -104,7 +107,8 @@ describe("Offline Delta Queue & ApiError Handling", () => {
             },
         } as const satisfies ValidApi<CustomGraph>;
 
-        const apiGraph = createGraph<ApiGraphDef<Schema, typeof edges, typeof api>>({
+        type CustomApiGraphDef = ApiGraphDef<Schema, typeof edges, typeof api>;
+        const apiGraph = createGraph<CustomApiGraphDef>({
             entities: structuredClone(baseEntities),
             edges,
             api,
@@ -139,7 +143,8 @@ describe("Offline Delta Queue & ApiError Handling", () => {
             },
         } as const satisfies ValidApi<CustomGraph>;
 
-        const apiGraph = createGraph<ApiGraphDef<Schema, typeof edges, typeof api>>({
+        type CustomApiGraphDef = ApiGraphDef<Schema, typeof edges, typeof api>;
+        const apiGraph = createGraph<CustomApiGraphDef>({
             entities: structuredClone(baseEntities),
             edges,
             api,
@@ -169,7 +174,8 @@ describe("Offline Delta Queue & ApiError Handling", () => {
             },
         } as const satisfies ValidApi<CustomGraph>;
 
-        const apiGraph = createGraph<ApiGraphDef<Schema, typeof edges, typeof api>>({
+        type CustomApiGraphDef = ApiGraphDef<Schema, typeof edges, typeof api>;
+        const apiGraph = createGraph<CustomApiGraphDef>({
             entities: structuredClone(baseEntities),
             edges,
             api,
@@ -192,7 +198,8 @@ describe("Offline Delta Queue & ApiError Handling", () => {
             },
         } as const satisfies ValidApi<CustomGraph>;
 
-        const apiGraph = createGraph<ApiGraphDef<Schema, typeof edges, typeof api>>({
+        type CustomApiGraphDef = ApiGraphDef<Schema, typeof edges, typeof api>;
+        const apiGraph = createGraph<CustomApiGraphDef>({
             entities: structuredClone(baseEntities),
             edges,
             api,
@@ -220,7 +227,8 @@ describe("Offline Delta Queue & ApiError Handling", () => {
             },
         } as const satisfies ValidApi<CustomGraph>;
 
-        const apiGraph = createGraph<ApiGraphDef<Schema, typeof edges, typeof api>>({
+        type CustomApiGraphDef = ApiGraphDef<Schema, typeof edges, typeof api>;
+        const apiGraph = createGraph<CustomApiGraphDef>({
             entities: structuredClone(baseEntities),
             edges,
             api,
@@ -249,7 +257,8 @@ describe("Offline Delta Queue & ApiError Handling", () => {
             },
         } as const satisfies ValidApi<CustomGraph>;
 
-        const apiGraph = createGraph<ApiGraphDef<Schema, typeof edges, typeof api>>({
+        type CustomApiGraphDef = ApiGraphDef<Schema, typeof edges, typeof api>;
+        const apiGraph = createGraph<CustomApiGraphDef>({
             entities: structuredClone(baseEntities),
             edges,
             api,

@@ -21,7 +21,8 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
             },
         } as const satisfies ValidApi<CustomGraph>;
 
-        const apiGraph = createGraph<ApiGraphDef<Schema, typeof edges, typeof api>>({
+        type CustomApiGraphDef = ApiGraphDef<Schema, typeof edges, typeof api>;
+        const apiGraph = createGraph<CustomApiGraphDef>({
             entities: structuredClone(baseEntities),
             edges,
             api,
@@ -52,7 +53,8 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
             },
         } as const satisfies ValidApi<CustomGraph>;
 
-        const apiGraph = createGraph<ApiGraphDef<Schema, typeof edges, typeof api>>({
+        type CustomApiGraphDef = ApiGraphDef<Schema, typeof edges, typeof api>;
+        const apiGraph = createGraph<CustomApiGraphDef>({
             entities: structuredClone(baseEntities),
             edges,
             api,
@@ -81,7 +83,8 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
             },
         } as const satisfies ValidApi<CustomGraph>;
 
-        const apiGraph = createGraph<ApiGraphDef<Schema, typeof edges, typeof api>>({
+        type CustomApiGraphDef = ApiGraphDef<Schema, typeof edges, typeof api>;
+        const apiGraph = createGraph<CustomApiGraphDef>({
             entities: structuredClone(baseEntities),
             edges,
             api,
@@ -106,7 +109,8 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
             },
         } as const satisfies ValidApi<CustomGraph>;
 
-        const apiGraph = createGraph<ApiGraphDef<Schema, typeof edges, typeof api>>({
+        type CustomApiGraphDef = ApiGraphDef<Schema, typeof edges, typeof api>;
+        const apiGraph = createGraph<CustomApiGraphDef>({
             entities: structuredClone(baseEntities),
             edges,
             api,
@@ -140,7 +144,8 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
             },
         } as const satisfies ValidApi<CustomGraph>;
 
-        const apiGraph = createGraph<ApiGraphDef<Schema, typeof edges, typeof api>>({
+        type CustomApiGraphDef = ApiGraphDef<Schema, typeof edges, typeof api>;
+        const apiGraph = createGraph<CustomApiGraphDef>({
             entities: structuredClone(baseEntities),
             edges,
             api,
@@ -169,7 +174,8 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
             },
         } as const satisfies ValidApi<CustomGraph>;
 
-        const apiGraph = createGraph<ApiGraphDef<Schema, typeof edges, typeof api>>({
+        type CustomApiGraphDef = ApiGraphDef<Schema, typeof edges, typeof api>;
+        const apiGraph = createGraph<CustomApiGraphDef>({
             entities: {
                 transaction: [] as Transaction[],
                 subcategory: [] as Subcategory[],
@@ -205,7 +211,8 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
             },
         } as const satisfies ValidApi<CustomGraph>;
 
-        const apiGraph = createGraph<ApiGraphDef<Schema, typeof edges, typeof api>>({
+        type CustomApiGraphDef = ApiGraphDef<Schema, typeof edges, typeof api>;
+        const apiGraph = createGraph<CustomApiGraphDef>({
             entities: structuredClone(baseEntities),
             edges,
             api,
@@ -229,7 +236,8 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
             },
         } as const satisfies ValidApi<CustomGraph>;
 
-        const apiGraph = createGraph<ApiGraphDef<Schema, typeof edges, typeof api>>({
+        type CustomApiGraphDef = ApiGraphDef<Schema, typeof edges, typeof api>;
+        const apiGraph = createGraph<CustomApiGraphDef>({
             entities: structuredClone(baseEntities),
             edges,
             api,
@@ -261,7 +269,8 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
             },
         } as const satisfies ValidApi<MyGraphDef>;
 
-        const apiGraph = createGraph<ApiGraphDef<Schema, typeof edges, typeof apiOptions>>({
+        type CustomApiGraphDef = ApiGraphDef<Schema, typeof edges, typeof apiOptions>;
+        const apiGraph = createGraph<CustomApiGraphDef>({
             entities: structuredClone(baseEntities),
             edges,
             api: apiOptions,
@@ -290,7 +299,8 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
             },
         } as const satisfies ValidApi<CustomGraph>;
 
-        const apiGraph = createGraph<ApiGraphDef<Schema, typeof edges, typeof api>>({
+        type CustomApiGraphDef = ApiGraphDef<Schema, typeof edges, typeof api>;
+        const apiGraph = createGraph<CustomApiGraphDef>({
             entities: structuredClone(baseEntities),
             edges,
             api,
@@ -312,7 +322,8 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
             },
         } as const satisfies ValidApi<CustomGraph>;
 
-        const apiGraph = createGraph<ApiGraphDef<Schema, typeof edges, typeof api>>({
+        type CustomApiGraphDef = ApiGraphDef<Schema, typeof edges, typeof api>;
+        const apiGraph = createGraph<CustomApiGraphDef>({
             entities: structuredClone(baseEntities),
             edges,
             api,
@@ -334,7 +345,8 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
             },
         } as const satisfies ValidApi<CustomGraph>;
 
-        const apiGraph = createGraph<ApiGraphDef<Schema, typeof edges, typeof api>>({
+        type CustomApiGraphDef = ApiGraphDef<Schema, typeof edges, typeof api>;
+        const apiGraph = createGraph<CustomApiGraphDef>({
             entities: structuredClone(baseEntities),
             edges,
             api,
@@ -350,7 +362,8 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
 
         const apiFresh = {} as const satisfies ValidApi<CustomGraph>;
 
-        const freshGraph = createGraph<ApiGraphDef<Schema, typeof edges, typeof apiFresh>>({
+        type CustomFreshGraphDef = ApiGraphDef<Schema, typeof edges, typeof apiFresh>;
+        const freshGraph = createGraph<CustomFreshGraphDef>({
             entities: { ...structuredClone(baseEntities), transaction: [] as Transaction[] },
             edges,
             api: apiFresh,
@@ -380,7 +393,8 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
                 },
             } as const satisfies ValidApi<CustomGraph>;
 
-            const apiGraph = createGraph<ApiGraphDef<Schema, typeof edges, typeof api>>({
+            type CustomApiGraphDef = ApiGraphDef<Schema, typeof edges, typeof api>;
+            const apiGraph = createGraph<CustomApiGraphDef>({
                 entities: structuredClone(baseEntities),
                 edges,
                 api,
@@ -412,7 +426,8 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
                 },
             } as const satisfies ValidApi<CustomGraph>;
 
-            const apiGraph = createGraph<ApiGraphDef<Schema, typeof edges, typeof api>>({
+            type CustomApiGraphDef = ApiGraphDef<Schema, typeof edges, typeof api>;
+            const apiGraph = createGraph<CustomApiGraphDef>({
                 entities: structuredClone(baseEntities),
                 edges,
                 api,
@@ -435,7 +450,8 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
                 },
             } as const satisfies ValidApi<CustomGraph>;
 
-            const apiGraph = createGraph<ApiGraphDef<Schema, typeof edges, typeof api>>({
+            type CustomApiGraphDef = ApiGraphDef<Schema, typeof edges, typeof api>;
+            const apiGraph = createGraph<CustomApiGraphDef>({
                 entities: structuredClone(baseEntities),
                 edges,
                 api,
@@ -461,7 +477,8 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
                 },
             } as const satisfies ValidApi<CustomGraph>;
 
-            const apiGraph = createGraph<ApiGraphDef<Schema, typeof edges, typeof api>>({
+            type CustomApiGraphDef = ApiGraphDef<Schema, typeof edges, typeof api>;
+            const apiGraph = createGraph<CustomApiGraphDef>({
                 entities: structuredClone(baseEntities),
                 edges,
                 api,
@@ -495,7 +512,8 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
                 },
             } as const satisfies ValidApi<CustomGraph>;
 
-            const apiGraph = createGraph<ApiGraphDef<Schema, typeof edges, typeof api>>({
+            type CustomApiGraphDef = ApiGraphDef<Schema, typeof edges, typeof api>;
+            const apiGraph = createGraph<CustomApiGraphDef>({
                 entities: structuredClone(baseEntities),
                 edges,
                 api,
@@ -534,7 +552,8 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
                 },
             } as const satisfies ValidApi<CustomGraph>;
 
-            const apiGraph = createGraph<ApiGraphDef<Schema, typeof edges, typeof api>>({
+            type CustomApiGraphDef = ApiGraphDef<Schema, typeof edges, typeof api>;
+            const apiGraph = createGraph<CustomApiGraphDef>({
                 entities: structuredClone(baseEntities),
                 edges,
                 api,
@@ -577,7 +596,8 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
                 },
             } as const satisfies ValidApi<CustomGraph>;
 
-            const apiGraph = createGraph<ApiGraphDef<Schema, typeof edges, typeof api>>({
+            type CustomApiGraphDef = ApiGraphDef<Schema, typeof edges, typeof api>;
+            const apiGraph = createGraph<CustomApiGraphDef>({
                 entities: structuredClone(baseEntities),
                 edges,
                 api,
@@ -611,7 +631,8 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
                 },
             } as const satisfies ValidApi<CustomGraph>;
 
-            const apiGraph = createGraph<ApiGraphDef<Schema, typeof edges, typeof api>>({
+            type CustomApiGraphDef = ApiGraphDef<Schema, typeof edges, typeof api>;
+            const apiGraph = createGraph<CustomApiGraphDef>({
                 entities: structuredClone(baseEntities),
                 edges,
                 api,
@@ -657,7 +678,8 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
                 },
             } as const satisfies ValidApi<CustomGraph>;
 
-            const apiGraph = createGraph<ApiGraphDef<Schema, typeof edges, typeof api>>({
+            type CustomApiGraphDef = ApiGraphDef<Schema, typeof edges, typeof api>;
+            const apiGraph = createGraph<CustomApiGraphDef>({
                 entities: structuredClone(baseEntities),
                 edges,
                 api,
@@ -691,7 +713,8 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
                 },
             } as const satisfies ValidApi<CustomGraph>;
 
-            const apiGraph = createGraph<ApiGraphDef<Schema, typeof edges, typeof api>>({
+            type CustomApiGraphDef = ApiGraphDef<Schema, typeof edges, typeof api>;
+            const apiGraph = createGraph<CustomApiGraphDef>({
                 entities: structuredClone(baseEntities),
                 edges,
                 api,
@@ -714,7 +737,8 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
                 },
             } as const satisfies ValidApi<CustomGraph>;
 
-            const apiGraph = createGraph<ApiGraphDef<Schema, typeof edges, typeof api>>({
+            type CustomApiGraphDef = ApiGraphDef<Schema, typeof edges, typeof api>;
+            const apiGraph = createGraph<CustomApiGraphDef>({
                 entities: structuredClone(baseEntities),
                 edges,
                 api,
@@ -744,7 +768,8 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
                 },
             } as const satisfies ValidApi<CustomGraph>;
 
-            const apiGraph = createGraph<ApiGraphDef<Schema, typeof edges, typeof api>>({
+            type CustomApiGraphDef = ApiGraphDef<Schema, typeof edges, typeof api>;
+            const apiGraph = createGraph<CustomApiGraphDef>({
                 entities: structuredClone(baseEntities),
                 edges,
                 api,
@@ -778,7 +803,8 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
                 },
             } as const satisfies ValidApi<CustomGraph>;
 
-            const apiGraph = createGraph<ApiGraphDef<Schema, typeof edges, typeof api>>({
+            type CustomApiGraphDef = ApiGraphDef<Schema, typeof edges, typeof api>;
+            const apiGraph = createGraph<CustomApiGraphDef>({
                 entities: structuredClone(baseEntities),
                 edges,
                 api,
@@ -800,7 +826,8 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
                 },
             } as const satisfies ValidApi<CustomGraph>;
 
-            const apiGraph = createGraph<ApiGraphDef<Schema, typeof edges, typeof api>>({
+            type CustomApiGraphDef = ApiGraphDef<Schema, typeof edges, typeof api>;
+            const apiGraph = createGraph<CustomApiGraphDef>({
                 entities: structuredClone(baseEntities),
                 edges,
                 api,
@@ -823,7 +850,8 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
                 },
             } as const satisfies ValidApi<CustomGraph>;
 
-            const apiGraph = createGraph<ApiGraphDef<Schema, typeof edges, typeof api>>({
+            type CustomApiGraphDef = ApiGraphDef<Schema, typeof edges, typeof api>;
+            const apiGraph = createGraph<CustomApiGraphDef>({
                 entities: structuredClone(baseEntities),
                 edges,
                 api,
@@ -841,7 +869,8 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
                 },
             } as const satisfies ValidApi<CustomGraph>;
 
-            const apiGraph = createGraph<ApiGraphDef<Schema, typeof edges, typeof api>>({
+            type CustomApiGraphDef = ApiGraphDef<Schema, typeof edges, typeof api>;
+            const apiGraph = createGraph<CustomApiGraphDef>({
                 entities: structuredClone(baseEntities),
                 edges,
                 api,
@@ -872,7 +901,8 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
                 },
             } as const satisfies ValidApi<CustomGraph>;
 
-            const apiGraph = createGraph<ApiGraphDef<Schema, typeof edges, typeof api>>({
+            type CustomApiGraphDef = ApiGraphDef<Schema, typeof edges, typeof api>;
+            const apiGraph = createGraph<CustomApiGraphDef>({
                 entities: structuredClone(baseEntities),
                 edges,
                 api,

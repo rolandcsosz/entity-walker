@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { createGraph, createNonProxyGraph } from "../src/index";
+import { createApiGraph } from "../src/api";
 import { CustomGraph, edges } from "./types";
 import { baseEntities } from "./shared";
 
@@ -110,7 +111,7 @@ describe("Undefined Entities Support", () => {
 
     describe("API-bound Graph Wrapper (createApiGraph / createGraph({ api }))", () => {
         it("allows omitting entities in API graph config", () => {
-            const graph = createGraph<CustomGraph>({
+            const graph = createApiGraph<CustomGraph>({
                 edges,
                 api: {},
             });
@@ -124,7 +125,7 @@ describe("Undefined Entities Support", () => {
         });
 
         it("allows partial entities mapping in API graph", () => {
-            const graph = createGraph<CustomGraph>({
+            const graph = createApiGraph<CustomGraph>({
                 entities: {
                     subcategory: structuredClone(baseEntities.subcategory),
                 },

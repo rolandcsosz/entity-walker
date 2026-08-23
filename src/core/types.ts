@@ -181,7 +181,6 @@ export type EntityNodeNoProxy<D extends GraphDef<any, any>, E extends EntityBase
 export type EntityNodeListNoProxy<D extends GraphDef<any, any>, E extends EntityBase> = EntityNodeNoProxy<D, E>[] & {
     entities(): E[];
     select<R>(fn: (entity: E) => R): R[];
-    ids(): string[];
     first(): E | undefined;
     findEntity(predicate: (entity: E) => boolean): E | undefined;
     findNode(predicate: (entity: E) => boolean): EntityNodeNoProxy<D, E> | undefined;
