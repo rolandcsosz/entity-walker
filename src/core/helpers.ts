@@ -13,6 +13,39 @@ import {
 } from "./types";
 export const NODE_PROP = Symbol("entity-walker:internal");
 
+function assertAcyclicGraphEdges(edges: Record<string, any>): void {
+    const visiting = new Set<string>();
+    const visited = new Set<string>();
+    const path: string[] = [];
+
+    const visit = (sourceType: string) => {
+        if (visited.has(sourceType)) return;
+        if (visiting.has(sourceType)) {
+            const cycleStart = path.indexOf(sourceType);
+            const cyclePath = [...path.slice(cycleStart), sourceType].join(" -> ");
+            throw new Error(`[entity-walker] Graph edges must be acyclic. Detected cycle: ${cyclePath}.`);
+        }
+
+        visiting.add(sourceType);
+        path.push(sourceType);
+
+        const entityEdges = edges[sourceType];
+        if (entityEdges && typeof entityEdges === "object") {
+            for (const targetType of Object.keys(entityEdges)) {
+                visit(targetType);
+            }
+        }
+
+        path.pop();
+        visiting.delete(sourceType);
+        visited.add(sourceType);
+    };
+
+    for (const sourceType of Object.keys(edges ?? {})) {
+        visit(sourceType);
+    }
+}
+
 export interface CoreData<EM extends EntityMap> {
     toNodeList(nodes: any[], nodeKey: string): any;
     graphSchema(): GraphSchema;
@@ -31,6 +64,8 @@ export function buildCore<EM extends EntityMap, E extends GraphEdges<EM>>(
     getCreateNode: () => (key: keyof EM, id: string | number | null, path?: string[]) => any,
     transformList?: (list: any, nodeKey: string) => void,
 ): CoreData<EM> {
+    assertAcyclicGraphEdges(edges as Record<string, any>);
+
     const safeEntities = (entities ?? {}) as Record<string, any[]>;
     const byId: Record<string, Record<string, any>> = {};
     const reverseIndex: Record<string, Record<string, Record<string, string[]>>> = {};

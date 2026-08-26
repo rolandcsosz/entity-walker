@@ -618,7 +618,7 @@ export function createApiGraph<D extends GraphDef<any, any>>(
                 }
                 const res = await executeApiCallWithHooks(
                     { op: "read", entityType: type, entityId: id, data: id },
-                    (reqId) => entityConfig.read!(reqId),
+                    (reqId) => entityConfig.read!(reqId, node),
                 );
                 if (isApiError(res)) {
                     return res;
@@ -658,7 +658,7 @@ export function createApiGraph<D extends GraphDef<any, any>>(
                 if (entityConfig?.delete) {
                     const res = await executeApiCallWithHooks(
                         { op: "delete", entityType: type, entityId: id, data: id },
-                        (reqId) => entityConfig.delete!(reqId),
+                        (reqId) => entityConfig.delete!(reqId, node),
                     );
                     if (isApiError(res)) {
                         error = res;
@@ -731,7 +731,7 @@ export function createApiGraph<D extends GraphDef<any, any>>(
                         { op: "update", entityType: type, entityId: id, data: updated },
                         (reqData) => {
                             finalPayload = reqData;
-                            return entityConfig.update!(reqData);
+                            return entityConfig.update!(reqData, wrapNode(type, id, txGraph));
                         },
                     );
                     if (isApiError(res)) {
@@ -843,8 +843,15 @@ export function createApiGraph<D extends GraphDef<any, any>>(
             return wrapNode(type, info.id, activeGraph);
         });
 
-        const loadFn = async (options?: { force?: boolean }) => {
-            const cacheKey = type;
+        const loadFn = async (paramsOrOptions?: any, maybeOptions?: { force?: boolean }) => {
+            const entityConfig = opts?.[type];
+            const handlerExpectsParams = typeof entityConfig?.list === "function" && entityConfig.list.length > 0;
+            const firstArgLooksLikeOptions =
+                paramsOrOptions && typeof paramsOrOptions === "object" && "force" in paramsOrOptions;
+            const firstArgIsOptions = maybeOptions === undefined && firstArgLooksLikeOptions && !handlerExpectsParams;
+            const params = firstArgIsOptions ? undefined : paramsOrOptions;
+            const options = firstArgIsOptions ? paramsOrOptions : maybeOptions;
+            const cacheKey = `${type}:${JSON.stringify(params ?? null)}`;
             if (!options?.force && queryCache.has(cacheKey)) {
                 const cached = queryCache.get(cacheKey)!;
                 const allNodes = activeGraph[`${type}Nodes`]();
@@ -852,13 +859,12 @@ export function createApiGraph<D extends GraphDef<any, any>>(
                 return wrapList(type, matchingNodes, activeGraph);
             }
 
-            const entityConfig = opts?.[type];
             if (!entityConfig?.list) {
                 return { message: `[entity-walker] list handler is required to load node list for '${type}'.` };
             }
 
-            const response = await executeApiCallWithHooks({ op: "list", entityType: type }, () =>
-                entityConfig.list!(),
+            const response = await executeApiCallWithHooks({ op: "list", entityType: type, data: params }, (payload) =>
+                entityConfig.list!(payload, listProxy),
             );
 
             if (isApiError(response)) {
@@ -924,7 +930,7 @@ export function createApiGraph<D extends GraphDef<any, any>>(
                             entityId: delta.entityId,
                             data: delta.data,
                         },
-                        (reqData) => entityConfig.create!(reqData),
+                        (reqData) => entityConfig.create!(reqData, wrapNode(delta.entityType, delta.entityId, baseGraph)),
                     );
                     if (isApiError(res)) {
                         error = res;
@@ -950,7 +956,7 @@ export function createApiGraph<D extends GraphDef<any, any>>(
                             entityId: delta.entityId,
                             data: payload,
                         },
-                        (reqData) => entityConfig.update!(reqData),
+                        (reqData) => entityConfig.update!(reqData, wrapNode(delta.entityType, delta.entityId, baseGraph)),
                     );
                     if (isApiError(res)) {
                         error = res;
@@ -968,7 +974,7 @@ export function createApiGraph<D extends GraphDef<any, any>>(
                             entityId: delta.entityId,
                             data: delta.entityId,
                         },
-                        (reqId) => entityConfig.delete!(reqId),
+                        (reqId) => entityConfig.delete!(reqId, wrapNode(delta.entityType, delta.entityId, baseGraph)),
                     );
                     if (isApiError(res)) {
                         error = res;
@@ -1176,7 +1182,8 @@ export function createApiGraph<D extends GraphDef<any, any>>(
                                     entityId: delta.entityId,
                                     data: delta.data,
                                 },
-                                (reqData) => entityConfig.create!(reqData),
+                                (reqData) =>
+                                    entityConfig.create!(reqData, wrapNode(delta.entityType, delta.entityId, txCoreGraph)),
                             );
                             if (isApiError(res)) {
                                 error = res;
@@ -1215,7 +1222,8 @@ export function createApiGraph<D extends GraphDef<any, any>>(
                                     entityId: delta.entityId,
                                     data: delta.data,
                                 },
-                                (reqData) => entityConfig.update!(reqData),
+                                (reqData) =>
+                                    entityConfig.update!(reqData, wrapNode(delta.entityType, delta.entityId, txCoreGraph)),
                             );
                             if (isApiError(res)) {
                                 error = res;
@@ -1237,7 +1245,8 @@ export function createApiGraph<D extends GraphDef<any, any>>(
                                     entityId: delta.entityId,
                                     data: delta.entityId,
                                 },
-                                (reqId) => entityConfig.delete!(reqId),
+                                (reqId) =>
+                                    entityConfig.delete!(reqId, wrapNode(delta.entityType, delta.entityId, txCoreGraph)),
                             );
                             if (isApiError(res)) {
                                 error = res;
@@ -1334,7 +1343,8 @@ export function createApiGraph<D extends GraphDef<any, any>>(
                         { op: "create", entityType: type, data },
                         (reqData) => {
                             finalData = reqData;
-                            return entityConfig.create!(reqData);
+                            const handlerNode = finalData?.id !== undefined ? wrapNode(type, finalData.id) : undefined;
+                            return handlerNode ? entityConfig.create!(reqData, handlerNode) : entityConfig.create!(reqData);
                         },
                     );
 

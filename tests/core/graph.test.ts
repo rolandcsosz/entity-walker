@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { Schema, SchemaNumeric } from "../types";
-import { Entities } from "../../src";
+import { createGraph, createNonProxyGraph, Entities, GraphDef, GraphEdges } from "../../src";
 import {
     baseEntities,
     baseEntitiesNumeric,
@@ -10,6 +10,33 @@ import {
     proxyAdapter,
     proxyAdapterN,
 } from "../shared";
+
+type CycleParent = { id: string; childId: string };
+type CycleChild = { id: string; parentId: string };
+type CycleSchema = { parent: CycleParent; child: CycleChild };
+const cyclicEdges = {
+    parent: {
+        child: { resolve: (parent: CycleParent) => parent.childId },
+    },
+    child: {
+        parent: { resolve: (child: CycleChild) => child.parentId },
+    },
+} as const satisfies GraphEdges<CycleSchema>;
+type CyclicGraph = GraphDef<CycleSchema, typeof cyclicEdges>;
+
+describe("graph edge validation", () => {
+    it("throws on directed edge cycles during proxy graph creation", () => {
+        expect(() => createGraph<CyclicGraph>({ edges: cyclicEdges })).toThrow(
+            "Graph edges must be acyclic. Detected cycle: parent -> child -> parent.",
+        );
+    });
+
+    it("throws on directed edge cycles during non-proxy graph creation", () => {
+        expect(() => createNonProxyGraph<CyclicGraph>({ edges: cyclicEdges })).toThrow(
+            "Graph edges must be acyclic. Detected cycle: parent -> child -> parent.",
+        );
+    });
+});
 
 function runEntityGraphTests(label: string, { rootNode, nodeList, path, makeGraph }: GraphWrapper) {
     describe(label, () => {

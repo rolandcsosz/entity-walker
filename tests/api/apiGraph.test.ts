@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { createGraph, ApiGraphDef, ValidApi, ApiError, ApiGraphEvent, ApiNode, ApiGraph, GraphDef } from "../../src";
+import { createGraph, ApiGraphDef, ValidApi, ApiError, ApiGraphEvent, ApiNode, ApiGraph, GraphDef, ApiNodeList } from "../../src";
 import { edges, Transaction, Subcategory, MainCategory, ExpenseType, IncomeType, Schema, CustomGraph } from "../types";
 import { baseEntities } from "../shared";
 import { getApiGraph } from "./openapiClientGraph.test";
@@ -198,11 +198,101 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
         expect(requestCount).toBe(1);
     });
 
+    it("passes list load params and calling node list to list handlers", async () => {
+        let requestCount = 0;
+        let receivedListIds: (string | number)[] = [];
+
+        const api = {
+            transaction: {
+                list: async (params: { subcategoryId: string }, list?: ApiNodeList<CustomGraph, Transaction>) => {
+                    requestCount++;
+                    receivedListIds = list?.ids() ?? [];
+                    return [
+                        { id: `t_${params.subcategoryId}_1`, subcategoryId: params.subcategoryId },
+                        { id: `t_${params.subcategoryId}_2`, subcategoryId: params.subcategoryId },
+                    ] as Transaction[];
+                },
+            },
+        } as const satisfies ValidApi<CustomGraph>;
+
+        type CustomApiGraphDef = ApiGraphDef<Schema, typeof edges, typeof api>;
+        const apiGraph = createGraph<CustomApiGraphDef>({
+            entities: {
+                transaction: [] as Transaction[],
+                subcategory: [] as Subcategory[],
+                mainCategory: [] as MainCategory[],
+                expenseType: [] as ExpenseType[],
+                incomeType: [] as IncomeType[],
+            },
+            edges,
+            api,
+        });
+
+        const filtered = await apiGraph.transactionNodes().load({ subcategoryId: "sub1" });
+        expect(filtered.ids()).toEqual(["t_sub1_1", "t_sub1_2"]);
+        expect(receivedListIds).toEqual([]);
+
+        const cached = await apiGraph.transactionNodes().load({ subcategoryId: "sub1" });
+        expect(cached.ids()).toEqual(["t_sub1_1", "t_sub1_2"]);
+        expect(requestCount).toBe(1);
+
+        const other = await apiGraph.transactionNodes().load({ subcategoryId: "sub2" });
+        expect(other.ids()).toEqual(["t_sub2_1", "t_sub2_2"]);
+        expect(requestCount).toBe(2);
+    });
+
+    it("passes optional entity nodes to standard entity handlers", async () => {
+        const handlerNodes: Record<string, { exists?: boolean; value?: Transaction }> = {};
+
+        const api = {
+            transaction: {
+                create: async (
+                    data: Omit<Transaction, "id"> & { id: string },
+                    node?: ApiNode<CustomGraph, Transaction>,
+                ) => {
+                    handlerNodes.create = { exists: node?.exists(), value: node?.value() };
+                    return { id: data.id, subcategoryId: data.subcategoryId } as Transaction;
+                },
+                read: async (id: string, node?: ApiNode<CustomGraph, Transaction>) => {
+                    handlerNodes.read = { exists: node?.exists(), value: node?.value() };
+                    return { id, subcategoryId: "sub2" } as Transaction;
+                },
+                update: async (data: Transaction, node?: ApiNode<CustomGraph, Transaction>) => {
+                    handlerNodes.update = { exists: node?.exists(), value: node?.value() };
+                    return data;
+                },
+                delete: async (id: string, node?: ApiNode<CustomGraph, Transaction>) => {
+                    handlerNodes.delete = { exists: node?.exists(), value: node?.value() };
+                },
+            },
+        } as const satisfies ValidApi<CustomGraph>;
+
+        type CustomApiGraphDef = ApiGraphDef<Schema, typeof edges, typeof api>;
+        const apiGraph = createGraph<CustomApiGraphDef>({
+            entities: structuredClone(baseEntities),
+            edges,
+            api,
+        });
+
+        await apiGraph.createTransaction({ id: "tx_node", subcategoryId: "sub1" });
+        await apiGraph.transaction("tx1").load();
+        await apiGraph.transaction("tx1").update((tx) => ({ ...tx, amount: 123 }));
+        await apiGraph.transaction("tx2").delete();
+
+        expect(handlerNodes.create.exists).toBe(false);
+        expect(handlerNodes.read.exists).toBe(true);
+        expect(handlerNodes.read.value?.id).toBe("tx1");
+        expect(handlerNodes.update.exists).toBe(true);
+        expect(handlerNodes.update.value?.amount).toBe(123);
+        expect(handlerNodes.delete.exists).toBe(true);
+        expect(handlerNodes.delete.value?.id).toBe("tx2");
+    });
+
     it("respects custom node actions", async () => {
         const api = {
             transaction: {
                 actions: {
-                    vmi: async (node: ApiNode<CustomGraph, Transaction>, vmi: string) => {},
+                    vmi: async (node: ApiNode<CustomGraph, Transaction>, vmi: string) => { },
                     archive: async (node: ApiNode<CustomGraph, Transaction>) => {
                         await node.update((tx) => ({ ...tx, archived: true }));
                         return { ok: true };
@@ -295,7 +385,7 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
                 update: async (data: any) => {
                     return data as Transaction;
                 },
-                delete: async (id: string) => {},
+                delete: async (id: string) => { },
             },
         } as const satisfies ValidApi<CustomGraph>;
 

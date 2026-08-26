@@ -37,17 +37,17 @@ export type PendingDelta = {
 export type ApiGraphEventDetails<D extends GraphDef<any, any>> = {
     [K in keyof D["entityModel"] & string]: {
         op?:
-            | "create"
-            | "update"
-            | "delete"
-            | "read"
-            | "list"
-            | "sync"
-            | "commit"
-            | "rollback"
-            | "restore"
-            | "flush"
-            | string;
+        | "create"
+        | "update"
+        | "delete"
+        | "read"
+        | "list"
+        | "sync"
+        | "commit"
+        | "rollback"
+        | "restore"
+        | "flush"
+        | string;
         entityType?: K;
         entityId?: D["entityModel"][K]["id"];
         data?: D["entityModel"][K];
@@ -110,11 +110,11 @@ export type ApiEntityHooks<
 };
 
 export interface ApiEntityHandlers<E extends EntityBase> {
-    create?(data: unknown): ApiHandlerResult<E>;
-    read?(id: E["id"]): ApiHandlerResult<E>;
-    update?(data: unknown): ApiHandlerResult<E>;
-    delete?(id: E["id"]): ApiHandlerResult<void>;
-    list?(): ApiHandlerResult<E[]>;
+    create?(data: unknown, node?: any): ApiHandlerResult<E>;
+    read?(id: E["id"], node?: any): ApiHandlerResult<E>;
+    update?(data: unknown, node?: any): ApiHandlerResult<E>;
+    delete?(id: E["id"], node?: any): ApiHandlerResult<void>;
+    list?(params: any, nodeList?: any): ApiHandlerResult<E[]>;
 }
 
 export interface ApiEntityConfig<E extends EntityBase> extends ApiEntityHandlers<E> {
@@ -125,6 +125,11 @@ export interface ApiEntityGraphConfig<
     D extends GraphDef<any, any>,
     E extends D["entityModel"][keyof D["entityModel"]] = D["entityModel"][keyof D["entityModel"]],
 > extends ApiEntityConfig<E> {
+    create?(data: unknown, node?: ApiNode<D, E>): ApiHandlerResult<E>;
+    read?(id: E["id"], node?: ApiNode<D, E>): ApiHandlerResult<E>;
+    update?(data: unknown, node?: ApiNode<D, E>): ApiHandlerResult<E>;
+    delete?(id: E["id"], node?: ApiNode<D, E>): ApiHandlerResult<void>;
+    list?(params: any, nodeList?: ApiNodeList<D, E>): ApiHandlerResult<E[]>;
     actions?: Record<string, (node: ApiNode<D, E>, ...args: any[]) => Promise<any>>;
     hooks?: ApiEntityHooks<D, KeyOf<D, E> & keyof D["entityModel"] & string>;
 }
@@ -155,12 +160,20 @@ type ApiGraphBase<D extends GraphDef<any, any>> = GraphDef<D["entityModel"], D["
 
 type ApiOptions<D extends GraphDef<any, any>> = D extends { api: infer Api }
     ? Api extends ValidApi<ApiGraphBase<D>>
-        ? Api
-        : ValidApi<ApiGraphBase<D>>
+    ? Api
+    : ValidApi<ApiGraphBase<D>>
     : ValidApi<ApiGraphBase<D>>;
 
 type ApiEntityOptions<D extends GraphDef<any, any>, E extends EntityBase> = ApiOptions<D>[KeyOf<D, E> &
     keyof ApiOptions<D>];
+
+type ApiListLoad<D extends GraphDef<any, any>, E extends EntityBase> = ApiEntityOptions<D, E> extends {
+    readonly list: (...args: infer P) => any;
+}
+    ? P extends []
+        ? (options?: { force?: boolean }) => Promise<ApiNodeList<D, E>>
+        : (params: P[0], options?: { force?: boolean }) => Promise<ApiNodeList<D, E>>
+    : (options?: { force?: boolean }) => Promise<ApiNodeList<D, E>>;
 
 export type ApiNode<D extends GraphDef<any, any>, E extends EntityBase> = {
     value(): E | undefined;
@@ -197,7 +210,7 @@ export type ApiNodeList<D extends GraphDef<any, any>, E extends EntityBase> = Ap
     ids(): (string | number)[];
     isEmpty(): boolean;
     isNotEmpty(): boolean;
-    load(options?: { force?: boolean }): Promise<ApiNodeList<D, E>>;
+    load: ApiListLoad<D, E>;
 };
 
 export type ApiCustomNodeList<D extends GraphDef<any, any>, E extends EntityBase> = ApiNodeList<D, E>;
