@@ -194,7 +194,10 @@ export type ConcreteSubcategoryApiHandlers = ApiEntityHandlers<Subcategory>;
             { name: "ConcreteCoreMeta", title: "EntityGraphMeta<CustomGraph> (Core Graph Meta)" },
             { name: "ConcreteApiMeta", title: "ApiGraphMeta<CustomGraph> (API Graph Meta)" },
             { name: "ConcreteValidApi", title: "ValidApi<CustomGraph> (API Graph Config)" },
-            { name: "ConcreteSubcategoryApiConfig", title: "ApiEntityGraphConfig<CustomGraph, Subcategory> (Graph Entity API Config)" },
+            {
+                name: "ConcreteSubcategoryApiConfig",
+                title: "ApiEntityGraphConfig<CustomGraph, Subcategory> (Graph Entity API Config)",
+            },
             { name: "ConcreteSubcategoryEntityConfig", title: "ApiEntityConfig<Subcategory> (Entity API Config)" },
             { name: "ConcreteSubcategoryApiHandlers", title: "ApiEntityHandlers<Subcategory> (Entity API Handlers)" },
         ];

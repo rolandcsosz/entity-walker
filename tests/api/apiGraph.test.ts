@@ -1,5 +1,15 @@
 import { describe, it, expect } from "vitest";
-import { createGraph, ApiGraphDef, ValidApi, ApiError, ApiGraphEvent, ApiNode, ApiGraph, GraphDef, ApiNodeList } from "../../src";
+import {
+    createGraph,
+    ApiGraphDef,
+    ValidApi,
+    ApiError,
+    ApiGraphEvent,
+    ApiNode,
+    ApiGraph,
+    GraphDef,
+    ApiNodeList,
+} from "../../src";
 import { edges, Transaction, Subcategory, MainCategory, ExpenseType, IncomeType, Schema, CustomGraph } from "../types";
 import { baseEntities } from "../shared";
 import { getApiGraph } from "./openapiClientGraph.test";
@@ -292,7 +302,7 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
         const api = {
             transaction: {
                 actions: {
-                    vmi: async (node: ApiNode<CustomGraph, Transaction>, vmi: string) => { },
+                    vmi: async (node: ApiNode<CustomGraph, Transaction>, vmi: string) => {},
                     archive: async (node: ApiNode<CustomGraph, Transaction>) => {
                         await node.update((tx) => ({ ...tx, archived: true }));
                         return { ok: true };
@@ -385,7 +395,7 @@ describe("API-Bound Graph Wrapper (Handlers)", () => {
                 update: async (data: any) => {
                     return data as Transaction;
                 },
-                delete: async (id: string) => { },
+                delete: async (id: string) => {},
             },
         } as const satisfies ValidApi<CustomGraph>;
 

@@ -37,17 +37,17 @@ export type PendingDelta = {
 export type ApiGraphEventDetails<D extends GraphDef<any, any>> = {
     [K in keyof D["entityModel"] & string]: {
         op?:
-        | "create"
-        | "update"
-        | "delete"
-        | "read"
-        | "list"
-        | "sync"
-        | "commit"
-        | "rollback"
-        | "restore"
-        | "flush"
-        | string;
+            | "create"
+            | "update"
+            | "delete"
+            | "read"
+            | "list"
+            | "sync"
+            | "commit"
+            | "rollback"
+            | "restore"
+            | "flush"
+            | string;
         entityType?: K;
         entityId?: D["entityModel"][K]["id"];
         data?: D["entityModel"][K];
@@ -141,6 +141,7 @@ export type ValidApi<D extends GraphDef<any, any>> = {
     idFormat?: NewIdFormatter;
     hooks?: ApiHooks<D>;
     actions?: Record<string, (graph: any, ...args: any[]) => Promise<any>>;
+    autoLoadReferences?: boolean;
 } & {
     [K in keyof D["entityModel"]]?: ApiEntityGraphConfig<D, D["entityModel"][K]>;
 };
@@ -160,20 +161,23 @@ type ApiGraphBase<D extends GraphDef<any, any>> = GraphDef<D["entityModel"], D["
 
 type ApiOptions<D extends GraphDef<any, any>> = D extends { api: infer Api }
     ? Api extends ValidApi<ApiGraphBase<D>>
-    ? Api
-    : ValidApi<ApiGraphBase<D>>
+        ? Api
+        : ValidApi<ApiGraphBase<D>>
     : ValidApi<ApiGraphBase<D>>;
 
 type ApiEntityOptions<D extends GraphDef<any, any>, E extends EntityBase> = ApiOptions<D>[KeyOf<D, E> &
     keyof ApiOptions<D>];
 
-type ApiListLoad<D extends GraphDef<any, any>, E extends EntityBase> = ApiEntityOptions<D, E> extends {
-    readonly list: (...args: infer P) => any;
-}
-    ? P extends []
-        ? (options?: { force?: boolean }) => Promise<ApiNodeList<D, E>>
-        : (params: P[0], options?: { force?: boolean }) => Promise<ApiNodeList<D, E>>
-    : (options?: { force?: boolean }) => Promise<ApiNodeList<D, E>>;
+type ApiListLoad<D extends GraphDef<any, any>, E extends EntityBase> =
+    ApiEntityOptions<D, E> extends {
+        readonly list: (...args: infer P) => any;
+    }
+        ? P extends []
+            ? (options?: { force?: boolean }) => Promise<ApiNodeList<D, E>>
+            : [] extends P
+              ? (params?: P[0], options?: { force?: boolean }) => Promise<ApiNodeList<D, E>>
+              : (params: P[0], options?: { force?: boolean }) => Promise<ApiNodeList<D, E>>
+        : (options?: { force?: boolean }) => Promise<ApiNodeList<D, E>>;
 
 export type ApiNode<D extends GraphDef<any, any>, E extends EntityBase> = {
     value(): E | undefined;
@@ -187,15 +191,23 @@ export type ApiNode<D extends GraphDef<any, any>, E extends EntityBase> = {
     ): Promise<
         ApiEntityOptions<D, E> extends { readonly update: (...args: any[]) => Promise<infer R> } ? R : void | ApiError
     >;
-    api: ApiEntityOptions<D, E> extends { readonly actions: infer Actions }
-        ? {
-              [K in keyof Actions]: Actions[K] extends (node: any, ...args: infer P) => infer R
-                  ? (...args: P) => Promise<Awaited<R>>
-                  : never;
-          }
-        : {};
+    api: [0] extends [1 & ApiEntityOptions<D, E>]
+        ? {}
+        : ApiEntityOptions<D, E> extends { readonly actions: infer Actions }
+          ? [0] extends [1 & Actions]
+              ? {}
+              : {
+                    [K in keyof Actions]: Actions[K] extends (node: any, ...args: infer P) => infer R
+                        ? (...args: P) => Promise<Awaited<R>>
+                        : never;
+                }
+          : {};
 } & {
-    [Rel in keyof D["edges"][KeyOf<D, E>]]: () => ApiNode<D, D["entityModel"][Rel & keyof D["entityModel"]]>;
+    [
+        Rel in [0] extends [1 & D["edges"][KeyOf<D, E>]]
+            ? never
+            : keyof D["edges"][KeyOf<D, E>] & keyof D["entityModel"]
+    ]: () => ApiNode<D, D["entityModel"][Rel & keyof D["entityModel"]]>;
 } & {
     [SourceEntity in ReverseKeys<D, KeyOf<D, E>> as `${string & SourceEntity}Nodes`]: () => ApiNodeList<
         D,
@@ -221,12 +233,13 @@ export type ApiGraphSnapshot<D extends GraphDef<any, any>> = {
     idMappings?: Record<string | number, string | number>;
 };
 
-type WrapApiGraphMeta<D extends GraphDef<any, any>> =
-    ApiOptions<D> extends { actions: infer Actions }
-        ? [keyof Actions] extends [never]
-            ? ApiGraphMeta<D>
-            : ApiCustomGraphMeta<D>
-        : ApiGraphMeta<D>;
+type WrapApiGraphMeta<D extends GraphDef<any, any>> = [0] extends [1 & ApiOptions<D>]
+    ? ApiGraphMeta<D>
+    : ApiOptions<D> extends { actions: infer Actions }
+      ? [keyof Actions] extends [never]
+          ? ApiGraphMeta<D>
+          : ApiCustomGraphMeta<D>
+      : ApiGraphMeta<D>;
 
 export interface ApiGraphMeta<D extends GraphDef<any, any>> {
     sync(fresh: Partial<Entities<D["entityModel"]>>, options?: { mode?: "merge" | "replace" }): void;
@@ -241,18 +254,24 @@ export interface ApiGraphMeta<D extends GraphDef<any, any>> {
     resolveId(id: string | number): string | number;
     getOriginalId(id: string | number): string | number;
     setIdFormat(formatter: NewIdFormatter): void;
+    setAutoLoadReferences(enabled: boolean): void;
+    isAutoLoadReferencesEnabled(): boolean;
     addHook(hooks: ApiHooks<D>): () => void;
     api: {};
 }
 
 export type ApiCustomGraphMeta<D extends GraphDef<any, any>> = ApiGraphMeta<D> & {
-    api: ApiOptions<D> extends { actions: infer Actions }
-        ? {
-              [K in keyof Actions]: Actions[K] extends (graph: any, ...args: infer P) => infer R
-                  ? (...args: P) => Promise<Awaited<R>>
-                  : never;
-          }
-        : {};
+    api: [0] extends [1 & ApiOptions<D>]
+        ? {}
+        : ApiOptions<D> extends { actions: infer Actions }
+          ? [0] extends [1 & Actions]
+              ? {}
+              : {
+                    [K in keyof Actions]: Actions[K] extends (graph: any, ...args: infer P) => infer R
+                        ? (...args: P) => Promise<Awaited<R>>
+                        : never;
+                }
+          : {};
 };
 
 export type ApiTransactionGraph<D extends GraphDef<any, any>> = ApiGraph<D> & {

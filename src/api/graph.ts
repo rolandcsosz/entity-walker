@@ -166,6 +166,10 @@ export function createApiGraph<D extends GraphDef<any, any>, Options extends Val
     idCounters?: Map<string, number>,
     formatterRef?: { fn?: NewIdFormatter },
     dynamicHooks?: Set<ApiHooks<any>>,
+    autoLoadRef?: { enabled: boolean },
+    activeUserOpsRef?: { count: number },
+    inFlightAutoFetches?: Set<string>,
+    attemptedAutoFetches?: Set<string>,
 ): ApiGraph<D & { api: Options }>;
 
 export function createApiGraph<D extends GraphDef<any, any>>(
@@ -180,6 +184,10 @@ export function createApiGraph<D extends GraphDef<any, any>>(
     idCounters: Map<string, number> = new Map(),
     formatterRef: { fn?: NewIdFormatter } = { fn: undefined },
     dynamicHooks: Set<ApiHooks<any>> = new Set(),
+    autoLoadRef: { enabled: boolean } = { enabled: false },
+    activeUserOpsRef: { count: number } = { count: 0 },
+    inFlightAutoFetches: Set<string> = new Set(),
+    attemptedAutoFetches: Set<string> = new Set(),
 ): ApiGraph<D> {
     let baseGraph: any;
     let opts: any;
@@ -198,6 +206,10 @@ export function createApiGraph<D extends GraphDef<any, any>>(
         baseGraph = baseGraphOrConfig;
         opts = options!;
         edges = graphEdges ?? baseGraph?.edges;
+    }
+
+    if (opts?.autoLoadReferences !== undefined) {
+        autoLoadRef.enabled = !!opts.autoLoadReferences;
     }
 
     if (opts?.idFormat && !formatterRef.fn) {
@@ -388,40 +400,140 @@ export function createApiGraph<D extends GraphDef<any, any>>(
         }
     }
 
+    let autoLoadScheduled = false;
+
+    function scheduleAutoLoadReferences() {
+        if (isTx) return;
+        if (autoLoadScheduled) return;
+
+        autoLoadScheduled = true;
+        setTimeout(async () => {
+            autoLoadScheduled = false;
+
+            if (activeUserOpsRef.count > 0) {
+                return;
+            }
+
+            const edgeMap = edges ?? baseGraph?.edges;
+            if (!edgeMap || typeof edgeMap !== "object") return;
+
+            const snapFn = baseGraph.meta?.snapshot ?? baseGraph.snapshot;
+            const rawSnap = typeof snapFn === "function" ? snapFn.call(baseGraph.meta ?? baseGraph) : null;
+            const allEntities =
+                rawSnap && typeof rawSnap === "object" && "entities" in rawSnap ? rawSnap.entities : rawSnap;
+            if (!allEntities || typeof allEntities !== "object") return;
+
+            const missingToFetch: Array<{ type: string; id: string | number }> = [];
+
+            for (const [sourceType, entityEdges] of Object.entries(edgeMap)) {
+                if (!entityEdges || typeof entityEdges !== "object") continue;
+                const sourceList = allEntities[sourceType];
+                if (!Array.isArray(sourceList) || sourceList.length === 0) continue;
+
+                for (const [edgeProp, targetConfig] of Object.entries(entityEdges as Record<string, any>)) {
+                    if (!targetConfig) continue;
+
+                    const targetType =
+                        typeof targetConfig === "string"
+                            ? targetConfig
+                            : (targetConfig.target ?? targetConfig.type ?? edgeProp);
+
+                    const edgeAutoLoad = typeof targetConfig === "object" ? targetConfig.autoLoad : undefined;
+                    const isAutoLoadEnabled = edgeAutoLoad !== undefined ? edgeAutoLoad : autoLoadRef.enabled;
+
+                    if (!isAutoLoadEnabled) continue;
+
+                    const targetEntityConfig = opts?.[targetType];
+                    if (typeof targetEntityConfig?.read !== "function") continue;
+
+                    for (const sourceEntity of sourceList) {
+                        if (!sourceEntity) continue;
+
+                        let targetId: string | number | undefined;
+                        if (typeof targetConfig === "object" && typeof targetConfig.resolve === "function") {
+                            targetId = targetConfig.resolve(sourceEntity);
+                        } else {
+                            const possibleFkFields = [
+                                targetConfig?.foreignKey,
+                                targetConfig?.fk,
+                                edgeProp,
+                                `${edgeProp}Id`,
+                                `${targetType}Id`,
+                            ].filter(Boolean);
+                            const fkField = possibleFkFields.find((f) => f in sourceEntity);
+                            if (fkField) targetId = sourceEntity[fkField];
+                        }
+
+                        if (targetId == null) continue;
+                        const resolvedTargetId = resolveId(targetId);
+
+                        const targetNode = baseGraph[targetType]?.(resolvedTargetId);
+                        const exists = targetNode ? targetNode.exists() : false;
+
+                        if (!exists) {
+                            const key = `${targetType}:${resolvedTargetId}`;
+                            if (!inFlightAutoFetches.has(key) && !attemptedAutoFetches.has(key)) {
+                                missingToFetch.push({ type: targetType, id: resolvedTargetId });
+                                attemptedAutoFetches.add(key);
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (missingToFetch.length === 0) return;
+
+            for (const item of missingToFetch) {
+                const key = `${item.type}:${item.id}`;
+                inFlightAutoFetches.add(key);
+                try {
+                    const apiNode = wrapNode(item.type, item.id, baseGraph);
+                    await apiNode.load({ isAutoLoad: true });
+                } catch {
+                    // Ignore auto-load fetch errors
+                } finally {
+                    inFlightAutoFetches.delete(key);
+                }
+            }
+
+            scheduleAutoLoadReferences();
+        });
+    }
+
     async function executeApiCallWithHooks<T>(
-        context: ApiCallContext,
+        context: ApiCallContext & { isAutoLoad?: boolean },
         fn: (payload: any) => Promise<T>,
     ): Promise<T | ApiError> {
-        let currentPayload = context.data;
+        const isUserOp = !context.isAutoLoad;
+        if (isUserOp) {
+            activeUserOpsRef.count++;
+        }
+        const key =
+            context.entityType && context.entityId != null ? `${context.entityType}:${context.entityId}` : undefined;
+        if (key) {
+            inFlightAutoFetches.add(key);
+        }
+        try {
+            let currentPayload = context.data;
 
-        const beforeCallHooks: Array<(ctx: ApiCallContext) => any> = [];
-        if (opts?.hooks?.beforeCall) {
-            beforeCallHooks.push(opts.hooks.beforeCall);
-        }
-        if (context.entityType && opts?.[context.entityType]?.hooks?.beforeCall) {
-            beforeCallHooks.push(opts[context.entityType].hooks.beforeCall);
-        }
-        for (const h of dynamicHooks) {
-            if (h.beforeCall) {
-                beforeCallHooks.push(h.beforeCall);
+            const beforeCallHooks: Array<(ctx: ApiCallContext) => any> = [];
+            if (opts?.hooks?.beforeCall) {
+                beforeCallHooks.push(opts.hooks.beforeCall);
             }
-        }
-
-        for (const hook of beforeCallHooks) {
-            try {
-                const currentCtx = { ...context, data: currentPayload };
-                const res = await hook(currentCtx);
-                if (res === false) {
-                    const cancelError: ApiError = {
-                        message: `[entity-walker] API call for operation '${context.op}' canceled by beforeCall hook.`,
-                        isTransient: false,
-                    };
-                    notifyListeners({ type: "error", error: cancelError, ...context });
-                    await runFinallyHooks(context, currentPayload, undefined, cancelError);
-                    return cancelError;
+            if (context.entityType && opts?.[context.entityType]?.hooks?.beforeCall) {
+                beforeCallHooks.push(opts[context.entityType].hooks.beforeCall);
+            }
+            for (const h of dynamicHooks) {
+                if (h.beforeCall) {
+                    beforeCallHooks.push(h.beforeCall);
                 }
-                if (res && typeof res === "object") {
-                    if (res.cancel === true) {
+            }
+
+            for (const hook of beforeCallHooks) {
+                try {
+                    const currentCtx = { ...context, data: currentPayload };
+                    const res = await hook(currentCtx);
+                    if (res === false) {
                         const cancelError: ApiError = {
                             message: `[entity-walker] API call for operation '${context.op}' canceled by beforeCall hook.`,
                             isTransient: false,
@@ -430,102 +542,123 @@ export function createApiGraph<D extends GraphDef<any, any>>(
                         await runFinallyHooks(context, currentPayload, undefined, cancelError);
                         return cancelError;
                     }
-                    if ("data" in res) {
-                        currentPayload = res.data;
+                    if (res && typeof res === "object") {
+                        if (res.cancel === true) {
+                            const cancelError: ApiError = {
+                                message: `[entity-walker] API call for operation '${context.op}' canceled by beforeCall hook.`,
+                                isTransient: false,
+                            };
+                            notifyListeners({ type: "error", error: cancelError, ...context });
+                            await runFinallyHooks(context, currentPayload, undefined, cancelError);
+                            return cancelError;
+                        }
+                        if ("data" in res) {
+                            currentPayload = res.data;
+                        }
                     }
+                } catch (err) {
+                    const parsed = parseError(err, { ...context, data: currentPayload }) ?? {
+                        message: err instanceof Error ? err.message : String(err),
+                        raw: err,
+                        isTransient: false,
+                    };
+                    await runFinallyHooks(context, currentPayload, undefined, parsed);
+                    return parsed;
+                }
+            }
+
+            let result: any;
+            let error: ApiError | null = null;
+
+            try {
+                result = await fn(currentPayload);
+                const parsed = parseError(result, { ...context, data: currentPayload });
+                const isBuiltinOp =
+                    context.op === "create" ||
+                    context.op === "update" ||
+                    context.op === "delete" ||
+                    context.op === "read" ||
+                    context.op === "list";
+                if (parsed && (isBuiltinOp || typeof result !== "string")) {
+                    error = parsed;
                 }
             } catch (err) {
-                const parsed = parseError(err, { ...context, data: currentPayload }) ?? {
+                error = parseError(err, { ...context, data: currentPayload }) ?? {
                     message: err instanceof Error ? err.message : String(err),
                     raw: err,
                     isTransient: false,
                 };
-                await runFinallyHooks(context, currentPayload, undefined, parsed);
-                return parsed;
             }
-        }
 
-        let result: any;
-        let error: ApiError | null = null;
+            if (error) {
+                const onErrorHooks: Array<(ctx: ApiCallContext & { error: ApiError }) => any> = [];
+                if (context.entityType && opts?.[context.entityType]?.hooks?.onError) {
+                    onErrorHooks.push(opts[context.entityType].hooks.onError);
+                }
+                if (opts?.hooks?.onError) {
+                    onErrorHooks.push(opts.hooks.onError);
+                }
+                for (const h of dynamicHooks) {
+                    if (h.onError) {
+                        onErrorHooks.push(h.onError);
+                    }
+                }
 
-        try {
-            result = await fn(currentPayload);
-            const parsed = parseError(result, { ...context, data: currentPayload });
-            const isBuiltinOp =
-                context.op === "create" ||
-                context.op === "update" ||
-                context.op === "delete" ||
-                context.op === "read" ||
-                context.op === "list";
-            if (parsed && (isBuiltinOp || typeof result !== "string")) {
-                error = parsed;
+                const errCtx = { ...context, data: currentPayload, error };
+                for (const hook of onErrorHooks) {
+                    try {
+                        const customErr = await hook(errCtx);
+                        if (customErr && typeof customErr === "object" && "message" in customErr) {
+                            error = customErr as ApiError;
+                        }
+                    } catch {
+                        // Ignore error in onError hook
+                    }
+                }
+
+                await runFinallyHooks(context, currentPayload, undefined, error);
+                return error;
             }
-        } catch (err) {
-            error = parseError(err, { ...context, data: currentPayload }) ?? {
-                message: err instanceof Error ? err.message : String(err),
-                raw: err,
-                isTransient: false,
-            };
-        }
 
-        if (error) {
-            const onErrorHooks: Array<(ctx: ApiCallContext & { error: ApiError }) => any> = [];
-            if (context.entityType && opts?.[context.entityType]?.hooks?.onError) {
-                onErrorHooks.push(opts[context.entityType].hooks.onError);
+            const afterCallHooks: Array<(ctx: ApiCallContext & { result: any }) => any> = [];
+            if (context.entityType && opts?.[context.entityType]?.hooks?.afterCall) {
+                afterCallHooks.push(opts[context.entityType].hooks.afterCall);
             }
-            if (opts?.hooks?.onError) {
-                onErrorHooks.push(opts.hooks.onError);
+            if (opts?.hooks?.afterCall) {
+                afterCallHooks.push(opts.hooks.afterCall);
             }
             for (const h of dynamicHooks) {
-                if (h.onError) {
-                    onErrorHooks.push(h.onError);
+                if (h.afterCall) {
+                    afterCallHooks.push(h.afterCall);
                 }
             }
 
-            const errCtx = { ...context, data: currentPayload, error };
-            for (const hook of onErrorHooks) {
+            let currentResult = result;
+            for (const hook of afterCallHooks) {
                 try {
-                    const customErr = await hook(errCtx);
-                    if (customErr && typeof customErr === "object" && "message" in customErr) {
-                        error = customErr as ApiError;
+                    const afterCtx = { ...context, data: currentPayload, result: currentResult };
+                    const transformed = await hook(afterCtx);
+                    if (transformed !== undefined) {
+                        currentResult = transformed;
                     }
                 } catch {
-                    // Ignore error in onError hook
+                    // Ignore error in afterCall hook
                 }
             }
 
-            await runFinallyHooks(context, currentPayload, undefined, error);
-            return error;
-        }
-
-        const afterCallHooks: Array<(ctx: ApiCallContext & { result: any }) => any> = [];
-        if (context.entityType && opts?.[context.entityType]?.hooks?.afterCall) {
-            afterCallHooks.push(opts[context.entityType].hooks.afterCall);
-        }
-        if (opts?.hooks?.afterCall) {
-            afterCallHooks.push(opts.hooks.afterCall);
-        }
-        for (const h of dynamicHooks) {
-            if (h.afterCall) {
-                afterCallHooks.push(h.afterCall);
+            await runFinallyHooks(context, currentPayload, currentResult, undefined);
+            return currentResult;
+        } finally {
+            if (key) {
+                inFlightAutoFetches.delete(key);
             }
-        }
-
-        let currentResult = result;
-        for (const hook of afterCallHooks) {
-            try {
-                const afterCtx = { ...context, data: currentPayload, result: currentResult };
-                const transformed = await hook(afterCtx);
-                if (transformed !== undefined) {
-                    currentResult = transformed;
+            if (isUserOp) {
+                activeUserOpsRef.count = Math.max(0, activeUserOpsRef.count - 1);
+                if (activeUserOpsRef.count === 0 && autoLoadRef.enabled) {
+                    scheduleAutoLoadReferences();
                 }
-            } catch {
-                // Ignore error in afterCall hook
             }
         }
-
-        await runFinallyHooks(context, currentPayload, currentResult, undefined);
-        return currentResult;
     }
 
     function wrapNode(type: string, rawId: any, activeGraph = baseGraph): any {
@@ -612,12 +745,13 @@ export function createApiGraph<D extends GraphDef<any, any>>(
         const node = {
             value: () => getBaseNode().value(),
             exists: () => getBaseNode().exists(),
-            load: async () => {
+            load: async (loadOpts?: { isAutoLoad?: boolean }) => {
                 if (!entityConfig?.read) {
                     return { message: `[entity-walker] read handler is required to load node for '${type}'.` };
                 }
+                const isAutoLoad = !!loadOpts?.isAutoLoad;
                 const res = await executeApiCallWithHooks(
-                    { op: "read", entityType: type, entityId: id, data: id },
+                    { op: "read", entityType: type, entityId: id, data: id, isAutoLoad } as any,
                     (reqId) => entityConfig.read!(reqId, node),
                 );
                 if (isApiError(res)) {
@@ -633,6 +767,7 @@ export function createApiGraph<D extends GraphDef<any, any>>(
                     data: res,
                     entities: { [type]: [res] },
                 });
+                scheduleAutoLoadReferences();
                 return wrapNode(type, id, activeGraph);
             },
             delete: async () => {
@@ -802,6 +937,11 @@ export function createApiGraph<D extends GraphDef<any, any>>(
                     edges,
                     idCounters,
                     formatterRef,
+                    dynamicHooks,
+                    autoLoadRef,
+                    activeUserOpsRef,
+                    inFlightAutoFetches,
+                    attemptedAutoFetches,
                 ),
             api: apiProxy,
         };
@@ -878,6 +1018,7 @@ export function createApiGraph<D extends GraphDef<any, any>>(
             const syncFn = activeGraph.meta?.sync ?? activeGraph.sync;
             syncFn.call(activeGraph.meta ?? activeGraph, { [type]: response }, { mode: "merge" });
             notifyListeners({ type: "change", op: "list", entityType: type, entities: { [type]: response } });
+            scheduleAutoLoadReferences();
 
             const ids = response.map((e: any) => e.id);
             queryCache.set(cacheKey, { ids, fetchedAt: Date.now() });
@@ -930,7 +1071,8 @@ export function createApiGraph<D extends GraphDef<any, any>>(
                             entityId: delta.entityId,
                             data: delta.data,
                         },
-                        (reqData) => entityConfig.create!(reqData, wrapNode(delta.entityType, delta.entityId, baseGraph)),
+                        (reqData) =>
+                            entityConfig.create!(reqData, wrapNode(delta.entityType, delta.entityId, baseGraph)),
                     );
                     if (isApiError(res)) {
                         error = res;
@@ -956,7 +1098,8 @@ export function createApiGraph<D extends GraphDef<any, any>>(
                             entityId: delta.entityId,
                             data: payload,
                         },
-                        (reqData) => entityConfig.update!(reqData, wrapNode(delta.entityType, delta.entityId, baseGraph)),
+                        (reqData) =>
+                            entityConfig.update!(reqData, wrapNode(delta.entityType, delta.entityId, baseGraph)),
                     );
                     if (isApiError(res)) {
                         error = res;
@@ -1016,6 +1159,10 @@ export function createApiGraph<D extends GraphDef<any, any>>(
                     idCounters,
                     formatterRef,
                     dynamicHooks,
+                    autoLoadRef,
+                    activeUserOpsRef,
+                    inFlightAutoFetches,
+                    attemptedAutoFetches,
                 );
                 return executeApiCallWithHooks({ op: toStandardOp(actionName), data: args }, (payload) => {
                     const actualArgs = Array.isArray(payload) ? payload : [payload];
@@ -1030,6 +1177,7 @@ export function createApiGraph<D extends GraphDef<any, any>>(
             const syncFn = baseGraph.meta?.sync ?? baseGraph.sync;
             syncFn.call(baseGraph.meta ?? baseGraph, fresh, opt);
             notifyListeners({ type: "change", op: "sync", entities: fresh });
+            scheduleAutoLoadReferences();
         },
         snapshot: () => {
             const snapFn = baseGraph.meta?.snapshot ?? baseGraph.snapshot;
@@ -1040,6 +1188,8 @@ export function createApiGraph<D extends GraphDef<any, any>>(
             };
         },
         restore: (snap: any) => {
+            attemptedAutoFetches.clear();
+            inFlightAutoFetches.clear();
             const restoreFn = baseGraph.meta?.restore ?? baseGraph.restore;
             const target = baseGraph.meta ?? baseGraph;
             if (snap && typeof snap === "object" && "entities" in snap) {
@@ -1058,6 +1208,7 @@ export function createApiGraph<D extends GraphDef<any, any>>(
                 restoreFn.call(target, snap);
             }
             notifyListeners({ type: "change", op: "restore" });
+            scheduleAutoLoadReferences();
         },
         pendingChanges: () => [...pendingDeltas],
         flushPending: () => flushPending(),
@@ -1115,6 +1266,13 @@ export function createApiGraph<D extends GraphDef<any, any>>(
         setIdFormat: (formatter: NewIdFormatter) => {
             formatterRef.fn = formatter;
         },
+        setAutoLoadReferences: (enabled: boolean) => {
+            autoLoadRef.enabled = enabled;
+            if (enabled) {
+                scheduleAutoLoadReferences();
+            }
+        },
+        isAutoLoadReferencesEnabled: () => autoLoadRef.enabled,
         addHook: (hooks: ApiHooks<any>): (() => void) => {
             dynamicHooks.add(hooks);
             return () => {
@@ -1143,6 +1301,10 @@ export function createApiGraph<D extends GraphDef<any, any>>(
                 idCounters,
                 formatterRef,
                 dynamicHooks,
+                autoLoadRef,
+                activeUserOpsRef,
+                inFlightAutoFetches,
+                attemptedAutoFetches,
             );
 
             let committed = false;
@@ -1183,7 +1345,10 @@ export function createApiGraph<D extends GraphDef<any, any>>(
                                     data: delta.data,
                                 },
                                 (reqData) =>
-                                    entityConfig.create!(reqData, wrapNode(delta.entityType, delta.entityId, txCoreGraph)),
+                                    entityConfig.create!(
+                                        reqData,
+                                        wrapNode(delta.entityType, delta.entityId, txCoreGraph),
+                                    ),
                             );
                             if (isApiError(res)) {
                                 error = res;
@@ -1223,7 +1388,10 @@ export function createApiGraph<D extends GraphDef<any, any>>(
                                     data: delta.data,
                                 },
                                 (reqData) =>
-                                    entityConfig.update!(reqData, wrapNode(delta.entityType, delta.entityId, txCoreGraph)),
+                                    entityConfig.update!(
+                                        reqData,
+                                        wrapNode(delta.entityType, delta.entityId, txCoreGraph),
+                                    ),
                             );
                             if (isApiError(res)) {
                                 error = res;
@@ -1246,7 +1414,10 @@ export function createApiGraph<D extends GraphDef<any, any>>(
                                     data: delta.entityId,
                                 },
                                 (reqId) =>
-                                    entityConfig.delete!(reqId, wrapNode(delta.entityType, delta.entityId, txCoreGraph)),
+                                    entityConfig.delete!(
+                                        reqId,
+                                        wrapNode(delta.entityType, delta.entityId, txCoreGraph),
+                                    ),
                             );
                             if (isApiError(res)) {
                                 error = res;
@@ -1302,7 +1473,7 @@ export function createApiGraph<D extends GraphDef<any, any>>(
         meta: apiGraphMeta,
     };
 
-    return new Proxy(apiGraph, {
+    const apiGraphProxy = new Proxy(apiGraph, {
         get(target, p, receiver) {
             if (p === "then" || p === "toJSON") {
                 return undefined;
@@ -1344,7 +1515,9 @@ export function createApiGraph<D extends GraphDef<any, any>>(
                         (reqData) => {
                             finalData = reqData;
                             const handlerNode = finalData?.id !== undefined ? wrapNode(type, finalData.id) : undefined;
-                            return handlerNode ? entityConfig.create!(reqData, handlerNode) : entityConfig.create!(reqData);
+                            return handlerNode
+                                ? entityConfig.create!(reqData, handlerNode)
+                                : entityConfig.create!(reqData);
                         },
                     );
 
@@ -1392,6 +1565,7 @@ export function createApiGraph<D extends GraphDef<any, any>>(
                         entityId: resId,
                         data: response,
                     });
+                    scheduleAutoLoadReferences();
                     return wrapNode(type, resId);
                 };
             }
@@ -1405,4 +1579,7 @@ export function createApiGraph<D extends GraphDef<any, any>>(
             return (id: any) => wrapNode(propStr, resolveId(id));
         },
     }) as any;
+
+    scheduleAutoLoadReferences();
+    return apiGraphProxy;
 }

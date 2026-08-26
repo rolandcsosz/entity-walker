@@ -21,6 +21,7 @@ export type Entities<T> = {
 
 export type EdgeDef<Source> = {
     bidirectional?: boolean;
+    autoLoad?: boolean;
     resolve: (entity: Source) => string | number | undefined;
 };
 
@@ -36,21 +37,29 @@ export interface GraphDef<EM extends EntityMap = EntityMap, E extends GraphEdges
 }
 
 export type ReverseKeys<D extends GraphDef<any, any>, TargetKey extends keyof D["entityModel"]> = {
-    [SourceKey in keyof D["edges"]]: {
-        [RelName in keyof D["edges"][SourceKey]]: RelName extends TargetKey
-            ? D["edges"][SourceKey][RelName] extends { bidirectional: true }
-                ? SourceKey
-                : never
+    [SourceKey in keyof D["edges"] & keyof D["entityModel"]]: {
+        [RelName in keyof D["edges"][SourceKey] & keyof D["entityModel"]]: RelName extends TargetKey
+            ? [0] extends [1 & D["edges"][SourceKey][RelName]]
+                ? never
+                : D["edges"][SourceKey][RelName] extends { bidirectional: true }
+                  ? SourceKey
+                  : never
             : never;
-    }[keyof D["edges"][SourceKey]];
-}[keyof D["edges"]];
+    }[keyof D["edges"][SourceKey] & keyof D["entityModel"]];
+}[keyof D["edges"] & keyof D["entityModel"]];
 
 export type AllIncomingSourceKeys<D extends GraphDef<any, any>, TargetKey extends keyof D["entityModel"]> = {
-    [SourceKey in keyof D["edges"]]: TargetKey extends keyof D["edges"][SourceKey] ? SourceKey : never;
-}[keyof D["edges"]];
+    [SourceKey in keyof D["edges"] & keyof D["entityModel"]]: TargetKey extends keyof D["edges"][SourceKey]
+        ? [0] extends [1 & D["edges"][SourceKey]]
+            ? never
+            : SourceKey
+        : never;
+}[keyof D["edges"] & keyof D["entityModel"]];
+
+type IsEqual<X, Y> = (<T>() => T extends X ? 1 : 2) extends <T>() => T extends Y ? 1 : 2 ? true : false;
 
 export type KeyOf<D extends GraphDef<any, any>, E> = {
-    [K in keyof D["entityModel"]]: D["entityModel"][K] extends E ? (E extends D["entityModel"][K] ? K : never) : never;
+    [K in keyof D["entityModel"]]: IsEqual<D["entityModel"][K], E> extends true ? K : never;
 }[keyof D["entityModel"]];
 
 export type EntityNodeList<D extends GraphDef<any, any>, E extends EntityBase> = EntityNode<D, E>[] & {
@@ -71,10 +80,11 @@ export type EntityNodeList<D extends GraphDef<any, any>, E extends EntityBase> =
     resetScope(): EntityNodeList<D, E>;
     info(): ListDebugInfo;
 } & {
-    [Rel in keyof D["edges"][KeyOf<D, E>] as `${string & Rel}Nodes`]: () => EntityNodeList<
-        D,
-        D["entityModel"][Rel & keyof D["entityModel"]]
-    >;
+    [
+        Rel in [0] extends [1 & D["edges"][KeyOf<D, E>]]
+            ? never
+            : keyof D["edges"][KeyOf<D, E>] & keyof D["entityModel"] as `${string & Rel}Nodes`
+    ]: () => EntityNodeList<D, D["entityModel"][Rel & keyof D["entityModel"]]>;
 } & {
     [SourceEntity in ReverseKeys<D, KeyOf<D, E>> as `${string & SourceEntity}Nodes`]: () => EntityNodeList<
         D,
@@ -125,7 +135,11 @@ export type EntityNode<D extends GraphDef<any, any>, E extends EntityBase> = {
     delete(): void;
     update(fn: (entity: E) => E): void;
 } & ([AllIncomingSourceKeys<D, KeyOf<D, E>>] extends [never] ? {} : { deleteCascade(): void }) & {
-        [Rel in keyof D["edges"][KeyOf<D, E>]]: () => EntityNode<D, D["entityModel"][Rel & keyof D["entityModel"]]>;
+        [
+            Rel in [0] extends [1 & D["edges"][KeyOf<D, E>]]
+                ? never
+                : keyof D["edges"][KeyOf<D, E>] & keyof D["entityModel"]
+        ]: () => EntityNode<D, D["entityModel"][Rel & keyof D["entityModel"]]>;
     } & {
         [SourceEntity in ReverseKeys<D, KeyOf<D, E>> as `${string & SourceEntity}Nodes`]: () => EntityNodeList<
             D,
@@ -196,7 +210,10 @@ export type EntityNodeListNoProxy<D extends GraphDef<any, any>, E extends Entity
     resetScope(): EntityNodeListNoProxy<D, E>;
     info(): ListDebugInfo;
     to<Target extends EntityBase>(): EntityNodeListNoProxy<D, Target>;
-    to<Nodes extends `${string & (keyof D["edges"][KeyOf<D, E>] | ReverseKeys<D, KeyOf<D, E>>)}Nodes`>(
+    to<
+        Nodes extends
+            `${string & ((keyof D["edges"][KeyOf<D, E>] & keyof D["entityModel"]) | ReverseKeys<D, KeyOf<D, E>>)}Nodes`,
+    >(
         rel: Nodes,
     ): Nodes extends `${infer Src}Nodes`
         ? EntityNodeListNoProxy<D, D["entityModel"][Src & keyof D["entityModel"]]>
